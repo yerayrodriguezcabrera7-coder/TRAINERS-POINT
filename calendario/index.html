@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172a32">
+  <title>Calendario · Trainers Point</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="calendar-core.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <aside class="rail" aria-label="Trainers Point">
+    <a class="brand" href="#main" aria-label="Trainers Point, ir al calendario">t<span>p</span><i></i></a>
+    <span class="rail-line"></span>
+    <div class="rail-active" title="Calendario" aria-label="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v5m8-5v5M4 11h16m-12 4h3m2 0h3m-8 3h3"/></svg></div>
+    <span class="rail-label">AGENDA</span>
+    <div class="rail-bottom" title="Trainers Point">TP</div>
+  </aside>
+  <main id="main">
+    <header class="page-heading">
+      <div><div class="eyebrow">TRAINERS POINT <span>/</span> ORGANIZACIÓN</div><h1>Tu equipo. <span>En un mismo calendario.</span></h1><p id="today-label"></p></div>
+      <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">＋</span> Nueva reserva</button></div>
+    </header>
+    <div class="local-banner"><span class="local-dot"></span><strong>Modo local</strong><span>Datos de ejemplo · Los cambios se guardan solo en este navegador.</span></div>
+    <div id="storage-warning" class="warning" role="alert" hidden></div>
+    <section class="stats" aria-label="Resumen del período visible">
+      <div class="stat"><span>RESERVAS DEL PERÍODO</span><div><strong id="stat-total">0</strong><small id="stat-period">Esta semana</small></div></div>
+      <div class="stat"><span><i class="dot confirmed"></i> CONFIRMADAS</span><div><strong id="stat-confirmed">0</strong><small>Todo listo</small></div></div>
+      <div class="stat"><span><i class="dot pending"></i> PENDIENTES</span><div><strong id="stat-pending">0</strong><small>Por confirmar o pagar</small></div></div>
+      <div class="stat"><span>EQUIPO VISIBLE</span><div><strong id="stat-team">3</strong><small>Entrenadores</small></div></div>
+    </section>
+    <section class="calendar-panel" aria-label="Calendario de reservas">
+      <div class="calendar-toolbar">
+        <div class="date-controls"><div class="arrows"><button id="previous" aria-label="Período anterior">‹</button><button id="next" aria-label="Período siguiente">›</button></div><button class="today-button" id="today">Hoy</button><h2 id="period-label"></h2><label class="date-jump" title="Ir a fecha"><span class="sr-only">Ir a fecha</span><input id="jump-date" type="date" aria-label="Ir a fecha"></label></div>
+        <div class="view-switch" role="group" aria-label="Vista del calendario"><button data-view="day">Día</button><button data-view="week" class="selected">Semana</button><button data-view="month">Mes</button></div>
+      </div>
+      <div class="filter-row">
+        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label>Sala<select id="room-filter"><option value="all">Todos los espacios</option></select></label><button class="clear-filters" id="clear-filters" hidden>Limpiar filtros</button></div>
+        <div class="legend" aria-label="Estados"><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
+      </div>
+      <div id="calendar" class="calendar-scroll" aria-label="Cuadrante de reservas"></div>
+      <footer class="calendar-footer"><span><i class="closed-swatch"></i> Fuera de apertura</span><span id="result-count" aria-live="polite"></span><span>Selecciona un hueco para reservar <span aria-hidden="true">↗</span></span></footer>
+    </section>
+    <p class="page-note">Más organización. Más tiempo para tus clientes.</p>
+  </main>
+  <dialog id="booking-dialog" aria-labelledby="booking-title">
+    <form id="booking-form">
+      <header class="modal-header"><div><div class="eyebrow">AGENDA DEL EQUIPO</div><h2 id="booking-title">Nueva reserva</h2></div><button type="button" class="icon-button" data-close="booking-dialog" aria-label="Cerrar">×</button></header>
+      <div class="modal-body"><div class="form-grid">
+        <label class="full">Cliente<select id="booking-client" required></select></label>
+        <div class="new-client-fields full" id="new-client-fields" hidden><label>Nombre y apellidos<input id="client-name" maxlength="100" autocomplete="name"></label><label>Correo electrónico (opcional)<input id="client-email" type="email" maxlength="150" autocomplete="email"></label><label>Teléfono (opcional)<input id="client-phone" type="tel" maxlength="30" autocomplete="tel"></label></div>
+        <button type="button" class="text-button full" id="view-client">Ver ficha del cliente ↗</button>
+        <label>Entrenador<select id="booking-employee" required></select></label><label>Servicio<select id="booking-service" required></select></label>
+        <label>Sala o espacio<select id="booking-room" required></select></label><label>Fecha<input type="date" id="booking-date" required></label>
+        <label>Inicio<input type="time" id="booking-start" step="900" required></label><label>Fin<input type="time" id="booking-end" step="900" required></label>
+        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de pago / confirmar</option><option value="completed">Finalizada</option><option value="cancelled">Cancelada</option></select></label>
+        <label class="full">Notas (opcional)<textarea id="booking-notes" rows="3" maxlength="1000" placeholder="Indicaciones para esta sesión…"></textarea></label>
+      </div><p class="form-hint" id="booking-hours"></p><p class="form-error" id="booking-error" role="alert" hidden></p></div>
+      <footer class="modal-footer"><button type="button" class="button danger" id="cancel-booking" hidden>Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
+    </form>
+  </dialog>
+  <dialog id="client-dialog" aria-labelledby="client-title"><header class="modal-header"><div><div class="eyebrow">FICHA DEL CLIENTE</div><h2 id="client-title"></h2></div><button class="icon-button" data-close="client-dialog" aria-label="Cerrar ficha">×</button></header><div class="modal-body" id="client-detail"></div><footer class="modal-footer"><button class="button secondary" data-close="client-dialog">Volver a la reserva</button></footer></dialog>
+  <dialog id="cancel-dialog" aria-labelledby="cancel-title"><header class="modal-header"><h2 id="cancel-title">¿Cancelar esta reserva?</h2></header><div class="modal-body"><p>La cita seguirá visible en rojo y dejará libre el horario. Puedes volver a activarla editando su estado.</p></div><footer class="modal-footer"><button class="button secondary" data-close="cancel-dialog">Volver</button><button class="button danger-solid" id="confirm-cancel">Sí, cancelar reserva</button></footer></dialog>
+  <dialog id="schedule-dialog" aria-labelledby="schedule-title"><form id="schedule-form"><header class="modal-header"><div><div class="eyebrow">CONFIGURACIÓN</div><h2 id="schedule-title">Horario de apertura</h2></div><button type="button" class="icon-button" data-close="schedule-dialog" aria-label="Cerrar horarios">×</button></header><div class="modal-body"><p class="schedule-intro">Horario común para todos los entrenadores. Las franjas cerradas aparecen sombreadas y no admiten reservas.</p><div id="schedule-fields"></div><p id="schedule-error" class="form-error" role="alert" hidden></p></div><footer class="modal-footer"><button type="button" class="button secondary" data-close="schedule-dialog">Cerrar</button><button class="button primary" type="submit">Guardar horario</button></footer></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p>Activa JavaScript para utilizar el calendario.</p></noscript>
+</body>
+</html>
