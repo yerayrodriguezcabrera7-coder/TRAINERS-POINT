@@ -1,9 +1,10 @@
-/* Calendario local: sin dependencias, peticiones de red ni credenciales. */
+/* Modo servidor con API; Live Server conserva la demostración local. */
+(async function boot() {
 'use strict';
 const C = window.CalendarCore;
 const $ = id => document.getElementById(id);
 const KEY = 'trainers-point-calendar-v1';
-const STATUS = { confirmed: 'Confirmada', pending: 'Pendiente', completed: 'Finalizada', cancelled: 'Cancelada' };
+const STATUS = { confirmed: 'Confirmada', pending: 'Pendiente', completed: 'Finalizada', cancelled: 'Cancelada', no_show: 'No presentado' };
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const todayKey = () => C.dateKey(new Date());
 const prettyDate = (key, options) => new Intl.DateTimeFormat('es-ES', options).format(C.parseDate(key));
@@ -61,13 +62,47 @@ function loadData() {
   }
   return seedData();
 }
-let data = loadData();
+const serverMode = window.CALENDAR_SERVER === true;
+let adminToken = serverMode ? window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
+$('mode-title').textContent = serverMode ? 'Servidor conectado' : 'Demostración local';
+$('mode-description').textContent = serverMode
+  ? 'Los cambios se guardan en la base de datos local.'
+  : 'Los cambios se guardan solo en este navegador.';
+const fromServer = b => ({...b,status:b.status.toLowerCase()});
+const toServer = b => ({...b,status:b.status.toUpperCase()});
+async function api(path,method='GET',body) {
+  const res=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminToken},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+  const result=await res.json();
+  if(!res.ok)throw new Error(result.error||'Error de conexión');
+  return result;
+}
+let data;
+if(serverMode) {
+  if(!adminToken) adminToken=window.prompt('Clave de administración del calendario (desarrollo):')||'';
+  try {data=await api('state');data.bookings=data.bookings.map(fromServer);sessionStorage.setItem('calendar-admin-token',adminToken);}
+  catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
+} else data=loadData();
+let polling=false;
+async function refreshServer(force=false) {
+  if(polling)return;
+  polling=true;
+  try {
+    const next=await api('state');
+    if(force||next.revision!==data.revision) {
+      data={...next,bookings:next.bookings.map(fromServer)};
+      // Do not change form values or the version captured when a dialog was opened.
+      if(!document.querySelector('dialog[open]')) setupSelects();
+      render();
+    }
+    $('storage-warning').hidden=true;
+  } finally {polling=false;}
+}
 function saveData() {
-  if (!storageWritable) return false;
+  if (serverMode || !storageWritable) return false;
   try { localStorage.setItem(KEY, JSON.stringify(data)); return true; }
   catch { warn('El navegador no permite guardar los cambios. Se conservarán solo hasta cerrar o recargar esta página.'); return false; }
 }
-if (storageWritable) saveData();
+if (!serverMode && storageWritable) saveData();
 const lookup = (type, id) => data[type].find(item => item.id === id);
 function toast(message) {
   $('toast').textContent = message;
@@ -94,6 +129,7 @@ function setupSelects() {
   fillSelect('booking-employee', data.employees);
   fillSelect('booking-service', data.services);
   fillSelect('booking-room', data.rooms);
+  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
 }
 function titleForPeriod(dates) {
   if (state.view === 'day') return prettyDate(state.date, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -184,6 +220,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   $('booking-error').hidden = true;
   state.editing = id || null;
   const b = id ? data.bookings.find(item => item.id === id) : null;
+  state.editingVersion=b?.version;
+  state.editingSnapshot=b ? {...b} : null;
   fillSelect('booking-client', data.clients, '');
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
@@ -192,17 +230,33 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const duration = service.duration || 60;
   const values = b || {clientId:data.clients[0].id,employeeId:employeeId || (state.employee === 'all' ? data.employees[0].id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
   $('cancel-booking').hidden = !b || b.status === 'cancelled';
   updateClientFields(); updateHoursHint();
   $('booking-dialog').showModal();
 }
 function formError(id,message) { $(id).textContent = message; $(id).hidden = false; }
-$('booking-form').addEventListener('submit', event => {
+$('booking-form').addEventListener('submit', async event => {
   event.preventDefault();
   const clientId = $('booking-client').value;
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
   const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
+  if(serverMode) {
+    if(state.saving)return;
+    state.saving=true;
+    try {
+      booking.version=state.editingVersion;
+      booking.sessionId=state.editingSnapshot?.sessionId||null;
+      const duration=lookup('services',booking.serviceId).duration;
+      booking.end=C.timeLabel(C.minutes(booking.start)+duration);
+      const client=clientId==='new'?{id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''}:undefined;
+      await api(state.editing?'bookings/'+encodeURIComponent(state.editing):'bookings',state.editing?'PUT':'POST',{booking:toServer(booking),client});
+      state.date=booking.date;$('booking-dialog').close();
+      await refreshServer(true);toast('Reserva guardada en el servidor.');
+    } catch(e){formError('booking-error',e.message);} finally{state.saving=false;}
+    return;
+  }
   const error = C.validateBooking(booking,data.bookings,data.schedule);
   if (error) { formError('booking-error',error); return; }
   if (clientId === 'new') data.clients.push({id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''});
@@ -223,6 +277,14 @@ $('booking-service').addEventListener('change',() => {
   const end = C.minutes($('booking-start').value) + duration;
   if (end < 1440) $('booking-end').value = C.timeLabel(end);
 });
+function updateServerEnd() {
+  if(!serverMode)return;
+  const duration=lookup('services',$('booking-service').value)?.duration||60;
+  const end=C.minutes($('booking-start').value)+duration;
+  $('booking-end').value=end<1440?C.timeLabel(end):'';
+}
+$('booking-start').addEventListener('change',updateServerEnd);
+$('booking-service').addEventListener('change',updateServerEnd);
 $('view-client').addEventListener('click',() => {
   const client = lookup('clients',$('booking-client').value);
   if (!client) return;
@@ -232,9 +294,13 @@ $('view-client').addEventListener('click',() => {
   $('client-dialog').showModal();
 });
 $('cancel-booking').addEventListener('click',() => $('cancel-dialog').showModal());
-$('confirm-cancel').addEventListener('click',() => {
+$('confirm-cancel').addEventListener('click',async () => {
   const booking = data.bookings.find(b => b.id === state.editing);
   if (!booking) return;
+  if(serverMode) {
+    try{await api('bookings/'+encodeURIComponent(booking.id),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',version:state.editingVersion})});$('cancel-dialog').close();$('booking-dialog').close();await refreshServer(true);toast('Reserva cancelada.');}
+    catch(e){$('cancel-dialog').close();formError('booking-error',e.message);}return;
+  }
   booking.status = 'cancelled';
   const persisted = saveData();
   $('cancel-dialog').close(); $('booking-dialog').close(); render();
@@ -242,6 +308,8 @@ $('confirm-cancel').addEventListener('click',() => {
 });
 $('schedule-button').addEventListener('click',() => {
   $('schedule-error').hidden = true;
+  state.configRevision=data.revision;
+  state.configSnapshot=structuredClone(data);
   $('schedule-fields').innerHTML = data.schedule.map((hours,i) => `<div class="schedule-row"><strong>${DAYS[i]}</strong><input type="time" step="1800" data-open="${i}" value="${hours.open}" aria-label="Apertura ${DAYS[i]}" ${hours.closed?'disabled':''} required><input type="time" step="1800" data-close-hour="${i}" value="${hours.close}" aria-label="Cierre ${DAYS[i]}" ${hours.closed?'disabled':''} required><label><input type="checkbox" data-closed="${i}" ${hours.closed?'checked':''}>Cerrado</label></div>`).join('');
   $('schedule-dialog').showModal();
 });
@@ -251,12 +319,16 @@ $('schedule-fields').addEventListener('change',event => {
   document.querySelector(`[data-open="${i}"]`).disabled = event.target.checked;
   document.querySelector(`[data-close-hour="${i}"]`).disabled = event.target.checked;
 });
-$('schedule-form').addEventListener('submit',event => {
+$('schedule-form').addEventListener('submit',async event => {
   event.preventDefault();
   const schedule = DAYS.map((_,i) => ({closed:document.querySelector(`[data-closed="${i}"]`).checked,open:document.querySelector(`[data-open="${i}"]`).value,close:document.querySelector(`[data-close-hour="${i}"]`).value}));
   if (schedule.some(hours => C.minutes(hours.open) >= C.minutes(hours.close))) { formError('schedule-error','La hora de cierre debe ser posterior a la apertura.'); return; }
   const outside = data.bookings.filter(b => b.date >= todayKey() && !['cancelled','completed'].includes(b.status) && !C.isOpen(b.date,C.minutes(b.start),C.minutes(b.end),schedule));
   if (outside.length) { formError('schedule-error',`Este horario dejaría ${outside.length} reserva(s) activa(s) fuera de apertura. Modifica esas reservas antes de cambiar el horario.`); return; }
+  if(serverMode){
+    try{await api('config','PUT',{config:{...state.configSnapshot,schedule},revision:state.configRevision});$('schedule-dialog').close();await refreshServer(true);toast('Apertura actualizada. Los horarios laborales se configuran por entrenador en la API.');}
+    catch(e){formError('schedule-error',e.message);}return;
+  }
   data.schedule = schedule;
   const persisted = saveData();
   $('schedule-dialog').close();render();toast(persisted?'Horario actualizado.':'Horario actualizado solo en esta sesión.');
@@ -288,8 +360,8 @@ $('calendar').addEventListener('click',event => {
 });
 // Other tabs must not silently overwrite this tab's in-progress form.
 window.addEventListener('storage',event => {
-  if(event.key===KEY) warn('Los datos han cambiado en otra pestaña. Recarga esta página antes de seguir editando para evitar sobrescribirlos.');
-  if(event.key===KEY) storageWritable=false;
+  if(!serverMode && event.key===KEY) warn('Los datos han cambiado en otra pestaña. Recarga esta página antes de seguir editando para evitar sobrescribirlos.');
+  if(!serverMode && event.key===KEY) storageWritable=false;
 });
 setupSelects();
 render(true);
@@ -297,3 +369,6 @@ setInterval(() => {
   const now=new Date();
   document.querySelectorAll('.now-line').forEach(line => {line.style.top=`${(now.getHours()*60+now.getMinutes())*1.4}px`;});
 },60000);
+
+if(serverMode)setInterval(()=>refreshServer().catch(()=>warn('Sin conexión. Los cambios se guardan solo cuando el servidor responde. Reintentando…')),2000);
+})().catch(e=>console.error('No se pudo iniciar el calendario',e));

@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#172a32">
   <title>Calendario · Trainers Point</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="runtime.js" defer></script>
   <script src="calendar-core.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -22,7 +23,7 @@
       <div><div class="eyebrow">TRAINERS POINT <span>/</span> ORGANIZACIÓN</div><h1>Tu equipo. <span>En un mismo calendario.</span></h1><p id="today-label"></p></div>
       <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">＋</span> Nueva reserva</button></div>
     </header>
-    <div class="local-banner"><span class="local-dot"></span><strong>Modo local</strong><span>Datos de ejemplo · Los cambios se guardan solo en este navegador.</span></div>
+    <div id="mode-banner" class="local-banner"><span class="local-dot"></span><strong id="mode-title">Cargando calendario</strong><span id="mode-description">Comprobando el almacenamiento…</span></div>
     <div id="storage-warning" class="warning" role="alert" hidden></div>
     <section class="stats" aria-label="Resumen del período visible">
       <div class="stat"><span>RESERVAS DEL PERÍODO</span><div><strong id="stat-total">0</strong><small id="stat-period">Esta semana</small></div></div>
@@ -54,7 +55,7 @@
         <label>Entrenador<select id="booking-employee" required></select></label><label>Servicio<select id="booking-service" required></select></label>
         <label>Sala o espacio<select id="booking-room" required></select></label><label>Fecha<input type="date" id="booking-date" required></label>
         <label>Inicio<input type="time" id="booking-start" step="900" required></label><label>Fin<input type="time" id="booking-end" step="900" required></label>
-        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de pago / confirmar</option><option value="completed">Finalizada</option><option value="cancelled">Cancelada</option></select></label>
+        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de pago / confirmar</option><option value="completed">Finalizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select></label>
         <label class="full">Notas (opcional)<textarea id="booking-notes" rows="3" maxlength="1000" placeholder="Indicaciones para esta sesión…"></textarea></label>
       </div><p class="form-hint" id="booking-hours"></p><p class="form-error" id="booking-error" role="alert" hidden></p></div>
       <footer class="modal-footer"><button type="button" class="button danger" id="cancel-booking" hidden>Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>

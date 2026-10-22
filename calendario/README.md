@@ -1,5 +1,7 @@
 # Calendario · Trainers Point
 
+**Backend disponible:** para guardar en PostgreSQL y sincronizar paneles, ejecutar `npm run dev:calendar` desde TRAINERS-POINT. Consulta [la guía del backend](../docs/calendario-backend.md). Lo que sigue describe el modo de demostración con Live Server.
+
 Frontend funcional en español, independiente y sin instalación de dependencias.
 
 ## Abrir y usar
