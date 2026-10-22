@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClientStatus {
+  LEAD
+  ACTIVO
+  INACTIVO
+  BAJA
+}
+
+enum ClientNoteCategory {
+  OBJETIVO
+  LESION
+  MEDIDAS
+  SEGUIMIENTO
+}
+
+enum BookingStatus {
+  PENDIENTE
+  CONFIRMADA
+  COMPLETADA
+  CANCELADA
+}
+
+model Client {
+  id               String        @id @default(uuid()) @db.Uuid
+  firstName        String
+  lastName         String
+  email            String        @unique
+  phone            String
+  dni              String?       @unique
+  birthDate        DateTime?     @db.Date
+  status           ClientStatus  @default(LEAD)
+  assignedWorkerId String?       @db.Uuid
+  notes            String?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+  clientNotes      ClientNote[]
+  bookings         Booking[]
+}
+
+model ClientNote {
+  id        String             @id @default(uuid()) @db.Uuid
+  clientId  String             @db.Uuid
+  authorId  String             @db.Uuid
+  category  ClientNoteCategory
+  content   String
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model Service {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  durationMin Int
+  price       Decimal   @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  bookings    Booking[]
+}
+
+model Booking {
+  id        String        @id @default(uuid()) @db.Uuid
+  clientId  String        @db.Uuid
+  serviceId String        @db.Uuid
+  startTime DateTime      @db.Timestamptz(3)
+  endTime   DateTime      @db.Timestamptz(3)
+  status    BookingStatus @default(PENDIENTE)
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  client    Client        @relation(fields: [clientId], references: [id])
+  service   Service       @relation(fields: [serviceId], references: [id])
+}
