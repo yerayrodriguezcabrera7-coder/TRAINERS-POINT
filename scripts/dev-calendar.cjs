@@ -67,6 +67,9 @@ const { Pool } = require("pg");
     throw e;
   }
   let stopping = false;
+  pool.on("error", (error) => {
+    if (!stopping) console.error("Error de PostgreSQL:", error.message);
+  });
   async function stop() {
     if (stopping) return;
     stopping = true;
