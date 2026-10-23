@@ -53,6 +53,7 @@ Los horarios son una franja continua al día y de capacidad uno por entrenador y
 - `calendar-core.js`: reglas reutilizables.
 - `app.js`: comportamiento y persistencia local.
 - `calendar-core.test.cjs`: pruebas de reglas; no se carga en el navegador.
+- `fichajes.html`, `fichajes.css` y `fichajes.js`: control horario parametrizado; necesita el backend local.
 
 ## Pruebas
 

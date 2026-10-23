@@ -4,23 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#172a32">
-  <title>Calendario · Trainers Point</title>
+  <title>Calendario · Cobosu</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="menu.css">
+  <link rel="stylesheet" href="design.css">
+  <script src="menu.js" defer></script>
   <script src="runtime.js" defer></script>
   <script src="calendar-core.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
-  <aside class="rail" aria-label="Trainers Point">
-    <a class="brand" href="#main" aria-label="Trainers Point, ir al calendario">t<span>p</span><i></i></a>
-    <span class="rail-line"></span>
-    <div class="rail-active" title="Calendario" aria-label="Calendario"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v5m8-5v5M4 11h16m-12 4h3m2 0h3m-8 3h3"/></svg></div>
-    <span class="rail-label">AGENDA</span>
-    <div class="rail-bottom" title="Trainers Point">TP</div>
-  </aside>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
   <main id="main">
     <header class="page-heading">
-      <div><div class="eyebrow">TRAINERS POINT <span>/</span> ORGANIZACIÓN</div><h1>Tu equipo. <span>En un mismo calendario.</span></h1><p id="today-label"></p></div>
+      <div><div class="eyebrow">COBOSU / OPERATIVA DEL CENTRO</div><h1>Calendario del equipo<span style="color:var(--red)">.</span></h1><p id="today-label"></p></div>
       <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">＋</span> Nueva reserva</button></div>
     </header>
     <div id="mode-banner" class="local-banner"><span class="local-dot"></span><strong id="mode-title">Cargando calendario</strong><span id="mode-description">Comprobando el almacenamiento…</span></div>

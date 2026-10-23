@@ -27,29 +27,42 @@ const hours = z
 export const week = z.array(hours).length(7);
 const named = z.object({ id, name: z.string().trim().min(1).max(200) });
 export const clientSchema = named.extend({
-  email: z.string().max(254),
+  email: z.union([z.literal(""), z.email()]).default(""),
   phone: z.string().max(40),
   notes: z.string().max(2000),
+  status: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).optional(),
+  birthDate: date.or(z.literal("")).optional(),
+});
+const period = z.object({ open: time, close: time }).refine(p => p.open < p.close);
+export const employeeSchema = named.extend({
+  color: z.string().regex(/^#[0-9a-f]{6}$/i),
+  schedule: week,
+  email: z.union([z.literal(""), z.email()]).optional(),
+  jobTitle: z.string().trim().max(100).optional(),
+  active: z.boolean().optional(),
+  shifts: z.array(z.object({ date, periods: z.array(period).max(8) })).max(366).optional(),
+}).superRefine((e, ctx) => {
+  const shifts = e.shifts || [];
+  if (new Set(shifts.map(s => s.date)).size !== shifts.length)
+    ctx.addIssue({ code: "custom", message: "Hay fechas de turno duplicadas." });
+  for (const shift of shifts) {
+    const sorted = [...shift.periods].sort((a,b) => a.open.localeCompare(b.open));
+    if (sorted.some((p,i) => i > 0 && p.open < sorted[i-1].close))
+      ctx.addIssue({ code: "custom", message: "Los turnos del mismo día se solapan." });
+  }
+});
+export const serviceSchema = named.extend({
+  duration: z.number().int().min(5).max(720),
+  capacity: z.number().int().min(1).max(100),
+  price: z.number().min(0).max(100000).optional(),
+  description: z.string().max(2000).optional(),
+  active: z.boolean().optional(),
 });
 export const configSchema = z
   .object({
     timezone: z.string().refine((v) => DateTime.now().setZone(v).isValid),
-    employees: z
-      .array(
-        named.extend({
-          color: z.string().regex(/^#[0-9a-f]{6}$/i),
-          schedule: week,
-        }),
-      )
-      .min(1),
-    services: z
-      .array(
-        named.extend({
-          duration: z.number().int().min(5).max(720),
-          capacity: z.number().int().min(1).max(100),
-        }),
-      )
-      .min(1),
+    employees: z.array(employeeSchema).min(1),
+    services: z.array(serviceSchema).min(1),
     rooms: z.array(named).min(1),
     clients: z.array(clientSchema),
     schedule: week,
@@ -76,6 +89,11 @@ export const bookingSchema = z.object({
 });
 export type Input = z.infer<typeof bookingSchema>;
 export type Booking = Input & { id: string; end: string; version: number };
+export const attendanceActionSchema = z.object({
+  employeeId: id,
+  action: z.enum(["IN", "OUT"]),
+});
+export type AttendanceAction = z.infer<typeof attendanceActionSchema>;
 export const minutes = (s: string) =>
   Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
 export const label = (n: number) =>
@@ -115,12 +133,16 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
   const worker = c.employees.find((x) => x.id === b.employeeId)!;
-  for (const h of [c.schedule[day], worker.schedule[day]])
+  for (const h of [c.schedule[day]])
     if (h.closed || b.start < h.open || b.end > h.close)
       throw new ApiError(
         409,
         "Fuera del horario de apertura o del entrenador.",
       );
+  const override = worker.shifts?.find(s => s.date === b.date);
+  const periods = override ? override.periods : worker.schedule[day].closed ? [] : [worker.schedule[day]];
+  if (!periods.some(p => b.start >= p.open && b.end <= p.close))
+    throw new ApiError(409, "Fuera del horario del entrenador.");
   const clashes = all.filter(
     (o) => o.id !== b.id && o.status !== "CANCELLED" && overlaps(b, o),
   );

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#191d20"><title>Tu centro · Cobosu</title>
+  <link rel="stylesheet" href="fichajes.css"><link rel="stylesheet" href="menu.css"><link rel="stylesheet" href="design.css"><link rel="stylesheet" href="inicio.css">
+  <script src="runtime.js" defer></script><script src="menu.js" defer></script><script src="inicio.js" defer></script>
+</head>
+<body>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
+  <main class="overview-shell">
+    <header class="overview-header"><div class="eyebrow">COBOSU / TU CENTRO</div><div class="overview-tools"><span id="sync-time" aria-live="polite">Conectando…</span><button id="reload" class="outline-button">Actualizar</button></div></header>
+    <section class="welcome-panel" aria-labelledby="welcome-title">
+      <div class="welcome-copy"><p class="eyebrow" id="overview-date">EL DÍA, DE UN VISTAZO</p><h1 id="welcome-title">Un centro en movimiento.<br><span>Todo bajo control.</span></h1><p>Tu agenda, tus clientes y tu equipo. Un solo lugar para organizar el día.</p><a class="primary link-button" href="index.html?nueva=1">＋ Crear reserva</a></div>
+      <div class="welcome-symbol" aria-hidden="true"><span>CO</span><span>BO<span class="symbol-dot">●</span></span><span>SU</span></div>
+    </section>
+    <p id="overview-error" class="warning" role="alert" hidden></p>
+    <section class="overview-metrics" aria-label="Actividad del centro">
+      <article><span>01 / AGENDA</span><strong id="today-count">—</strong><p>Reservas de hoy</p><small>Sin contar cancelaciones</small></article>
+      <article class="metric-attention"><span>02 / SEGUIMIENTO</span><strong id="pending-count">—</strong><p>Pendientes de hoy</p><small>Reservas por confirmar</small></article>
+      <article><span>03 / CLIENTES</span><strong id="client-count">—</strong><p>Clientes activos</p><small>En la base de tu centro</small></article>
+      <article><span>04 / EQUIPO</span><strong id="clock-count">—</strong><p id="clock-label">En jornada</p><small id="clock-caption">Fichajes abiertos</small></article>
+    </section>
+    <section class="workspace-grid">
+      <section class="overview-card agenda-card" aria-labelledby="agenda-title"><header><div><p class="eyebrow">PLAN DEL DÍA</p><h2 id="agenda-title">Agenda de hoy</h2></div><a href="index.html" class="quiet-link">Ver calendario ↗</a></header>
+        <div class="agenda-filters" role="group" aria-label="Filtrar reservas"><button data-agenda="all" aria-pressed="true">Todas</button><button data-agenda="pending" aria-pressed="false">Por confirmar <span id="pending-badge">—</span></button></div>
+        <div id="day-agenda" class="day-agenda" aria-live="polite"><p class="dashboard-empty">Cargando tu agenda…</p></div>
+      </section>
+      <div class="overview-side">
+        <section class="overview-card" aria-labelledby="team-title"><header><div><p class="eyebrow">AHORA EN EL CENTRO</p><h2 id="team-title">Equipo en jornada</h2></div><span class="presence-dot" aria-hidden="true"></span></header><div id="working-team"><p class="dashboard-empty">Consultando fichajes…</p></div><a class="card-footer-link" href="fichajes.html">Abrir fichajes <span>↗</span></a></section>
+        <section class="shortcuts" aria-label="Accesos rápidos"><p class="eyebrow">SIGUE ORGANIZANDO</p><a href="gestion.html?section=clients"><span><strong>Clientes</strong><small>Fichas, contacto e historial</small></span><b aria-hidden="true">↗</b></a><a href="gestion.html?section=services"><span><strong>Servicios</strong><small>Duración, precios y aforo</small></span><b aria-hidden="true">↗</b></a><a href="gestion.html?section=shifts"><span><strong>Turnos</strong><small>Horarios y días libres</small></span><b aria-hidden="true">↗</b></a></section>
+      </div>
+    </section>
+    <footer class="overview-footer"><strong>COBOSU<span> / GESTIÓN DEL CENTRO</span></strong><span>Más tiempo para las personas.</span></footer>
+  </main>
+</body>
+</html>

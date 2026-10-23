@@ -63,22 +63,26 @@ function loadData() {
   return seedData();
 }
 const serverMode = window.CALENDAR_SERVER === true;
-let adminToken = serverMode ? window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
+let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
 $('mode-title').textContent = serverMode ? 'Servidor conectado' : 'Demostración local';
 $('mode-description').textContent = serverMode
-  ? 'Los cambios se guardan en la base de datos local.'
+  ? 'Reservas y disponibilidad actualizadas para tu equipo.'
   : 'Los cambios se guardan solo en este navegador.';
 const fromServer = b => ({...b,status:b.status.toLowerCase()});
 const toServer = b => ({...b,status:b.status.toUpperCase()});
 async function api(path,method='GET',body) {
   const res=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminToken},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
   const result=await res.json();
+  if(res.status===401) location.href='login.html';
   if(!res.ok)throw new Error(result.error||'Error de conexión');
   return result;
 }
 let data;
 if(serverMode) {
-  if(!adminToken) adminToken=window.prompt('Clave de administración del calendario (desarrollo):')||'';
+  if(!adminToken){location.href='login.html';return;}
+  const me=await api('me');
+  if(me.role==='TRAINER'){location.href='fichajes.html';return;}
+  if(me.role!=='ADMIN') $('schedule-button').hidden=true;
   try {data=await api('state');data.bookings=data.bookings.map(fromServer);sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
@@ -153,7 +157,9 @@ function renderTimeGrid(dates, bookings, employees) {
     html += `<div class="time-column ${date === todayKey() ? 'is-today' : ''}" style="grid-column:${2 + i * employees.length + j};grid-row:3">`;
     for (let slot = 0; slot < 48; slot++) {
       const start = slot * 30;
-      const open = C.isOpen(date, start, start + 30, data.schedule);
+      const override = employee.shifts?.find(s=>s.date===date);
+      const working = override ? override.periods.some(p=>start>=C.minutes(p.open) && start+30<=C.minutes(p.close)) : !employee.schedule || C.isOpen(date,start,start+30,employee.schedule);
+      const open = employee.active!==false && working && C.isOpen(date, start, start + 30, data.schedule);
       const label = `${prettyDate(date, { day: 'numeric', month: 'long' })}, ${C.timeLabel(start)}, ${employee.name}`;
       html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de apertura: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera de apertura'}"></button>`;
     }
@@ -216,19 +222,23 @@ function updateHoursHint() {
   $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : `Apertura: ${hours.open} – ${hours.close}. Se comprueba la disponibilidad de entrenador y sala al guardar.`;
 }
 function showBooking(id, date = state.date, minute, employeeId) {
+  if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
   $('booking-form').reset();
   $('booking-error').hidden = true;
   state.editing = id || null;
   const b = id ? data.bookings.find(item => item.id === id) : null;
   state.editingVersion=b?.version;
   state.editingSnapshot=b ? {...b} : null;
-  fillSelect('booking-client', data.clients, '');
+  fillSelect('booking-client', data.clients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
+  fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
+  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId));
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const start = minute ?? C.minutes(hours.open);
-  const service = lookup('services',state.service) || data.services[0];
+  const selectedService = lookup('services',state.service);
+  const service = selectedService?.active!==false && selectedService || data.services.find(s=>s.active!==false) || data.services[0];
   const duration = service.duration || 60;
-  const values = b || {clientId:data.clients[0].id,employeeId:employeeId || (state.employee === 'all' ? data.employees[0].id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
+  const values = b || {clientId:data.clients.find(c=>(c.status||'ACTIVE')==='ACTIVE')?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
@@ -364,7 +374,12 @@ window.addEventListener('storage',event => {
   if(!serverMode && event.key===KEY) storageWritable=false;
 });
 setupSelects();
+const query=new URLSearchParams(location.search);
+if(C.validDate(query.get('fecha')||'')){state.date=query.get('fecha');state.view='day';}
 render(true);
+const requestedBooking=data.bookings.find(b=>b.id===query.get('reserva'));
+if(requestedBooking)showBooking(requestedBooking.id);
+else if(query.get('nueva')==='1')showBooking();
 setInterval(() => {
   const now=new Date();
   document.querySelectorAll('.now-line').forEach(line => {line.style.top=`${(now.getHours()*60+now.getMinutes())*1.4}px`;});

@@ -279,6 +279,36 @@ test("Cambio horario: rechaza horas inexistentes y ambiguas de Madrid", () => {
     /ambigua/,
   );
 });
+test("Fichajes parametrizados: usa toda la plantilla y evita dobles entradas", async () => {
+  const c = config();
+  c.employees = Array.from({ length: 7 }, (_, index) => ({
+    id: `worker-${index + 1}`,
+    name: `Empleado ${index + 1}`,
+    color: "#456789",
+    schedule: structuredClone(hours),
+  }));
+  const g = await gym(c);
+  const initial = await store.attendance(g);
+  assert.equal(initial.employees.length, 7);
+  assert.equal(initial.records.length, 0);
+  const attempts = await Promise.allSettled([
+    store.clock(g, { employeeId: "worker-1", action: "IN" }),
+    other.clock(g, { employeeId: "worker-1", action: "IN" }),
+  ]);
+  assert.equal(attempts.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(attempts.find((result) => result.status === "rejected").reason.status, 409);
+  assert.equal((await store.attendance(g)).records.filter((record) => !record.clockOut).length, 1);
+  const closed = await store.clock(g, { employeeId: "worker-1", action: "OUT" });
+  assert.ok(closed.clockOut);
+  await assert.rejects(
+    store.clock(g, { employeeId: "worker-1", action: "OUT" }),
+    /jornada abierta/,
+  );
+  await assert.rejects(
+    store.clock(g, { employeeId: "unknown", action: "IN" }),
+    /desconocido/,
+  );
+});
 test("API pública sincroniza dos servidores; autenticación y persistencia", async () => {
   const g = await gym(),
     token = "test-admin-token-long-enough";
@@ -288,6 +318,10 @@ test("API pública sincroniza dos servidores; autenticación y persistencia", as
   );
   const urls = apps.map((app) => "http://127.0.0.1:" + app.address().port);
   try {
+    const attendancePage = await fetch(urls[0] + "/fichajes.html");
+    assert.equal(attendancePage.status, 200);
+    assert.match(await attendancePage.text(), /id="employee-list"/);
+    assert.equal((await fetch(urls[0] + "/fichajes.js")).status, 200);
     assert.equal((await fetch(urls[0] + "/api/state")).status, 401);
     const before = await (
       await fetch(urls[1] + "/api/state", {
@@ -363,5 +397,118 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
     await until(()=>d.querySelectorAll('[data-booking]').length===2);
     assert.match(d.getElementById('calendar').textContent,/Cliente web/);
     assert.equal(w.localStorage.getItem('trainers-point-calendar-v1'),null);
+  }finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+
+test('Gestión: fichas persistentes, estado del cliente y conflictos entre ediciones', async () => {
+  const g=await gym();
+  const initial=await store.state(g);
+  const client=await store.manage(g,'clients',{name:'Nuevo cliente',email:'nuevo@example.com',phone:'600123123',notes:'Preferencia de mañana',status:'ACTIVE'},initial.revision);
+  assert.equal((await other.state(g)).clients.find(c=>c.id===client.id).notes,'Preferencia de mañana');
+  await assert.rejects(store.manage(g,'clients',{...client,name:'Edición vieja'},initial.revision,client.id),/cambiado/);
+  let state=await store.state(g);
+  await store.manage(g,'clients',{...client,status:'BLOCKED'},state.revision,client.id);
+  await assert.rejects(store.save(g,booking({clientId:client.id})),/bloqueado/);
+  const a=await store.save(g,booking());state=await store.state(g);
+  await assert.rejects(store.manage(g,'clients',{...state.clients[0],status:'INACTIVE'},state.revision,'c0'),/inactivo/);
+  assert.equal((await store.state(g)).bookings[0].id,a.id);
+  const historyGym=await gym();await store.save(historyGym,booking({date:'2020-10-22'}));
+  const h=await store.state(historyGym);
+  await store.manage(historyGym,'services',{...h.services[0],duration:45,price:30},h.revision,'s1');
+  assert.equal((await store.state(historyGym)).bookings[0].end,'11:00');
+});
+
+test('Turnos partidos y días libres afectan a disponibilidad y preservan reservas',async()=>{
+  const g=await gym(),s=await store.state(g);
+  await store.manage(g,'employees',{...s.employees[0],jobTitle:'Entrenador personal',shifts:[{date:'2030-10-22',periods:[{open:'09:00',close:'12:00'},{open:'15:00',close:'18:00'}]}]},s.revision,'e1');
+  const slots=await store.slots(g,{date:'2030-10-22',employeeId:'e1',serviceId:'s1',roomId:'r1'});
+  assert.ok(slots.some(s=>s.start==='15:00'));assert.ok(!slots.some(s=>s.start==='12:00'));
+  await assert.rejects(store.save(g,booking({start:'11:30'})),/horario/);
+  await store.save(g,booking());
+  const next=await store.state(g);
+  await assert.rejects(store.manage(g,'employees',{...next.employees[0],shifts:[{date:'2030-10-22',periods:[]}]},next.revision,'e1'),/horario/);
+  await assert.rejects(store.manage(g,'employees',{...next.employees[0],shifts:[{date:'2030-10-22',periods:[{open:'09:00',close:'12:00'},{open:'11:00',close:'13:00'}]}]},next.revision,'e1'),/solapan/);
+});
+
+test('Usuarios: login, permisos de servidor, fichajes propios y revocación de sesiones',async()=>{
+  const c=config();c.employees.push({...structuredClone(c.employees[0]),id:'e3',name:'Recepción'});
+  const g=await gym(c),bootstrap='management-bootstrap-token-long-enough';
+  const app=server(store,g,bootstrap,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+app.address().port;
+  async function request(path,token=bootstrap,method='GET',body){return fetch(base+'/api/'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
+  try{
+    const adminBody={record:{employeeId:'e1',username:'admin@example.com',password:'Admin-test-123',role:'ADMIN',enabled:true}};
+    const first=await request('manage/users',bootstrap,'POST',adminBody);assert.equal(first.status,201,await first.clone().text());
+    const {token:admin,id:adminId}=await first.json();assert.ok(admin);
+    assert.equal((await request('state')).status,401,'Bootstrap key stops working after first account');
+    assert.doesNotMatch(await (await fetch(base+'/runtime.js')).text(),new RegExp(bootstrap));
+    const trainee=await request('manage/users',admin,'POST',{record:{employeeId:'e2',username:'trainer@example.com',password:'Trainer-test-123',role:'TRAINER',enabled:true}});
+    assert.equal(trainee.status,201);const trainerId=(await trainee.json()).id;
+    assert.equal((await request('manage/users',admin,'POST',{record:{employeeId:'e3',username:'desk@example.com',password:'Reception-test-123',role:'RECEPTION',enabled:true}})).status,201);
+    async function login(username,password){const r=await request('login','', 'POST',{username,password});assert.equal(r.status,200,await r.clone().text());return (await r.json()).token;}
+    const trainer=await login('trainer@example.com','Trainer-test-123');
+    const receptionist=await login('desk@example.com','Reception-test-123');
+    assert.equal((await request('login','', 'POST',{username:'trainer@example.com',password:'wrong'})).status,401);
+    assert.equal((await request('state',trainer)).status,403);
+    const view=await (await request('manage',trainer)).json();assert.equal(view.employees.length,1);assert.equal(view.employees[0].id,'e2');assert.deepEqual(view.clients,[]);assert.deepEqual(view.users,[]);
+    assert.equal((await request('config',trainer,'PUT',{config:c,revision:0})).status,403);
+    assert.equal((await request('manage/users',trainer,'POST',adminBody)).status,403);
+    assert.equal((await request('attendance/clock',trainer,'POST',{employeeId:'e1',action:'IN'})).status,403);
+    assert.equal((await request('attendance/clock',trainer,'POST',{employeeId:'e2',action:'IN'})).status,201);
+    await store.clock(g,{employeeId:'e1',action:'IN'});
+    const attendance=await (await request('attendance',trainer)).json();assert.equal(attendance.employees.length,1);assert.ok(attendance.records.every(r=>r.employeeId==='e2'));
+    assert.equal((await request('manage/services',receptionist,'POST',{record:c.services[0]})).status,403);
+    const rev=(await (await request('manage',receptionist)).json()).revision;
+    assert.equal((await request('manage/clients',receptionist,'POST',{record:{name:'Desde recepción',email:'',phone:'',notes:''},revision:rev})).status,201);
+    assert.equal((await request('manage/users/'+adminId,admin,'PUT',{record:{...adminBody.record,enabled:false}})).status,409);
+    const members=await (await request('manage',admin)).json();assert.ok(members.users.every(u=>!u.password_hash&&!u.password));
+    assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer@example.com',role:'TRAINER',enabled:false}})).status,200);
+    assert.equal((await request('me',trainer)).status,401);
+    await request('logout',receptionist,'POST');assert.equal((await request('me',receptionist)).status,401);
+  }finally{await new Promise(r=>app.close(r));}
+});
+
+test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con historial',async()=>{
+  const {JSDOM}=require('jsdom');const g=await gym(),token='management-ui-test-long-enough';
+  const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+app.address().port;let dom;
+  const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('UI timeout');};
+  async function open(section){dom?.window.close();dom=await JSDOM.fromURL(base+'/gestion.html?section='+section,{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}});await until(()=>dom.window.document.querySelector('[data-edit]'));return dom.window.document;}
+  try{
+    let d=await open('clients');d.getElementById('add').click();d.querySelector('[name=name]').value='Cliente interfaz';d.querySelector('[name=email]').value='ui@example.com';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    await until(()=>d.getElementById('rows').textContent.includes('Cliente interfaz'));
+    const state=await store.state(g);assert.ok(state.clients.some(c=>c.name==='Cliente interfaz'));
+    d=await open('services');d.getElementById('add').click();d.querySelector('[name=name]').value='Pilates';d.querySelector('[name=capacity]').value='8';d.querySelector('[name=price]').value='25';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    await until(()=>d.getElementById('rows').textContent.includes('Pilates'));
+    assert.equal((await store.state(g)).services.find(s=>s.name==='Pilates').capacity,8);
+    d=await open('shifts');d.querySelector('[data-edit=e1]').click();d.getElementById('shift-date').value='2030-10-23';d.getElementById('day-off').click();d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    await until(()=>!d.getElementById('editor').open);
+    assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
+  }finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+
+test('Inicio: muestra actividad real, filtra pendientes y abre la reserva correcta',async()=>{
+  const {JSDOM}=require('jsdom');
+  const today=require('luxon').DateTime.now().setZone('Europe/Madrid').toISODate();
+  const g=await gym(),token='overview-ui-test-admin-long-enough';
+  const pending=await store.save(g,booking({date:today,status:'PENDING'}));
+  await store.save(g,booking({date:today,start:'12:00',clientId:'c1'}));
+  const cancelled=await store.save(g,booking({date:today,start:'14:00',clientId:'c2'}));
+  await store.save(g,{...cancelled,status:'CANCELLED'},cancelled.id);
+  await store.clock(g,{employeeId:'e1',action:'IN'});
+  const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+app.address().port;let dom;
+  const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('Overview UI timeout');};
+  const options={resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}};
+  try{
+    dom=await JSDOM.fromURL(base+'/inicio.html',options);let d=dom.window.document;
+    await until(()=>d.getElementById('today-count').textContent==='2');
+    assert.equal(d.getElementById('pending-count').textContent,'1');assert.equal(d.getElementById('client-count').textContent,'20');assert.equal(d.getElementById('clock-count').textContent,'1');
+    assert.equal(d.querySelectorAll('.agenda-item').length,2);
+    d.querySelector('[data-agenda=pending]').click();assert.equal(d.querySelectorAll('.agenda-item').length,1);
+    const target=d.querySelector('.agenda-item').href;assert.ok(target.includes(pending.id));
+    dom.window.close();dom=await JSDOM.fromURL(target,options);d=dom.window.document;
+    await until(()=>d.getElementById('booking-dialog').open);
+    assert.equal(d.getElementById('booking-client').value,'c0');assert.equal(d.getElementById('booking-status').value,'pending');assert.equal(d.getElementById('booking-date').value,today);
   }finally{dom?.window.close();await new Promise(r=>app.close(r));}
 });

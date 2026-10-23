@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestión del centro · Cobosu</title>
+  <link rel="stylesheet" href="fichajes.css"><link rel="stylesheet" href="menu.css"><link rel="stylesheet" href="gestion.css">
+  <link rel="stylesheet" href="design.css">
+  <script src="runtime.js" defer></script><script src="menu.js" defer></script><script src="gestion.js" defer></script>
+</head>
+<body>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
+  <main class="attendance-shell">
+    <header class="attendance-header"><div><p class="eyebrow">COBOSU · BIZKAIA</p><h1 id="page-title">Gestión del centro</h1><p id="page-subtitle" class="header-date">Cargando tus datos…</p></div><a class="outline-button link-button" href="fichajes.html">Ver fichajes →</a></header>
+    <nav id="sections" class="section-links" aria-label="Gestión"></nav>
+    <p id="notice" role="status" hidden></p>
+    <section class="summary" id="stats" aria-label="Resumen"></section>
+    <section class="attendance-card management-card">
+      <div class="panel-toolbar"><label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Buscar en esta sección" placeholder="Buscar por nombre, correo o teléfono…"></label>
+        <select id="status-filter" aria-label="Filtrar por estado"><option value="all">Todos los estados</option><option value="active">Activos</option><option value="inactive">Inactivos / bloqueados</option></select>
+        <button id="refresh" class="outline-button">Actualizar</button><button id="add" class="primary">＋ Añadir</button></div>
+      <div id="table-wrap" class="history-scroll"><table><thead id="columns"></thead><tbody id="rows"></tbody></table></div>
+      <p id="empty" class="empty-state" hidden>No hay resultados. Puedes añadir la primera ficha.</p>
+      <div id="permissions" hidden></div>
+    </section>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="record-form"><header class="dialog-heading"><h2 id="editor-title">Ficha</h2><button type="button" id="close" aria-label="Cerrar ficha">×</button></header>
+      <div id="fields"></div><p id="form-error" class="warning" role="alert" hidden></p>
+      <footer class="dialog-actions"><button type="button" id="cancel" class="outline-button">Cerrar</button><button id="save" class="primary">Guardar cambios</button></footer>
+    </form>
+  </dialog>
+</body>
+</html>
