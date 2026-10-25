@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gimnasios · Trainers Point</title>
+  <link rel="stylesheet" href="fichajes.css"><link rel="stylesheet" href="menu.css"><link rel="stylesheet" href="design.css"><link rel="stylesheet" href="gimnasios.css">
+  <script src="runtime.js" defer></script><script src="menu.js" defer></script><script src="gimnasios.js" defer></script>
+</head>
+<body>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
+  <main class="gyms-shell">
+    <header class="attendance-header"><div><p class="eyebrow">TRAINERS POINT · TU CENTRO</p><h1>Gimnasios</h1><p class="header-date">Añade y cambia de sede desde un único lugar.</p></div><button id="open-create" class="primary">＋ Añadir gimnasio</button></header>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <section class="gym-list-card"><div class="gym-list-head"><div><p class="eyebrow">SEDES DISPONIBLES</p><h2>Tus gimnasios</h2></div><span id="count"></span></div><div id="gym-list" class="gym-list"><p>Cargando gimnasios…</p></div></section>
+  </main>
+  <dialog id="create-dialog"><form id="create-form"><header class="dialog-heading"><h2>Nuevo gimnasio</h2><button type="button" id="close-create" aria-label="Cerrar">×</button></header><div class="form-grid"><label>Nombre del gimnasio<input name="name" required maxlength="120" placeholder="Ej. Trainers Point Centro"></label></div><p id="form-error" class="warning" hidden></p><footer class="dialog-actions"><button type="button" id="cancel-create" class="outline-button">Cancelar</button><button class="primary">Guardar gimnasio</button></footer></form></dialog>
+</body>
+</html>

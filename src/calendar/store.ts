@@ -20,7 +20,8 @@ import {
   serviceSchema,
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
-CREATE TABLE IF NOT EXISTS calendar.gyms(id text PRIMARY KEY, config jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS calendar.gyms(id text PRIMARY KEY, name text, config jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0);
+ALTER TABLE calendar.gyms ADD COLUMN IF NOT EXISTS name text;
 CREATE TABLE IF NOT EXISTS calendar.bookings(id text NOT NULL, gym_id text NOT NULL REFERENCES calendar.gyms(id), data jsonb NOT NULL, PRIMARY KEY(gym_id,id), CHECK(data->>'status' IN ('PENDING','CONFIRMED','CANCELLED','COMPLETED','NO_SHOW')));
 CREATE INDEX IF NOT EXISTS bookings_date ON calendar.bookings(gym_id, (data->>'date'));
 CREATE TABLE IF NOT EXISTS calendar.attendance(
@@ -41,9 +42,34 @@ export class Store {
   }
   async seed(gym: string, config: Config) {
     await this.pool.query(
-      "INSERT INTO calendar.gyms(id,config) VALUES($1,$2) ON CONFLICT DO NOTHING",
+      "INSERT INTO calendar.gyms(id,name,config) VALUES($1,$1,$2) ON CONFLICT (id) DO UPDATE SET name=COALESCE(calendar.gyms.name, EXCLUDED.name)",
       [gym, configSchema.parse(config)],
     );
+  }
+  async listGyms() {
+    return (await this.pool.query("SELECT id,name FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
+      .map((row) => ({ id: row.id as string, name: (row.name || row.id) as string }));
+  }
+  async gymExists(gym: string) {
+    return Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
+  }
+  async createGym(name: string, templateGym: string) {
+    const id = `${name.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "gimnasio"}-${randomUUID().slice(0, 8)}`;
+    const db = await this.pool.connect();
+    try {
+      await db.query("BEGIN");
+      const source = await db.query("SELECT config FROM calendar.gyms WHERE id=$1", [templateGym]);
+      if (!source.rows.length) throw new ApiError(404, "No se encontró el gimnasio base.");
+      const config = configSchema.parse(source.rows[0].config);
+      await db.query("INSERT INTO calendar.gyms(id,name,config) VALUES($1,$2,$3)", [id, name.trim(), config]);
+      await db.query("COMMIT");
+      return { id, name: name.trim() };
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
+    } finally {
+      db.release();
+    }
   }
   // Every writer locks the same persisted gym row BEFORE reading bookings. READ COMMITTED
   // gives waiting writers a fresh snapshot after the prior writer commits. Works across processes.

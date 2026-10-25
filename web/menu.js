@@ -21,7 +21,7 @@
   };
   const items = [
     ['Inicio','home','inicio.html'],
-    ['Calendario','calendar','index.html'], ['Clientes','people','gestion.html?section=clients'], ['Servicios','list','gestion.html?section=services'],
+    ['Calendario','calendar','index.html'], ['Clientes','people','gestion.html?section=clients'], ['Gimnasios','globe','gimnasios.html'], ['Servicios','list','gestion.html?section=services'],
     ['Profesionales','staff','gestion.html?section=employees'], ['Fichajes','clock','fichajes.html'],
     ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','gestion.html?section=users'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
@@ -38,7 +38,30 @@
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
   const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
-  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><img class="app-menu-logo" src="logo-cobosu.png" alt="Cobosu Gym Station" width="440" height="222"></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation">⇆</button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Cobosu · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><span aria-hidden="true">＋</span></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
+  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation">⇆</button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><span aria-hidden="true">＋</span></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
+  const firstGroup = host.querySelector('.menu-group');
+  if (firstGroup) {
+    const gymLink = document.createElement('a');
+    gymLink.className = 'app-menu-item'; gymLink.href = 'gimnasios.html'; gymLink.title = 'Gimnasios';
+    gymLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons.globe+'</svg><span class="app-menu-label">Gimnasios</span>';
+    if (location.pathname.endsWith('gimnasios.html')) gymLink.setAttribute('aria-current','page');
+    firstGroup.append(gymLink);
+  }
+  const center = host.querySelector('.app-menu-center');
+  center.querySelector('strong')?.replaceWith(Object.assign(document.createElement('select'), { id: 'gym-switcher', ariaLabel: 'Cambiar de gimnasio' }));
+  const gymSwitcher = center.querySelector('#gym-switcher');
+  async function loadGyms() {
+    try {
+      const response = await fetch('/api/gyms'); if (!response.ok) return;
+      const data = await response.json();
+      const selected = localStorage.getItem('calendar-selected-gym') || data.selected || data.gyms[0]?.id;
+      gymSwitcher.innerHTML = data.gyms.map(g => '<option value="'+g.id+'">'+g.name+'</option>').join('');
+      gymSwitcher.value = selected;
+      if (selected) localStorage.setItem('calendar-selected-gym', selected);
+      gymSwitcher.addEventListener('change', () => { localStorage.setItem('calendar-selected-gym', gymSwitcher.value); location.reload(); });
+    } catch (_) {}
+  }
+  loadGyms();
   const main=document.querySelector('main');
   if(main){main.id ||= 'main';const skip=document.createElement('a');skip.href='#'+main.id;skip.className='skip-content';skip.textContent='Ir al contenido';document.body.prepend(skip);}
   const toggle = host.querySelector('.app-menu-toggle');

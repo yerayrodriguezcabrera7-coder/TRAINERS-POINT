@@ -5,12 +5,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
-    "start": "node dist/index.js",
-<<<<<<< HEAD
+    "start": "npm run build && node scripts/start.cjs",
+    "start:clients": "node dist/index.js",
     "test": "npm run build && node --test tests/*.test.cjs web/calendar-core.test.cjs",
-    "db:calendar": "npm run build && node scripts/setup-calendar.cjs",
-    "dev:calendar": "npm run build && node scripts/dev-calendar.cjs"
-=======
+    "dev:calendar": "npm run build && node scripts/dev-calendar.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -18,19 +16,18 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
-    "dotenv": "^16.4.5"
->>>>>>> rama/clientes-db
+    "dotenv": "^16.4.5",
+    "luxon": "^3.7.2",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
     "@types/luxon": "^3.7.6",
     "@types/node": "^22.0.0",
-<<<<<<< HEAD
     "@types/pg": "^8.23.1",
     "embedded-postgres": "^18.4.0-beta.17",
     "jsdom": "^27.0.1",
-=======
->>>>>>> rama/clientes-db
     "nodemon": "^3.1.4",
     "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
@@ -44,20 +41,12 @@
       "chokidar": "^4.0.3"
     }
   },
-<<<<<<< HEAD
-  "dependencies": {
-    "dotenv": "^18.0.8",
-    "luxon": "^3.7.2",
-    "pg": "^8.23.1",
-    "zod": "^4.6.7"
-  },
-  "engines": {
-    "node": ">=22"
-=======
   "allowScripts": {
     "@prisma/client@6.19.3": true,
     "prisma@6.19.3": true,
     "@prisma/engines@6.19.3": true
->>>>>>> rama/clientes-db
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
