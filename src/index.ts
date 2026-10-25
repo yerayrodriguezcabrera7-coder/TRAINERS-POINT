@@ -840,13 +840,6 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 }
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
-  "/": { file: "clients.html", contentType: "text/html; charset=utf-8" },
-  "/clientes": { file: "clients.html", contentType: "text/html; charset=utf-8" },
-  "/clients.css": { file: "clients.css", contentType: "text/css; charset=utf-8" },
-  "/clients.js": { file: "clients.js", contentType: "text/javascript; charset=utf-8" },
-  "/gimnasios": { file: "gyms.html", contentType: "text/html; charset=utf-8" },
-  "/gyms.css": { file: "gyms.css", contentType: "text/css; charset=utf-8" },
-  "/gyms.js": { file: "gyms.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
@@ -871,6 +864,20 @@ const server = createServer(async (request, response) => {
 
   if (url.pathname === "/calendario") {
     response.writeHead(302, { Location: "/calendario/" });
+    response.end();
+    return;
+  }
+
+  // Las rutas antiguas conservan sus enlaces, pero toda la operativa vive en
+  // la navegación y el estilo compartidos del calendario.
+  const integratedRoute =
+    url.pathname === "/" || url.pathname === "/clientes"
+      ? "/calendario/gestion.html?section=clients"
+      : url.pathname === "/gimnasios"
+        ? "/calendario/gimnasios.html"
+        : undefined;
+  if (integratedRoute) {
+    response.writeHead(302, { Location: integratedRoute });
     response.end();
     return;
   }
@@ -944,7 +951,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Trainers Point disponible en http://localhost:${port}/clientes`);
+  console.log(`Trainers Point disponible en http://localhost:${port}/calendario/`);
 });
 
 server.on("close", () => {

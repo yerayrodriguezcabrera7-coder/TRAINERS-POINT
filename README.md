@@ -6,7 +6,7 @@ La aplicación reúne en un único servidor y un único puerto (3000) los dos de
 
 | Parte | URL | Datos |
 | --- | --- | --- |
-| Clientes y gimnasios | http://localhost:3000/clientes y http://localhost:3000/gimnasios | PostgreSQL en AWS RDS (Prisma, `DATABASE_URL`) |
+| Clientes y gimnasios | http://localhost:3000/calendario/gestion.html?section=clients y http://localhost:3000/calendario/gimnasios.html | Datos integrados en el calendario |
 | Calendario (inicio, calendario, fichajes, gestión, acceso) | http://localhost:3000/calendario/ | PostgreSQL local aislado del propio calendario (carpeta `.calendar-dev/`). **No usa AWS.** |
 
 Requisitos: Node.js 22 o superior.
@@ -56,9 +56,9 @@ La URL de ejemplo usa PostgreSQL sobre TLS (`sslmode=require`). Cada ordenador d
 
 `npm run build` compila TypeScript. Antes de trabajar con el esquema, genera el cliente con `npm run prisma:generate`; aplica migraciones solo cuando el esquema y el entorno compartido estén acordados.
 
-## Página de clientes (desarrollo local)
+## Gestión de clientes (integrada en el calendario)
 
-Después de instalar dependencias y aplicar las migraciones acordadas, ejecuta `npm run dev` (en Windows PowerShell, `npm.cmd run dev`) desde la raíz del proyecto y abre `http://localhost:3000/clientes`. La página permite buscar y filtrar clientes, cambiar su estado y gimnasio, y gestionar sedes. El listado prioriza por defecto a quienes tienen la sesión futura más próxima y muestra las sesiones restantes, los pagos por revisar y el gimnasio; también permite ordenar por pagos o nombre. La próxima sesión se obtiene de las reservas asociadas al historial del cliente, por lo que queda preparada antes de que exista una vista de calendario. En **Historial** se pueden registrar servicios/bonos, sesiones incluidas, forma y estado de pago, programar sesiones y marcar asistencia; las sesiones restantes descuentan las programadas y las asistidas, mientras que las ausencias no descuentan. La migración inicial crea la sede `Bizkaia Sant Marti`; puedes añadir futuras sedes desde **Tus gimnasios → Añadir gimnasio**.
+Después de instalar dependencias y aplicar las migraciones acordadas, ejecuta `npm start` (en Windows PowerShell, `npm.cmd start`) desde la raíz del proyecto y abre `http://localhost:3000/calendario/gestion.html?section=clients`. La gestión usa la misma navegación, tipografía, colores y componentes que el calendario: permite buscar y filtrar clientes, editar sus fichas, cambiar su estado, consultar su historial de reservas y gestionar servicios, profesionales y sedes desde los apartados integrados. Las rutas antiguas `/clientes` y `/gimnasios` redirigen a estas pantallas para no romper marcadores existentes.
 
 El servidor escucha solo en `127.0.0.1`; esta página es una herramienta de desarrollo, no una aplicación lista para publicar: no tiene inicio de sesión ni autorización multiusuario. No expongas el puerto a una red ni uses datos personales reales hasta implementar autenticación y permisos.
 

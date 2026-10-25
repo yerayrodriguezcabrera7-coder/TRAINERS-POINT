@@ -236,13 +236,16 @@ export function server(
           ? "index.html"
           : path.replace(/^\/(?:calendario|web)\//, "");
       if (file === "runtime.js" || path === "/runtime.js") {
+        // El token solo se entrega durante el arranque inicial local. En cuanto
+        // existe una cuenta, el navegador debe usar una sesión autenticada.
+        const exposeBootstrapToken = options.exposeAdminToken && (await access.needsSetup(gym));
         res.writeHead(200, {
           "Content-Type": "text/javascript",
           "Cache-Control": "no-store",
         });
         res.end(
           `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);o={...o,headers:h};}return f(i,o);};})();${
-            options.exposeAdminToken
+            exposeBootstrapToken
               ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
               : ""
           }`,
