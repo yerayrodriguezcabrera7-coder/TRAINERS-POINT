@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ef493d">
+  <title>Fichajes · Cobosu</title>
+  <link rel="stylesheet" href="fichajes.css">
+  <link rel="stylesheet" href="menu.css">
+  <link rel="stylesheet" href="design.css">
+  <script src="menu.js" defer></script>
+  <script src="runtime.js" defer></script>
+  <script src="fichajes.js" defer></script>
+</head>
+<body>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
+  <main class="attendance-shell">
+    <header class="attendance-header">
+      <div>
+        <p class="eyebrow">CONTROL HORARIO</p>
+        <h1>La jornada, al día<span style="color:var(--red)">.</span></h1>
+        <p id="current-date" class="header-date"></p>
+      </div>
+      <div class="center-card" aria-label="Centro actual">
+        <span class="center-mark" aria-hidden="true">C</span>
+        <span><small>Centro actual</small><strong>COBOSU · BIZKAIA</strong></span>
+      </div>
+    </header>
+
+    <div id="attendance-warning" class="warning" role="alert" hidden></div>
+
+    <section class="summary" aria-label="Resumen de fichajes">
+      <article><span class="summary-icon working" aria-hidden="true">●</span><div><small>TRABAJANDO AHORA</small><strong id="working-count">0</strong></div></article>
+      <article><span class="summary-icon away" aria-hidden="true">●</span><div><small>FUERA</small><strong id="away-count">0</strong></div></article>
+      <article><span class="summary-icon total" aria-hidden="true">◷</span><div><small>PLANTILLA ACTIVA</small><strong id="employee-count">0</strong></div></article>
+      <article><span class="summary-icon hours" aria-hidden="true">∑</span><div><small>HORAS REGISTRADAS HOY</small><strong id="today-total">00:00</strong></div></article>
+    </section>
+
+    <section class="attendance-card">
+      <nav class="tabs" aria-label="Secciones de fichajes">
+        <button id="clocking-tab" class="active" aria-controls="clocking-panel" aria-selected="true"><span aria-hidden="true">◷</span> Fichajes</button>
+        <button id="history-tab" aria-controls="history-panel" aria-selected="false"><span aria-hidden="true">☷</span> Historial</button>
+      </nav>
+
+      <section id="clocking-panel" class="tab-panel" aria-labelledby="clocking-tab">
+        <div class="panel-toolbar">
+          <label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Buscar empleado</span><input id="employee-search" type="search" placeholder="Buscar empleado…" autocomplete="off"></label>
+          <p id="last-update" aria-live="polite"></p>
+        </div>
+        <div class="employee-table" role="table" aria-label="Estado de los empleados">
+          <div class="employee-head" role="row"><span role="columnheader">Empleado</span><span role="columnheader">Estado</span><span role="columnheader">Tiempo de la jornada</span><span role="columnheader">Acción</span></div>
+          <div id="employee-list" role="rowgroup"></div>
+        </div>
+        <div id="employee-empty" class="empty-state" hidden>No hay empleados que coincidan con la búsqueda.</div>
+      </section>
+
+      <section id="history-panel" class="tab-panel" aria-labelledby="history-tab" hidden>
+        <div class="history-filters">
+          <label>Desde<input id="history-from" type="date"></label>
+          <label>Hasta<input id="history-to" type="date"></label>
+          <label>Empleado<select id="history-employee"><option value="all">Todos los empleados</option></select></label>
+          <button id="refresh-history" class="outline-button">Actualizar</button>
+        </div>
+        <div class="history-scroll">
+          <table>
+            <thead><tr><th>Empleado</th><th>Entrada</th><th>Salida</th><th>Duración</th><th>Estado</th></tr></thead>
+            <tbody id="history-list"></tbody>
+          </table>
+        </div>
+        <div id="history-empty" class="empty-state" hidden>No hay fichajes en este período.</div>
+      </section>
+    </section>
+    <p class="page-note">Cada entrada y salida, en su sitio.</p>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
