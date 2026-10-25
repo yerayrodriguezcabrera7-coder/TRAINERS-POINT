@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+<<<<<<< HEAD
     "module": "Node16",
     "moduleResolution": "Node16",
+=======
+    "module": "node16",
+    "moduleResolution": "node16",
+>>>>>>> rama/clientes-db
     "rootDir": "./src",
     "outDir": "./dist",
     "strict": true,

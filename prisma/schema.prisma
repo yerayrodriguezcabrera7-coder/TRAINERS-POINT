@@ -1,0 +1,503 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClientStatus {
+  LEAD
+  ACTIVO
+  INACTIVO
+  BAJA
+}
+
+enum ClientNoteCategory {
+  OBJETIVO
+  LESION
+  MEDIDAS
+  SEGUIMIENTO
+}
+
+enum TrainingPlanStatus {
+  BORRADOR
+  ACTIVO
+  COMPLETADO
+  ARCHIVADO
+}
+
+enum BookingStatus {
+  PENDIENTE
+  CONFIRMADA
+  COMPLETADA
+  CANCELADA
+}
+
+enum AttendanceStatus {
+  PENDIENTE
+  ASISTIO
+  NO_ASISTIO
+  CANCELADA
+}
+
+enum UserStatus {
+  INVITADO
+  ACTIVO
+  SUSPENDIDO
+  DESACTIVADO
+}
+
+enum EmployeeStatus {
+  ACTIVO
+  AUSENTE
+  INACTIVO
+}
+
+enum ShiftStatus {
+  PROGRAMADO
+  COMPLETADO
+  CANCELADO
+}
+
+enum TimeEntryStatus {
+  ABIERTO
+  CERRADO
+  REVISADO
+}
+
+enum StockMovementType {
+  ENTRADA
+  VENTA
+  DEVOLUCION
+  AJUSTE
+  DANO
+}
+
+enum SaleStatus {
+  BORRADOR
+  COMPLETADA
+  CANCELADA
+  REEMBOLSADA
+}
+
+enum SaleLineType {
+  PRODUCTO
+  SERVICIO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  OTRO
+}
+
+enum PaymentStatus {
+  PENDIENTE
+  PAGADO
+  FALLIDO
+  REEMBOLSADO
+}
+
+enum InvoiceStatus {
+  BORRADOR
+  EMITIDA
+  ANULADA
+}
+
+enum InvoiceComplianceStatus {
+  PENDIENTE
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+}
+
+enum InvoiceEventType {
+  GENERADA
+  ENVIADA
+  ACEPTADA
+  RECHAZADA
+  RECTIFICADA
+  ERROR
+}
+
+model Client {
+  id               String                 @id @default(uuid()) @db.Uuid
+  firstName        String
+  lastName         String
+  email            String                 @unique
+  phone            String
+  dni              String?                @unique
+  birthDate        DateTime?              @db.Date
+  status           ClientStatus           @default(LEAD)
+  gymId            String                 @db.Uuid
+  assignedWorkerId String?                @db.Uuid
+  notes            String?
+  createdAt        DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
+  gym              Gym                    @relation(fields: [gymId], references: [id], onDelete: Restrict)
+  assignedWorker   Employee?              @relation("AssignedClients", fields: [assignedWorkerId], references: [id], onDelete: SetNull)
+  clientNotes      ClientNote[]
+  trainingPlans    TrainingPlan[]
+  bookings         Booking[]
+  servicePackages  ClientServicePackage[]
+  sales            Sale[]
+
+  @@index([status, lastName, firstName])
+  @@index([gymId, status])
+  @@index([assignedWorkerId])
+}
+
+model Gym {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  city      String?
+  province  String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  clients   Client[]
+
+  @@index([isActive, name])
+}
+
+model ClientNote {
+  id        String             @id @default(uuid()) @db.Uuid
+  clientId  String             @db.Uuid
+  authorId  String?            @db.Uuid
+  category  ClientNoteCategory
+  content   String
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  author    Employee?          @relation("EmployeeClientNotes", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([authorId])
+}
+
+model TrainingPlan {
+  id          String             @id @default(uuid()) @db.Uuid
+  clientId    String             @db.Uuid
+  createdById String?            @db.Uuid
+  name        String
+  goals       String?
+  details     Json?
+  status      TrainingPlanStatus @default(BORRADOR)
+  startsAt    DateTime?          @db.Date
+  endsAt      DateTime?          @db.Date
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation("TrainingPlanAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([clientId, status])
+  @@index([createdById])
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  status       UserStatus     @default(INVITADO)
+  lastLoginAt  DateTime?      @db.Timestamptz(3)
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+  employee     Employee?
+  userRoles    UserRole[]
+  createdPlans TrainingPlan[] @relation("TrainingPlanAuthor")
+  auditEvents  AuditLog[]     @relation("AuditActor")
+
+  @@index([status])
+}
+
+model Employee {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String?         @unique @db.Uuid
+  employeeNumber  String?         @unique
+  jobTitle        String
+  status          EmployeeStatus  @default(ACTIVO)
+  hiredAt         DateTime?       @db.Date
+  terminatedAt    DateTime?       @db.Date
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignedClients Client[]        @relation("AssignedClients")
+  clientNotes     ClientNote[]    @relation("EmployeeClientNotes")
+  bookings        Booking[]
+  shifts          EmployeeShift[]
+  timeEntries     TimeEntry[]
+  sales           Sale[]
+
+  @@index([status, jobTitle])
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  userRoles   UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model UserRole {
+  userId     String   @db.Uuid
+  roleId     String   @db.Uuid
+  assignedAt DateTime @default(now()) @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model Service {
+  id          String                 @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  durationMin Int
+  price       Decimal                @db.Decimal(10, 2)
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
+  bookings    Booking[]
+  packages    ClientServicePackage[]
+  saleLines   SaleLine[]
+
+  @@index([isActive, name])
+}
+
+model ClientServicePackage {
+  id             String        @id @default(uuid()) @db.Uuid
+  clientId       String        @db.Uuid
+  serviceId      String        @db.Uuid
+  sessionsBought Int
+  totalAmount    Decimal       @db.Decimal(12, 2)
+  paymentMethod  PaymentMethod
+  paymentStatus  PaymentStatus @default(PAGADO)
+  purchasedAt    DateTime      @default(now()) @db.Timestamptz(3)
+  notes          String?
+  client         Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service        Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  bookings       Booking[]
+
+  @@index([clientId, purchasedAt])
+  @@index([serviceId, purchasedAt])
+  @@index([paymentStatus])
+}
+
+model Booking {
+  id         String                @id @default(uuid()) @db.Uuid
+  clientId   String                @db.Uuid
+  serviceId  String                @db.Uuid
+  packageId  String?               @db.Uuid
+  employeeId String?               @db.Uuid
+  startTime  DateTime              @db.Timestamptz(3)
+  endTime    DateTime              @db.Timestamptz(3)
+  status     BookingStatus         @default(PENDIENTE)
+  attendance AttendanceStatus      @default(PENDIENTE)
+  attendedAt DateTime?             @db.Timestamptz(3)
+  createdAt  DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime              @updatedAt @db.Timestamptz(3)
+  client     Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  service    Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  package    ClientServicePackage? @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  employee   Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([startTime, endTime, status])
+  @@index([packageId, attendance])
+  @@index([employeeId, startTime])
+  @@index([clientId, startTime])
+}
+
+model EmployeeShift {
+  id         String      @id @default(uuid()) @db.Uuid
+  employeeId String      @db.Uuid
+  startsAt   DateTime    @db.Timestamptz(3)
+  endsAt     DateTime    @db.Timestamptz(3)
+  status     ShiftStatus @default(PROGRAMADO)
+  notes      String?
+  createdAt  DateTime    @default(now()) @db.Timestamptz(3)
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, startsAt, endsAt])
+}
+
+model TimeEntry {
+  id             String          @id @default(uuid()) @db.Uuid
+  employeeId     String          @db.Uuid
+  clockInAt      DateTime        @default(now()) @db.Timestamptz(3)
+  clockOutAt     DateTime?       @db.Timestamptz(3)
+  status         TimeEntryStatus @default(ABIERTO)
+  correctionNote String?
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(3)
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, clockInAt])
+  @@index([status, clockInAt])
+}
+
+model Product {
+  id          String          @id @default(uuid()) @db.Uuid
+  sku         String?         @unique
+  name        String
+  description String?
+  unitPrice   Decimal         @db.Decimal(10, 2)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+  movements   StockMovement[]
+  saleLines   SaleLine[]
+
+  @@index([isActive, name])
+}
+
+model StockMovement {
+  id         String            @id @default(uuid()) @db.Uuid
+  productId  String            @db.Uuid
+  type       StockMovementType
+  quantity   Int
+  unitCost   Decimal?          @db.Decimal(10, 2)
+  reference  String?
+  notes      String?
+  occurredAt DateTime          @default(now()) @db.Timestamptz(3)
+  product    Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([productId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model Sale {
+  id               String     @id @default(uuid()) @db.Uuid
+  clientId         String?    @db.Uuid
+  sellerEmployeeId String?    @db.Uuid
+  status           SaleStatus @default(BORRADOR)
+  currency         String     @default("EUR") @db.VarChar(3)
+  subtotal         Decimal    @db.Decimal(12, 2)
+  taxAmount        Decimal    @db.Decimal(12, 2)
+  totalAmount      Decimal    @db.Decimal(12, 2)
+  soldAt           DateTime?  @db.Timestamptz(3)
+  createdAt        DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @db.Timestamptz(3)
+  client           Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  seller           Employee?  @relation(fields: [sellerEmployeeId], references: [id], onDelete: SetNull)
+  lines            SaleLine[]
+  payments         Payment[]
+  invoice          Invoice?
+
+  @@index([status, soldAt])
+  @@index([clientId, soldAt])
+}
+
+model SaleLine {
+  id           String       @id @default(uuid()) @db.Uuid
+  saleId       String       @db.Uuid
+  type         SaleLineType
+  productId    String?      @db.Uuid
+  serviceId    String?      @db.Uuid
+  description  String
+  quantity     Decimal      @db.Decimal(10, 3)
+  unitPrice    Decimal      @db.Decimal(12, 2)
+  taxRate      Decimal      @db.Decimal(5, 2)
+  lineSubtotal Decimal      @db.Decimal(12, 2)
+  taxAmount    Decimal      @db.Decimal(12, 2)
+  lineTotal    Decimal      @db.Decimal(12, 2)
+  sale         Sale         @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  service      Service?     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+  @@index([serviceId])
+}
+
+model Payment {
+  id        String        @id @default(uuid()) @db.Uuid
+  saleId    String        @db.Uuid
+  method    PaymentMethod
+  status    PaymentStatus @default(PENDIENTE)
+  amount    Decimal       @db.Decimal(12, 2)
+  reference String?
+  paidAt    DateTime?     @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  sale      Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
+
+  @@index([saleId, status])
+}
+
+model Invoice {
+  id               String                  @id @default(uuid()) @db.Uuid
+  saleId           String                  @unique @db.Uuid
+  series           String
+  number           String
+  status           InvoiceStatus           @default(BORRADOR)
+  complianceStatus InvoiceComplianceStatus @default(PENDIENTE)
+  issuedAt         DateTime?               @db.Timestamptz(3)
+  currency         String                  @default("EUR") @db.VarChar(3)
+  customerName     String
+  customerTaxId    String?
+  customerAddress  String?
+  subtotal         Decimal                 @db.Decimal(12, 2)
+  taxAmount        Decimal                 @db.Decimal(12, 2)
+  totalAmount      Decimal                 @db.Decimal(12, 2)
+  previousHash     String?
+  recordHash       String?
+  qrCodeUrl        String?
+  createdAt        DateTime                @default(now()) @db.Timestamptz(3)
+  sale             Sale                    @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  events           InvoiceEvent[]
+
+  @@unique([series, number])
+  @@index([status, issuedAt])
+  @@index([complianceStatus, issuedAt])
+}
+
+model InvoiceEvent {
+  id         String           @id @default(uuid()) @db.Uuid
+  invoiceId  String           @db.Uuid
+  type       InvoiceEventType
+  externalId String?
+  details    Json?
+  occurredAt DateTime         @default(now()) @db.Timestamptz(3)
+  invoice    Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId, occurredAt])
+  @@index([type, occurredAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  occurredAt DateTime @default(now()) @db.Timestamptz(3)
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, occurredAt])
+  @@index([entityType, entityId, occurredAt])
+}
