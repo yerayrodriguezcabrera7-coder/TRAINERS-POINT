@@ -1,0 +1,11 @@
+.gyms-shell { max-width: 1100px; }
+.gym-list-card { background: #fff; border: 1px solid #dedfd9; border-radius: 10px; padding: 24px; }
+.gym-list-head { display: flex; justify-content: space-between; align-items: end; border-bottom: 1px solid #eceee8; padding-bottom: 18px; margin-bottom: 12px; }
+.gym-list-head h2 { margin: 8px 0 0; font-size: 22px; }
+.gym-list-head > span { color: #69747a; font-size: 11px; }
+.gym-list { display: grid; gap: 10px; }
+.gym-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 17px; border: 1px solid #e3e6df; border-radius: 8px; }
+.gym-card.selected { border-color: #cf3528; background: #fff9f7; }
+.gym-card strong,.gym-card small { display: block; }.gym-card strong { color: #26373d; }.gym-card small { margin-top: 5px; color: #78858a; font-size: 10px; }
+.gym-card .outline-button { min-height: 34px; font-size: 11px; }.notice { padding: 12px; background: #edf5ef; color: #2e6c50; border-radius: 7px; }.notice.error { background: #f6eae7; color: #944336; }
+@media(max-width:600px) { .gym-card { align-items: flex-start; flex-direction: column; }.gym-card button { width: 100%; } }

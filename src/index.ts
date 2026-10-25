@@ -1,28 +1,3 @@
-<<<<<<< HEAD
-import "dotenv/config";
-import { Pool } from "pg";
-import { Store } from "./calendar/store";
-import { server } from "./calendar/http";
-if (!process.env.DATABASE_URL)
-  throw new Error(
-    "Configura DATABASE_URL en .env. Consulta docs/calendario-backend.md.",
-  );
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
-const app = server(
-  new Store(pool),
-  process.env.CALENDAR_GYM || "cobosu-bizkaia",
-  process.env.CALENDAR_ADMIN_TOKEN || "",
-);
-app.listen(Number(process.env.PORT || 3000), "127.0.0.1", () =>
-  console.log(`Calendario: http://127.0.0.1:${process.env.PORT || 3000}`),
-);
-for (const signal of ["SIGINT", "SIGTERM"] as const)
-  process.on(signal, () =>
-    app.close(() => {
-      void pool.end();
-    }),
-  );
-=======
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
@@ -36,6 +11,7 @@ import {
   type ClientStatus,
 } from "@prisma/client";
 import { prisma } from "./lib/prisma";
+import { getCalendarHandler } from "./calendar-mount";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
@@ -854,6 +830,12 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
 
+  const calendar = getCalendarHandler();
+  if (calendar) {
+    await calendar(request, response);
+    return;
+  }
+
   sendError(response, 404, "No se encontró el recurso.");
 }
 
@@ -887,6 +869,22 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (url.pathname === "/calendario") {
+    response.writeHead(302, { Location: "/calendario/" });
+    response.end();
+    return;
+  }
+
+  if (url.pathname.startsWith("/calendario/")) {
+    const calendar = getCalendarHandler();
+    if (!calendar) {
+      sendError(response, 503, "El calendario no está activo. Inicia la aplicación con npm start.");
+      return;
+    }
+    await calendar(request, response);
+    return;
+  }
+
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("X-Frame-Options", "DENY");
@@ -894,6 +892,14 @@ const server = createServer(async (request, response) => {
 
   try {
     if (url.pathname.startsWith("/api/")) {
+      const calendarRequest = request.headers.referer?.includes("/calendario/") || request.headers.referer?.includes("/web/");
+      if (calendarRequest && ["/api/gyms"].includes(url.pathname)) {
+        const calendar = getCalendarHandler();
+        if (calendar) {
+          await calendar(request, response);
+          return;
+        }
+      }
       await handleApi(request, response, url);
       return;
     }
@@ -947,4 +953,3 @@ server.on("close", () => {
 
 process.on("SIGINT", () => server.close());
 process.on("SIGTERM", () => server.close());
->>>>>>> rama/clientes-db

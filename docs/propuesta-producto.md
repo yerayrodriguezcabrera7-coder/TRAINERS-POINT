@@ -1,4 +1,4 @@
-# Cobosu: de herramienta local a producto para centros deportivos
+# Trainers Point: de herramienta local a producto para centros deportivos
 
 ## Qué vendería
 

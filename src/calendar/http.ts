@@ -31,7 +31,7 @@ function send(res: ServerResponse, status: number, value: unknown) {
 }
 export function server(
   store: Store,
-  gym: string,
+  defaultGym: string,
   token: string,
   options: { exposeAdminToken?: boolean } = {},
 ) {
@@ -43,11 +43,29 @@ export function server(
     try {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
+      let gym = defaultGym;
+      const requestedGym = req.headers["x-calendar-gym"];
+      if (typeof requestedGym === "string" && requestedGym.trim()) gym = requestedGym.trim();
       if (path === "/api/health") {
         send(res, 200, { mode: "server" });
         return;
       }
       if (path.startsWith("/api/")) {
+        if (path === "/api/gyms" && req.method === "GET") {
+          send(res, 200, { gyms: await store.listGyms(), selected: gym });
+          return;
+        }
+        if (path === "/api/gyms" && req.method === "POST") {
+          const actual = Buffer.from(req.headers.authorization || "");
+          const expected = Buffer.from(`Bearer ${token}`);
+          if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
+            throw new ApiError(401, "No autorizado.");
+          const raw = await body(req);
+          const name = z.string().trim().min(1).max(120).parse(raw.name);
+          send(res, 201, { gym: await store.createGym(name, defaultGym) });
+          return;
+        }
+        if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
         if (req.method === "POST" && path === "/api/login") {
           const key = req.socket.remoteAddress || "unknown";
           const now = Date.now();
@@ -223,8 +241,8 @@ export function server(
           "Cache-Control": "no-store",
         });
         res.end(
-          `window.CALENDAR_SERVER = true;${
-            options.exposeAdminToken && await access.needsSetup(gym)
+          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);o={...o,headers:h};}return f(i,o);};})();${
+            options.exposeAdminToken
               ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
               : ""
           }`,
@@ -250,6 +268,9 @@ export function server(
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",
+        "gimnasios.html": "text/html",
+        "gimnasios.js": "text/javascript",
+        "gimnasios.css": "text/css",
         "login.html": "text/html",
         "login.js": "text/javascript",
       };

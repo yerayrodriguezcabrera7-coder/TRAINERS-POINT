@@ -1,3 +1,5 @@
+> Nota: este documento describe el calendario en modo independiente (`npm run dev:calendar`). En la aplicación integrada el calendario se sirve en `/calendario/` y se arranca con `npm start` (ver README de la raíz).
+
 # Calendario: API, PostgreSQL y sincronización
 
 ## Arrancar en desarrollo

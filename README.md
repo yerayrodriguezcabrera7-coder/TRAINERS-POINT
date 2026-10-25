@@ -1,36 +1,42 @@
 # TRAINERS-POINT
 
-<<<<<<< HEAD
-## Espacio de trabajo Cobosu
+## Aplicación integrada: instalación y arranque
 
-Abre [Inicio](http://127.0.0.1:3000/inicio.html) para consultar la agenda de hoy, pendientes y equipo en jornada. El resumen utiliza datos reales y se actualiza cada 20 segundos mientras la pestaña está visible. Las reservas del resumen abren su ficha en el calendario. El diseño comparte la identidad Cobosu y agrupa la navegación por tareas.
+La aplicación reúne en un único servidor y un único puerto (3000) los dos desarrollos del proyecto:
 
-[Propuesta de producto y prioridades de implantación](docs/propuesta-producto.md).
+| Parte | URL | Datos |
+| --- | --- | --- |
+| Clientes y gimnasios | http://localhost:3000/clientes y http://localhost:3000/gimnasios | PostgreSQL en AWS RDS (Prisma, `DATABASE_URL`) |
+| Calendario (inicio, calendario, fichajes, gestión, acceso) | http://localhost:3000/calendario/ | PostgreSQL local aislado del propio calendario (carpeta `.calendar-dev/`). **No usa AWS.** |
 
-## Calendario con backend
+Requisitos: Node.js 22 o superior.
 
 ```sh
 npm install
-npm run dev:calendar
+cp .env.example .env     # en Windows: copy .env.example .env
+# edita .env y pon la contraseña real de RDS en DATABASE_URL (nunca se sube a Git)
+npm run prisma:generate  # solo la primera vez o si cambia prisma/schema.prisma
+npm start
 ```
 
-Abre http://127.0.0.1:3000 para el calendario o http://127.0.0.1:3000/fichajes.html para el control horario. El modo local conecta automáticamente hasta crear la primera cuenta de administración.
-Incluye PostgreSQL local independiente, reservas transaccionales, cálculo de disponibilidad, aforo grupal, fichajes parametrizados por empleado y actualización automática del panel.
+`npm start` compila TypeScript, arranca el PostgreSQL local del calendario (la primera vez lo inicializa y crea datos ficticios mínimos) y levanta el servidor único. Ctrl+C lo cierra todo. Abre http://localhost:3000/clientes; el menú lateral enlaza con el calendario.
 
-Desde el menú puedes gestionar **Clientes** (datos, notas, estado e historial), **Servicios** (duración, aforo y precio), **Profesionales**, **Turnos**, **Usuarios** y **Permisos**. Las fichas se guardan en PostgreSQL; los clientes inactivos o bloqueados no pueden recibir nuevas reservas. Usa el estado inactivo para conservar el historial.
+Otros scripts:
 
-Para crear accesos: añade los empleados en Profesionales y abre Usuarios. La primera cuenta debe ser Administración, con una contraseña de al menos 10 caracteres. Esa cuenta se inicia automáticamente; las siguientes entran desde `login.html`. Recepción gestiona clientes y reservas; Entrenador consulta sus turnos y registra sus propios fichajes. Solo Administración gestiona la plantilla y los accesos. No se han creado contraseñas predeterminadas.
+- `npm run start:clients`: arranque original del proyecto de clientes (solo AWS, sin calendario; `/calendario/` responde 503).
+- `npm run dev`: desarrollo con recarga del proyecto de clientes (sin calendario).
+- `npm run dev:calendar`: calendario por sí solo en el puerto 3000 (modo independiente original; no arrancar a la vez que `npm start`).
+- `npm test`: pruebas del calendario (no requieren credenciales; usan un PostgreSQL local temporal).
+- `npm run db:test`: comprueba la conexión a AWS (requiere `.env` con credenciales reales).
 
-En Turnos, cada empleado tiene un horario semanal y excepciones por fecha. Puedes añadir varias franjas para una jornada partida o marcar un día libre. Estos horarios se comprueban al reservar. Las modificaciones que invalidan reservas futuras pendientes o confirmadas se rechazan con un mensaje.
+El calendario conserva su comportamiento original y **no está conectado a AWS**: su servidor recibe su propia conexión local y nunca lee `DATABASE_URL`. La integración del calendario con la base de datos de AWS queda pendiente para su responsable.
 
-[Guía de arranque, APIs, concurrencia y límites de integración](docs/calendario-backend.md).
+### Calendario
 
-```sh
-npm test
-```
+Abre [Inicio](http://localhost:3000/calendario/inicio.html) para consultar la agenda de hoy, pendientes y equipo en jornada, o [el calendario](http://localhost:3000/calendario/). Incluye reservas transaccionales, cálculo de disponibilidad, aforo grupal, fichajes por empleado y actualización automática del panel. Desde su menú se gestionan clientes, servicios, profesionales, turnos, usuarios y permisos del calendario. La primera cuenta debe ser Administración (contraseña de al menos 10 caracteres); en el modo local se conecta automáticamente hasta crearla. Más detalle: [guía del calendario](docs/calendario-backend.md), [propuesta de producto](docs/propuesta-producto.md) y [web/README.md](web/README.md).
 
-La carpeta `web` contiene las pantallas (inicio, calendario, clientes, servicios, equipo y acceso). También funciona como demostración independiente con Live Server, usando datos locales del navegador.
-=======
+---
+
 ## Configurar la conexión a PostgreSQL (AWS RDS)
 
 1. Instala Node.js y ejecuta `npm install`.
@@ -71,4 +77,3 @@ Esto define el modelo de datos, no una aplicación completa: todavía hay que im
 Los modelos de factura son una estructura inicial, no una implementación ni certificación VeriFactu. Antes de emitir facturas reales, validar requisitos fiscales, numeración, rectificaciones, encadenamiento/firma, conservación y comunicación con la AEAT con una asesoría o proveedor especializado. No registrar contraseñas, datos de tarjeta ni contenido personal sensible en `AuditLog` o en eventos de factura.
 
 El esquema está preparado para PostgreSQL y RDS. No apliques migraciones automáticamente sobre la base compartida: primero comprueba si contiene tablas/datos existentes, revisa el SQL de migración y acuerda la ventana y el responsable con el equipo.
->>>>>>> rama/clientes-db
