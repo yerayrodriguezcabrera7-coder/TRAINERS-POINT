@@ -117,7 +117,7 @@ function createInfoItem(label, value, detail, className = "") {
 
 function renderClient(client, index) {
   const card = document.createElement("article");
-  card.className = "client-card";
+  card.className = "client-card client-card-modern";
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
   const person = document.createElement("div");
@@ -245,6 +245,7 @@ async function loadClients() {
   rows.append(loadingMessage);
 
   const params = new URLSearchParams();
+  params.set("all", "true");
   if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
   if (statusFilter.value) params.set("status", statusFilter.value);
   if (gymFilter.value) params.set("gymId", gymFilter.value);
@@ -896,10 +897,10 @@ function sessionBadge(value) {
 
 function renderClient(client) {
   const card = document.createElement("article");
-  card.className = "client-card";
+  card.className = "client-card client-card-modern";
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-label", `Abrir ficha de ${client.firstName} ${client.lastName}`);
+  card.setAttribute("aria-label", `Ver ficha de ${client.firstName} ${client.lastName}`);
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
   const avatar = document.createElement("span");
@@ -908,28 +909,110 @@ function renderClient(client) {
   const nameBlock = document.createElement("span");
   const name = document.createElement("strong");
   name.textContent = `${client.firstName} ${client.lastName}`;
-  const session = document.createElement("small");
-  session.className = "client-session-time";
-  session.textContent = client.nextSession ? sessionBadge(client.nextSession.startTime) : "Acceso previsto hoy";
-  nameBlock.append(name, session);
+  const contact = document.createElement("small");
+  contact.className = "client-contact";
+  contact.textContent = client.email || client.phone || "Sin datos de contacto";
+  const status = document.createElement("span");
+  status.className = `client-status status-${client.status}`;
+  status.textContent = statusLabels[client.status] ?? "Sin estado";
+  nameBlock.append(name, contact);
   identity.append(avatar, nameBlock);
+  identity.append(status);
   const info = document.createElement("div");
   info.className = "client-card-info";
-  info.append(createInfoItem("SESIONES", client.servicePackageCount > 0 ? `${client.remainingSessions} restantes` : "Sin bono", "Disponibles"));
-  info.append(createInfoItem("PAGO", client.pendingPayments > 0 ? "Pendiente" : "Al día", client.pendingPayments > 0 ? "Revisar ficha" : "Sin incidencias", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
+  info.append(createInfoItem("PRÓXIMA SESIÓN", client.nextSession ? sessionBadge(client.nextSession.startTime) : "Sin sesión programada", client.nextSession?.service?.name || "Puedes programarla desde su ficha", client.nextSession ? "client-info-next" : ""));
+  info.append(createInfoItem("BONOS", client.servicePackageCount > 0 ? `${client.remainingSessions} sesiones` : "Sin bono", client.servicePackageCount > 0 ? "Disponibles" : "Añadir desde historial"));
+  info.append(createInfoItem("PAGOS", client.pendingPayments > 0 ? "Pendiente de revisar" : "Al día", client.pendingPayments > 0 ? "Abrir ficha" : "Sin incidencias", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
   info.append(createInfoItem("SEDE", client.gym?.name ?? "Sin gimnasio", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
   const arrow = document.createElement("span");
   arrow.className = "card-arrow";
   arrow.textContent = "↗";
-  card.append(identity, info, arrow);
-  const open = () => openClientDetail(client);
+  const footer = document.createElement("div");
+  footer.className = "client-card-footer";
+  const footerHint = document.createElement("span");
+  footerHint.textContent = client.nextSession ? `Próxima atención · ${formatDateTime(client.nextSession.startTime)}` : "Ficha lista para completar";
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "client-open-button";
+  openButton.textContent = "Ver ficha";
+  footer.append(footerHint, openButton);
+  card.append(identity, info, footer, arrow);
+  const open = () => { window.location.href = `/clientes/${encodeURIComponent(client.id)}/ficha`; };
   card.addEventListener("click", open);
+  openButton.addEventListener("click", (event) => { event.stopPropagation(); open(); });
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;
 }
 
 const clientDetailDialog = document.querySelector("#client-detail-dialog");
+const objectiveForm = document.querySelector("#objective-form");
+const objectiveInput = document.querySelector("#objective-input");
+const measurementForm = document.querySelector("#measurement-form");
+const measurementDate = document.querySelector("#measurement-date");
+const measurementSummary = document.querySelector("#measurement-summary");
+const measurementHistory = document.querySelector("#measurement-history");
+const measurementError = document.querySelector("#measurement-error");
+const progressStatus = document.querySelector("#progress-status");
 let detailClient;
+let progressClientId;
+const progressMetrics = [["weight", "Peso", "kg"], ["hip", "Cadera", "cm"], ["waist", "Cintura", "cm"], ["leg", "Pierna", "cm"], ["chest", "Pecho", "cm"], ["arm", "Brazo", "cm"]];
+function measurementValue(value, unit) { return value === null || value === undefined ? "—" : `${Number(value).toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${unit}`; }
+function renderProgress(progress) {
+  const measurements = progress.measurements || [];
+  const first = measurements[0];
+  const latest = measurements.at(-1);
+  objectiveInput.value = progress.client.objective || "";
+  progressStatus.textContent = measurements.length ? `${measurements.length} ${measurements.length === 1 ? "registro" : "registros"}` : "Sin registros";
+  measurementSummary.replaceChildren();
+  if (!latest) {
+    const empty = document.createElement("p");
+    empty.className = "progress-empty";
+    empty.textContent = "Todavía no hay mediciones. Añade la primera para empezar a visualizar su evolución.";
+    measurementSummary.append(empty);
+  } else {
+    for (const [key, label, unit] of progressMetrics) {
+      const current = latest[key];
+      const previous = first?.[key];
+      const delta = current !== null && current !== undefined && previous !== null && previous !== undefined ? current - previous : null;
+      const card = document.createElement("div");
+      card.className = "measurement-card";
+      const deltaText = delta === null ? "Sin comparación" : `${delta > 0 ? "+" : ""}${Number(delta).toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${unit}`;
+      card.innerHTML = `<span>${label}</span><strong>${measurementValue(current, unit)}</strong><small class="${delta !== null && delta < 0 ? "positive-change" : ""}">${deltaText}</small>`;
+      measurementSummary.append(card);
+    }
+  }
+  measurementHistory.replaceChildren();
+  if (measurements.length) {
+    const title = document.createElement("h4");
+    title.textContent = "Historial de mediciones";
+    measurementHistory.append(title);
+    for (const measurement of [...measurements].reverse()) {
+      const row = document.createElement("article");
+      row.className = "measurement-history-row";
+      const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${measurement.measuredAt}T00:00:00Z`));
+      const values = progressMetrics.filter(([key]) => measurement[key] !== null && measurement[key] !== undefined).map(([key, label, unit]) => `${label}: ${measurementValue(measurement[key], unit)}`).join(" · ");
+      row.innerHTML = `<div><strong>${date}</strong><small>${values || "Sin valores"}</small></div>${measurement.notes ? `<p>${escapeText(measurement.notes)}</p>` : ""}`;
+      measurementHistory.append(row);
+    }
+  }
+}
+async function loadClientProgress(client) {
+  progressClientId = client.id;
+  progressStatus.textContent = "Cargando…";
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}/progress`, { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo cargar la evolución.");
+    if (progressClientId === client.id) renderProgress(data);
+  } catch (error) {
+    progressStatus.textContent = "No disponible";
+    measurementSummary.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "progress-empty error";
+    message.textContent = error.message;
+    measurementSummary.append(message);
+  }
+}
 function openClientDetail(client) {
   detailClient = client;
   document.querySelector("#client-detail-title").textContent = `${client.firstName} ${client.lastName}`;
@@ -941,10 +1024,48 @@ function openClientDetail(client) {
   document.querySelector("#detail-notes").textContent = client.clientNotes?.[0]?.content || client.notes || "Sin notas añadidas.";
   document.querySelector("#detail-routine").textContent = client.trainingPlans?.[0]?.name || (client.servicePackageCount ? `${client.remainingSessions} sesiones disponibles en sus bonos.` : "No hay rutina activa registrada.");
   document.querySelector("#detail-checkin").textContent = "✓ Registrar check-in";
+  objectiveInput.value = client.objective || "";
+  measurementForm.reset();
+  measurementDate.value = new Date().toISOString().slice(0, 10);
+  measurementError.hidden = true;
   clientDetailDialog.showModal();
+  loadClientProgress(client);
 }
 document.querySelector("#close-client-detail").addEventListener("click", () => clientDetailDialog.close());
 document.querySelector("#open-detail-history").addEventListener("click", () => { clientDetailDialog.close(); if (detailClient) openClientHistory(detailClient); });
+objectiveForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!progressClientId) return;
+  const button = objectiveForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(progressClientId)}/objective`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ objective: objectiveInput.value.trim() }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo guardar el objetivo.");
+    if (detailClient) detailClient.objective = data.client.objective;
+    showToast("Objetivo guardado.");
+  } catch (error) { showToast(error.message || "No se pudo guardar el objetivo.", true); }
+  finally { button.disabled = false; }
+});
+measurementForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  measurementError.hidden = true;
+  if (!progressClientId || !measurementForm.reportValidity()) return;
+  const body = Object.fromEntries(new FormData(measurementForm).entries());
+  for (const key of ["weight", "hip", "waist", "leg", "chest", "arm"]) if (body[key] === "") delete body[key]; else if (body[key] !== undefined) body[key] = Number(body[key]);
+  const button = measurementForm.querySelector("button[type='submit']");
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(progressClientId)}/measurements`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo guardar la medición.");
+    measurementForm.reset();
+    measurementDate.value = new Date().toISOString().slice(0, 10);
+    await loadClientProgress(detailClient || { id: progressClientId });
+    showToast("Medición guardada.");
+  } catch (error) { measurementError.textContent = error.message || "No se pudo guardar la medición."; measurementError.hidden = false; }
+  finally { button.disabled = false; }
+});
 document.querySelector("#detail-checkin").addEventListener("click", async () => {
   if (!detailClient?.nextSession?.id) { showToast("Este usuario no tiene una sesión pendiente hoy.", true); return; }
   const button = document.querySelector("#detail-checkin");

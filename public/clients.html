@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#111111">
-    <title>Usuarios | Trainers Point</title>
+    <title>Clientes | Trainers Point</title>
     <link rel="stylesheet" href="/clients.css">
     <link rel="stylesheet" href="/menu.css">
     <script src="/clients.js" defer></script>
@@ -65,9 +65,9 @@
         <section class="page-content">
           <div class="page-heading">
             <div>
-              <p class="eyebrow">GESTIÓN DE CLIENTES</p>
-              <h1>Usuarios <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Organiza tus clientes y acompaña cada etapa de su progreso.</p>
+              <p class="eyebrow">CENTRO · RELACIÓN CON CLIENTES</p>
+              <h1>Clientes <span id="heading-count" class="heading-count"></span></h1>
+              <p class="page-description">Encuentra una ficha, entiende su situación y deja preparada la siguiente sesión.</p>
             </div>
             <button class="button button-primary" id="open-create" type="button">
               <span class="button-plus" aria-hidden="true">+</span>
@@ -101,8 +101,8 @@
           <section class="client-panel" aria-labelledby="client-list-title">
             <div class="panel-heading">
               <div>
-                <h2 id="client-list-title">Usuarios de hoy</h2>
-                <p>Prioriza las próximas sesiones y revisa de un vistazo los pagos pendientes.</p>
+                <h2 id="client-list-title">Tu cartera de clientes</h2>
+                <p>Busca por nombre y abre la ficha completa en un solo clic.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
@@ -179,6 +179,13 @@
           <section class="detail-section"><span class="detail-label">NOTAS DEL ENTRENADOR</span><p id="detail-notes">Sin notas añadidas.</p></section>
           <section class="detail-section"><span class="detail-label">RUTINA ACTIVA</span><p id="detail-routine">Consulta el historial para ver sus rutinas.</p></section>
         </div>
+        <section class="progress-panel" aria-labelledby="progress-title">
+          <div class="progress-panel-heading"><div><p class="detail-label">EVOLUCIÓN DEL CLIENTE</p><h3 id="progress-title">Objetivo y medidas</h3></div><span id="progress-status" class="progress-status">Cargando…</span></div>
+          <form id="objective-form" class="objective-form"><label><span>Objetivo del cliente</span><textarea id="objective-input" maxlength="1000" rows="2" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea></label><button class="button button-outline" type="submit">Guardar objetivo</button></form>
+          <div id="measurement-summary" class="measurement-summary"></div>
+          <div id="measurement-history" class="measurement-history"></div>
+          <form id="measurement-form" class="measurement-form"><div class="measurement-form-heading"><div><strong>Añadir medición</strong><small>Registra siempre en las mismas condiciones.</small></div><input id="measurement-date" name="measuredAt" type="date" required></div><div class="measurement-fields"><label>Peso <input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera <input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura <input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna <input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho <input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo <input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div><textarea name="notes" rows="2" maxlength="1000" placeholder="Notas de esta medición (opcional)"></textarea><button class="button button-primary" type="submit">Guardar medición</button><p id="measurement-error" class="form-error" role="alert" hidden></p></form>
+        </section>
         <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver historial completo</button><button class="button button-primary" id="detail-checkin" type="button">✓ Registrar check-in</button></div>
       </div>
     </dialog>
@@ -189,7 +196,7 @@
           <div>
             <p class="eyebrow">NUEVO REGISTRO</p>
             <h2 id="dialog-title">Añadir cliente</h2>
-            <p>Completa los datos básicos para crear su perfil.</p>
+            <p>Crea una ficha clara para que todo el equipo pueda atenderle mejor.</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar">×</button>
         </div>
@@ -229,6 +236,7 @@
             <textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento…"></textarea>
           </label>
         </div>
+        <label class="form-field form-field-wide"><span>Objetivo del cliente</span><textarea name="objective" rows="2" maxlength="1000" placeholder="Ej. Mejorar fuerza, perder grasa o preparar una prueba…"></textarea></label>
         <p class="form-error" id="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>

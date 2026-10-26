@@ -17,10 +17,11 @@ import { prisma } from "./lib/prisma";
 import { Store, migration as calendarMigration } from "./calendar/store";
 import { accessMigration } from "./calendar/access";
 import { server as createCalendarServer } from "./calendar/http";
+import { progressMigration } from "./progress-migration";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
-const maxBodyBytes = 16 * 1024;
+const maxBodyBytes = 2 * 1024 * 1024;
 const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "INACTIVO", "BAJA"];
 const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "OTRO"];
 const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO", "REEMBOLSADO"];
@@ -37,6 +38,18 @@ type ClientInput = {
   dni?: string;
   birthDate?: string;
   notes?: string;
+  objective?: string;
+};
+
+type MeasurementInput = {
+  measuredAt: string;
+  weight?: number;
+  hip?: number;
+  waist?: number;
+  leg?: number;
+  chest?: number;
+  arm?: number;
+  notes?: string;
 };
 
 type GymInput = {
@@ -44,6 +57,7 @@ type GymInput = {
   city?: string;
   province?: string;
   address?: string;
+  photoData?: string;
 };
 
 type ServiceInput = {
@@ -103,6 +117,7 @@ function parseClientInput(value: unknown): ClientInput | string {
   const phone = typeof value.phone === "string" ? value.phone.trim() : "";
   const dni = typeof value.dni === "string" ? value.dni.trim() : "";
   const notes = typeof value.notes === "string" ? value.notes.trim() : "";
+  const objective = typeof value.objective === "string" ? value.objective.trim() : "";
   const birthDate = typeof value.birthDate === "string" ? value.birthDate.trim() : "";
   const gymId = typeof value.gymId === "string" ? value.gymId.trim() : "";
 
@@ -126,7 +141,7 @@ function parseClientInput(value: unknown): ClientInput | string {
     return "Selecciona un gimnasio válido.";
   }
 
-  if (dni.length > 30 || notes.length > 5000) {
+  if (dni.length > 30 || notes.length > 5000 || objective.length > 1000) {
     return "El DNI o las notas superan la longitud permitida.";
   }
 
@@ -150,7 +165,28 @@ function parseClientInput(value: unknown): ClientInput | string {
     ...(dni ? { dni } : {}),
     ...(birthDate ? { birthDate } : {}),
     ...(notes ? { notes } : {}),
+    ...(objective ? { objective } : {}),
   };
+}
+
+function parseMeasurementInput(value: unknown): MeasurementInput | string {
+  if (!isRecord(value)) return "La medición no tiene un formato válido.";
+  const measuredAt = typeof value.measuredAt === "string" ? value.measuredAt.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(measuredAt)) return "Introduce una fecha válida.";
+  const parsedDate = new Date(`${measuredAt}T00:00:00.000Z`);
+  if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== measuredAt) return "Introduce una fecha válida.";
+  const fields = ["weight", "hip", "waist", "leg", "chest", "arm"] as const;
+  const result: MeasurementInput = { measuredAt };
+  for (const field of fields) {
+    if (value[field] === undefined || value[field] === null || value[field] === "") continue;
+    const number = typeof value[field] === "number" ? value[field] : Number(value[field]);
+    if (!Number.isFinite(number) || number <= 0 || number > 1000) return "Las medidas deben ser números positivos válidos.";
+    result[field] = Math.round(number * 100) / 100;
+  }
+  if (fields.every((field) => result[field] === undefined)) return "Introduce al menos una medida.";
+  if (typeof value.notes === "string" && value.notes.trim().length > 1000) return "Las notas superan la longitud permitida.";
+  if (typeof value.notes === "string" && value.notes.trim()) result.notes = value.notes.trim();
+  return result;
 }
 
 function parseGymInput(value: unknown): GymInput | string {
@@ -162,6 +198,7 @@ function parseGymInput(value: unknown): GymInput | string {
   const city = typeof value.city === "string" ? value.city.trim() : "";
   const province = typeof value.province === "string" ? value.province.trim() : "";
   const address = typeof value.address === "string" ? value.address.trim() : "";
+  const photoData = typeof value.photoData === "string" ? value.photoData.trim() : "";
 
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
@@ -170,11 +207,16 @@ function parseGymInput(value: unknown): GymInput | string {
     return "La ubicación supera la longitud permitida.";
   }
 
+  if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
+    return "La imagen no es vÃ¡lida o supera el tamaÃ±o permitido.";
+  }
+
   return {
     name,
     ...(city ? { city } : {}),
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
+    ...(photoData ? { photoData } : {}),
   };
 }
 
@@ -298,6 +340,99 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       select: { id: true, name: true, description: true, durationMin: true, price: true },
     });
     sendJson(response, 201, { service });
+    return;
+  }
+
+  const clientProgressMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/progress$/i);
+  if (request.method === "GET" && clientProgressMatch) {
+    const client = await prisma.client.findUnique({
+      where: { id: clientProgressMatch[1] },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        objective: true,
+        email: true,
+        phone: true,
+        notes: true,
+        status: true,
+        gym: { select: { id: true, name: true, city: true, province: true } },
+      },
+    });
+    if (!client) { sendError(response, 404, "No se encontró el cliente."); return; }
+    const measurements = await prisma.clientMeasurement.findMany({
+      where: { clientId: client.id },
+      orderBy: { measuredAt: "asc" },
+    });
+    sendJson(response, 200, {
+      client,
+      measurements: measurements.map((measurement) => ({
+        ...measurement,
+        weight: measurement.weight === null ? null : Number(measurement.weight),
+        hip: measurement.hip === null ? null : Number(measurement.hip),
+        waist: measurement.waist === null ? null : Number(measurement.waist),
+        leg: measurement.leg === null ? null : Number(measurement.leg),
+        chest: measurement.chest === null ? null : Number(measurement.chest),
+        arm: measurement.arm === null ? null : Number(measurement.arm),
+      })),
+    });
+    return;
+  }
+
+  const clientObjectiveMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/objective$/i);
+  if (request.method === "PATCH" && clientObjectiveMatch) {
+    if (!hasTrustedOrigin(request, port)) { sendError(response, 403, "Origen de la solicitud no permitido."); return; }
+    const body = await readJsonBody(request);
+    const objective = isRecord(body) && typeof body.objective === "string" ? body.objective.trim() : "";
+    if (objective.length > 1000) { sendError(response, 400, "El objetivo supera la longitud permitida."); return; }
+    try {
+      const client = await prisma.client.update({
+        where: { id: clientObjectiveMatch[1] },
+        data: { objective: objective || null },
+        select: { id: true, objective: true },
+      });
+      sendJson(response, 200, { client });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") { sendError(response, 404, "No se encontró el cliente."); return; }
+      throw error;
+    }
+    return;
+  }
+
+  const clientMeasurementMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/measurements$/i);
+  if (request.method === "POST" && clientMeasurementMatch) {
+    if (!hasTrustedOrigin(request, port)) { sendError(response, 403, "Origen de la solicitud no permitido."); return; }
+    const input = parseMeasurementInput(await readJsonBody(request));
+    if (typeof input === "string") { sendError(response, 400, input); return; }
+    try {
+      const measurement = await prisma.clientMeasurement.upsert({
+        where: { clientId_measuredAt: { clientId: clientMeasurementMatch[1], measuredAt: new Date(`${input.measuredAt}T00:00:00.000Z`) } },
+        create: {
+          client: { connect: { id: clientMeasurementMatch[1] } },
+          measuredAt: new Date(`${input.measuredAt}T00:00:00.000Z`),
+          ...(input.weight !== undefined ? { weight: input.weight } : {}),
+          ...(input.hip !== undefined ? { hip: input.hip } : {}),
+          ...(input.waist !== undefined ? { waist: input.waist } : {}),
+          ...(input.leg !== undefined ? { leg: input.leg } : {}),
+          ...(input.chest !== undefined ? { chest: input.chest } : {}),
+          ...(input.arm !== undefined ? { arm: input.arm } : {}),
+          ...(input.notes ? { notes: input.notes } : {}),
+        },
+        update: {
+          ...(input.weight !== undefined ? { weight: input.weight } : { weight: null }),
+          ...(input.hip !== undefined ? { hip: input.hip } : { hip: null }),
+          ...(input.waist !== undefined ? { waist: input.waist } : { waist: null }),
+          ...(input.leg !== undefined ? { leg: input.leg } : { leg: null }),
+          ...(input.chest !== undefined ? { chest: input.chest } : { chest: null }),
+          ...(input.arm !== undefined ? { arm: input.arm } : { arm: null }),
+          notes: input.notes || null,
+        },
+      });
+      sendJson(response, 201, { measurement });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") { sendError(response, 404, "No se encontró el cliente."); return; }
+      throw error;
+    }
     return;
   }
 
@@ -534,7 +669,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
       orderBy: { name: "asc" },
     });
-    sendJson(response, 200, { gyms });
+    const photos = await prisma.$queryRaw<Array<{ id: string; photoData: string | null }>>(Prisma.sql`SELECT "id", "photoData" FROM "Gym" WHERE "isActive" = true`);
+    const photoById = new Map(photos.map((photo) => [photo.id, photo.photoData]));
+    sendJson(response, 200, { gyms: gyms.map((gym) => ({ ...gym, photoData: photoById.get(gym.id) ?? null })) });
     return;
   }
 
@@ -551,11 +688,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
     try {
+      const { photoData, ...gymData } = input;
       const gym = await prisma.gym.create({
-        data: input,
+        data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      sendJson(response, 201, { gym });
+      if (photoData) {
+        await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = ${photoData} WHERE "id" = ${gym.id}::uuid`);
+      }
+      sendJson(response, 201, { gym: { ...gym, photoData: photoData ?? null } });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
@@ -641,6 +782,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           phone: true,
           dni: true,
           notes: true,
+          objective: true,
           trainingPlans: { where: { status: "ACTIVO" }, select: { name: true }, take: 1 },
           clientNotes: { orderBy: { createdAt: "desc" }, select: { content: true }, take: 1 },
           birthDate: true,
@@ -742,6 +884,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           ...(input.dni ? { dni: input.dni } : {}),
           ...(input.birthDate ? { birthDate: new Date(`${input.birthDate}T00:00:00.000Z`) } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
+          ...(input.objective ? { objective: input.objective } : {}),
         },
         select: {
           id: true,
@@ -750,6 +893,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           email: true,
           phone: true,
           dni: true,
+          objective: true,
           birthDate: true,
           status: true,
           gymId: true,
@@ -868,6 +1012,9 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/design.css": { file: "web/design.css", contentType: "text/css; charset=utf-8" },
   "/clientes": { file: "public/clients.html", contentType: "text/html; charset=utf-8" },
   "/clientes.html": { file: "public/clients.html", contentType: "text/html; charset=utf-8" },
+  "/client-profile.html": { file: "public/client-profile.html", contentType: "text/html; charset=utf-8" },
+  "/client-profile.css": { file: "public/client-profile.css", contentType: "text/css; charset=utf-8" },
+  "/client-profile.js": { file: "public/client-profile.js", contentType: "text/javascript; charset=utf-8" },
   "/clients.css": { file: "public/clients.css", contentType: "text/css; charset=utf-8" },
   "/clients.js": { file: "public/clients.js", contentType: "text/javascript; charset=utf-8" },
   "/gimnasios": { file: "public/gyms.html", contentType: "text/html; charset=utf-8" },
@@ -914,7 +1061,8 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const asset = staticFiles[url.pathname];
+    const profileMatch = url.pathname.match(/^\/clientes\/[0-9a-f-]+\/ficha$/i);
+    const asset = profileMatch ? staticFiles["/client-profile.html"] : staticFiles[url.pathname];
     if (!asset) {
       sendError(response, 404, "No se encontró la página.");
       return;
@@ -958,6 +1106,7 @@ async function start(): Promise<void> {
   const store = new Store(pool);
   await pool.query(calendarMigration);
   await pool.query(accessMigration);
+  await pool.query(progressMigration);
   const configuredGym = (await prisma.gym.findFirst({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true } }))?.id || "trainers-point-bizkaia";
   let gym = configuredGym;
   const schedule = Array.from({ length: 7 }, (_, i) => ({ open: "09:00", close: i === 5 ? "14:00" : "21:00", closed: i === 6 }));
