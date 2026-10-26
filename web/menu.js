@@ -29,7 +29,7 @@
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = location.pathname === '/clientes' ? '/clientes' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
+  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';

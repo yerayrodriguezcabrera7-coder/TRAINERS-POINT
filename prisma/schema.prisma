@@ -135,6 +135,7 @@ model Client {
   gymId            String                 @db.Uuid
   assignedWorkerId String?                @db.Uuid
   notes            String?
+  objective        String?
   createdAt        DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
   gym              Gym                    @relation(fields: [gymId], references: [id], onDelete: Restrict)
@@ -144,10 +145,29 @@ model Client {
   bookings         Booking[]
   servicePackages  ClientServicePackage[]
   sales            Sale[]
+  measurements     ClientMeasurement[]
 
   @@index([status, lastName, firstName])
   @@index([gymId, status])
   @@index([assignedWorkerId])
+}
+
+model ClientMeasurement {
+  id        String   @id @default(uuid()) @db.Uuid
+  clientId  String   @db.Uuid
+  measuredAt DateTime @db.Date
+  weight    Decimal? @db.Decimal(6, 2)
+  hip       Decimal? @db.Decimal(6, 2)
+  waist     Decimal? @db.Decimal(6, 2)
+  leg       Decimal? @db.Decimal(6, 2)
+  chest     Decimal? @db.Decimal(6, 2)
+  arm       Decimal? @db.Decimal(6, 2)
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, measuredAt])
+  @@index([clientId, measuredAt])
 }
 
 model Gym {
