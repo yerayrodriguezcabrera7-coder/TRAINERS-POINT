@@ -1,5 +1,6 @@
 export const progressMigration = `
 ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "objective" TEXT;
+ALTER TABLE "Gym" ADD COLUMN IF NOT EXISTS "photoData" TEXT;
 CREATE TABLE IF NOT EXISTS "ClientMeasurement" (
   "id" UUID NOT NULL,
   "clientId" UUID NOT NULL,

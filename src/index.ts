@@ -21,7 +21,7 @@ import { progressMigration } from "./progress-migration";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
-const maxBodyBytes = 16 * 1024;
+const maxBodyBytes = 2 * 1024 * 1024;
 const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "INACTIVO", "BAJA"];
 const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "OTRO"];
 const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO", "REEMBOLSADO"];
@@ -57,6 +57,7 @@ type GymInput = {
   city?: string;
   province?: string;
   address?: string;
+  photoData?: string;
 };
 
 type ServiceInput = {
@@ -197,6 +198,7 @@ function parseGymInput(value: unknown): GymInput | string {
   const city = typeof value.city === "string" ? value.city.trim() : "";
   const province = typeof value.province === "string" ? value.province.trim() : "";
   const address = typeof value.address === "string" ? value.address.trim() : "";
+  const photoData = typeof value.photoData === "string" ? value.photoData.trim() : "";
 
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
@@ -205,11 +207,16 @@ function parseGymInput(value: unknown): GymInput | string {
     return "La ubicación supera la longitud permitida.";
   }
 
+  if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
+    return "La imagen no es vÃ¡lida o supera el tamaÃ±o permitido.";
+  }
+
   return {
     name,
     ...(city ? { city } : {}),
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
+    ...(photoData ? { photoData } : {}),
   };
 }
 
@@ -662,7 +669,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
       orderBy: { name: "asc" },
     });
-    sendJson(response, 200, { gyms });
+    const photos = await prisma.$queryRaw<Array<{ id: string; photoData: string | null }>>(Prisma.sql`SELECT "id", "photoData" FROM "Gym" WHERE "isActive" = true`);
+    const photoById = new Map(photos.map((photo) => [photo.id, photo.photoData]));
+    sendJson(response, 200, { gyms: gyms.map((gym) => ({ ...gym, photoData: photoById.get(gym.id) ?? null })) });
     return;
   }
 
@@ -679,11 +688,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
     try {
+      const { photoData, ...gymData } = input;
       const gym = await prisma.gym.create({
-        data: input,
+        data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      sendJson(response, 201, { gym });
+      if (photoData) {
+        await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = ${photoData} WHERE "id" = ${gym.id}::uuid`);
+      }
+      sendJson(response, 201, { gym: { ...gym, photoData: photoData ?? null } });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
