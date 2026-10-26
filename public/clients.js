@@ -117,7 +117,7 @@ function createInfoItem(label, value, detail, className = "") {
 
 function renderClient(client, index) {
   const card = document.createElement("article");
-  card.className = "client-card";
+  card.className = "client-card client-card-modern";
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
   const person = document.createElement("div");
@@ -909,22 +909,37 @@ function renderClient(client) {
   const nameBlock = document.createElement("span");
   const name = document.createElement("strong");
   name.textContent = `${client.firstName} ${client.lastName}`;
-  const session = document.createElement("small");
-  session.className = "client-session-time";
-  session.textContent = client.nextSession ? sessionBadge(client.nextSession.startTime) : "Acceso previsto hoy";
-  nameBlock.append(name, session);
+  const contact = document.createElement("small");
+  contact.className = "client-contact";
+  contact.textContent = client.email || client.phone || "Sin datos de contacto";
+  const status = document.createElement("span");
+  status.className = `client-status status-${client.status}`;
+  status.textContent = statusLabels[client.status] ?? "Sin estado";
+  nameBlock.append(name, contact);
   identity.append(avatar, nameBlock);
+  identity.append(status);
   const info = document.createElement("div");
   info.className = "client-card-info";
-  info.append(createInfoItem("SESIONES", client.servicePackageCount > 0 ? `${client.remainingSessions} restantes` : "Sin bono", "Disponibles"));
-  info.append(createInfoItem("PAGO", client.pendingPayments > 0 ? "Pendiente" : "Al día", client.pendingPayments > 0 ? "Revisar ficha" : "Sin incidencias", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
+  info.append(createInfoItem("PRÓXIMA SESIÓN", client.nextSession ? sessionBadge(client.nextSession.startTime) : "Sin sesión programada", client.nextSession?.service?.name || "Puedes programarla desde su ficha", client.nextSession ? "client-info-next" : ""));
+  info.append(createInfoItem("BONOS", client.servicePackageCount > 0 ? `${client.remainingSessions} sesiones` : "Sin bono", client.servicePackageCount > 0 ? "Disponibles" : "Añadir desde historial"));
+  info.append(createInfoItem("PAGOS", client.pendingPayments > 0 ? "Pendiente de revisar" : "Al día", client.pendingPayments > 0 ? "Abrir ficha" : "Sin incidencias", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
   info.append(createInfoItem("SEDE", client.gym?.name ?? "Sin gimnasio", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
   const arrow = document.createElement("span");
   arrow.className = "card-arrow";
   arrow.textContent = "↗";
-  card.append(identity, info, arrow);
+  const footer = document.createElement("div");
+  footer.className = "client-card-footer";
+  const footerHint = document.createElement("span");
+  footerHint.textContent = client.nextSession ? `Próxima atención · ${formatDateTime(client.nextSession.startTime)}` : "Ficha lista para completar";
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "client-open-button";
+  openButton.textContent = "Abrir ficha";
+  footer.append(footerHint, openButton);
+  card.append(identity, info, footer, arrow);
   const open = () => openClientDetail(client);
   card.addEventListener("click", open);
+  openButton.addEventListener("click", (event) => { event.stopPropagation(); open(); });
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;
 }
