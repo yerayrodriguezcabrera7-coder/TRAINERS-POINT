@@ -40,6 +40,8 @@
   const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation">⇆</button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><span aria-hidden="true">＋</span></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const firstGroup = host.querySelector('.menu-group');
+  const brand = host.querySelector('.app-menu-brand');
+  if (brand) brand.innerHTML = '<img class="app-menu-logo" src="/assets/trainers-point-logo.png" alt="Trainers Point">';
   if (firstGroup) {
     const gymLink = document.createElement('a');
     gymLink.className = 'app-menu-item'; gymLink.href = '/gimnasios'; gymLink.title = 'Gimnasios';
