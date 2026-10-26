@@ -245,6 +245,7 @@ async function loadClients() {
   rows.append(loadingMessage);
 
   const params = new URLSearchParams();
+  params.set("all", "true");
   if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
   if (statusFilter.value) params.set("status", statusFilter.value);
   if (gymFilter.value) params.set("gymId", gymFilter.value);
