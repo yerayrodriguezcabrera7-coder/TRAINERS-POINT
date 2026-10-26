@@ -46,7 +46,7 @@
     <form id="booking-form">
       <header class="modal-header"><div><div class="eyebrow">AGENDA DEL EQUIPO</div><h2 id="booking-title">Nueva reserva</h2></div><button type="button" class="icon-button" data-close="booking-dialog" aria-label="Cerrar">×</button></header>
       <div class="modal-body"><div class="form-grid">
-        <label class="full">Cliente<select id="booking-client" required></select></label>
+        <div class="full client-picker-field"><span class="field-label">Cliente</span><div class="client-picker"><input id="client-search" type="search" placeholder="Buscar cliente por nombre…" autocomplete="off" aria-controls="client-results" aria-autocomplete="list"><button type="button" id="clear-client-search" class="client-search-clear" aria-label="Limpiar búsqueda">×</button></div><div id="client-results" class="client-results" role="listbox" aria-label="Clientes"></div><select id="booking-client" required hidden aria-hidden="true"></select><button type="button" class="button secondary client-add-button" id="add-client">＋ Añadir nuevo cliente</button></div>
         <div class="new-client-fields full" id="new-client-fields" hidden><label>Nombre y apellidos<input id="client-name" maxlength="100" autocomplete="name"></label><label>Correo electrónico (opcional)<input id="client-email" type="email" maxlength="150" autocomplete="email"></label><label>Teléfono (opcional)<input id="client-phone" type="tel" maxlength="30" autocomplete="tel"></label></div>
         <button type="button" class="text-button full" id="view-client">Ver ficha del cliente ↗</button>
         <label>Entrenador<select id="booking-employee" required></select></label><label>Servicio<select id="booking-service" required></select></label>

@@ -230,6 +230,24 @@ function updateClientFields() {
   $('client-name').required = isNew;
   ['client-name','client-email','client-phone'].forEach(id => { $(id).disabled = !isNew; });
   $('view-client').hidden = isNew;
+  $('add-client').textContent = isNew ? '← Elegir un cliente existente' : '＋ Añadir nuevo cliente';
+  if (isNew) { $('client-search').value = ''; $('client-results').hidden = true; }
+}
+function availableClients() {
+  return (serverMode && awsClientsLoaded ? awsClients : data.clients).filter(client => (client.status || 'ACTIVE') === 'ACTIVE');
+}
+function renderClientResults() {
+  const query = $('client-search').value.trim().toLocaleLowerCase('es');
+  const clients = availableClients().filter(client => `${client.name} ${client.email || ''} ${client.phone || ''}`.toLocaleLowerCase('es').includes(query));
+  $('client-results').innerHTML = clients.length ? clients.map(client => `<button type="button" class="client-result" role="option" data-client-id="${escapeHTML(client.id)}"><strong>${escapeHTML(client.name)}</strong><span>${escapeHTML(client.email || client.phone || 'Sin datos de contacto')}</span></button>`).join('') : '<p class="client-results-empty">No se han encontrado clientes.</p>';
+  $('client-results').hidden = false;
+}
+function syncClientPicker() {
+  const value = $('booking-client').value;
+  if (value === 'new') { updateClientFields(); return; }
+  const client = availableClients().find(item => item.id === value);
+  $('client-search').value = client?.name || '';
+  $('client-results').hidden = true;
 }
 function updateHoursHint() {
   const date = $('booking-date').value;
@@ -255,8 +273,9 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const selectedService = lookup('services',state.service);
   const service = selectedService?.active!==false && selectedService || data.services.find(s=>s.active!==false) || data.services[0];
   const duration = service.duration || 60;
-  const values = b || {clientId:data.clients.find(c=>(c.status||'ACTIVE')==='ACTIVE')?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
+  const values = b || {clientId:availableClients()[0]?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  syncClientPicker();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
   $('cancel-booking').hidden = !b || b.status === 'cancelled';
@@ -297,6 +316,21 @@ $('booking-form').addEventListener('submit', async event => {
   toast(`${persisted ? 'Reserva guardada.' : 'Reserva guardada solo en esta sesión.'}${matchesFilters ? '' : ' No se muestra con los filtros actuales.'}`);
 });
 $('booking-client').addEventListener('change',updateClientFields);
+$('client-search').addEventListener('focus',renderClientResults);
+$('client-search').addEventListener('input',renderClientResults);
+$('clear-client-search').addEventListener('click',() => { $('client-search').value=''; renderClientResults(); $('client-search').focus(); });
+$('client-results').addEventListener('click',event => {
+  const option = event.target.closest('[data-client-id]');
+  if (!option) return;
+  $('booking-client').value = option.dataset.clientId;
+  syncClientPicker();
+  updateClientFields();
+});
+$('add-client').addEventListener('click',() => {
+  $('booking-client').value = $('booking-client').value === 'new' ? (availableClients()[0]?.id || 'new') : 'new';
+  updateClientFields();
+  if ($('booking-client').value !== 'new') syncClientPicker();
+});
 $('booking-date').addEventListener('change',updateHoursHint);
 $('booking-service').addEventListener('change',() => {
   if (state.editing) return;
