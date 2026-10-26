@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
+import type { PrismaClient } from "@prisma/client";
 import { accessMigration } from "./access";
 import {
   ApiError,
@@ -35,7 +36,49 @@ CREATE TABLE IF NOT EXISTS calendar.attendance(
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_one_open_shift ON calendar.attendance(gym_id,employee_id) WHERE clock_out IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_by_gym_and_time ON calendar.attendance(gym_id,clock_in DESC);`;
 export class Store {
-  constructor(public pool: Pool) {}
+  constructor(public pool: Pool, private clientsDb?: PrismaClient) {}
+
+  private async externalConfig(gym: string, raw: unknown) {
+    const config = configSchema.parse(raw);
+    if (!this.clientsDb) return config;
+    const row = (await this.pool.query("SELECT name FROM calendar.gyms WHERE id=$1", [gym])).rows[0];
+    if (!row) return config;
+    const slug = (value: string) => value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const gyms = await this.clientsDb.gym.findMany({ where: { isActive: true }, select: { id: true, name: true } });
+    const externalGym = gyms.find(item => item.id === row.name || slug(item.name) === slug(String(row.name)));
+    if (!externalGym) return config;
+    const clients = await this.clientsDb.client.findMany({
+      where: { gymId: externalGym.id },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true },
+    });
+    config.clients = clients.map(client => ({
+      id: client.id,
+      name: `${client.firstName} ${client.lastName}`.trim(),
+      email: client.email,
+      phone: client.phone,
+      notes: client.notes || "",
+      status: client.status === "ACTIVO" || client.status === "LEAD" ? "ACTIVE" as const : client.status === "BAJA" ? "BLOCKED" as const : "INACTIVE" as const,
+      birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : "",
+    }));
+    const services = await this.clientsDb.service.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, description: true, durationMin: true, price: true, isActive: true },
+    });
+    if (services.length) {
+      config.services = services.map(service => ({
+        id: service.id,
+        name: service.name,
+        description: service.description || "",
+        duration: service.durationMin,
+        capacity: 1,
+        price: Number(service.price),
+        active: service.isActive,
+      }));
+    }
+    return config;
+  }
   async migrate() {
     await this.pool.query(migration);
     await this.pool.query(accessMigration);
@@ -123,7 +166,7 @@ export class Store {
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
     return {
-      ...rows[0].config,
+      ...configSchema.parse(rows[0].config),
       bookings: rows[0].bookings,
       revision: Number(rows[0].revision),
       version: 1,

@@ -43,28 +43,12 @@ export function server(
     try {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
-      let gym = defaultGym;
-      const requestedGym = req.headers["x-calendar-gym"];
-      if (typeof requestedGym === "string" && requestedGym.trim()) gym = requestedGym.trim();
+      const gym = defaultGym;
       if (path === "/api/health") {
         send(res, 200, { mode: "server" });
         return;
       }
       if (path.startsWith("/api/")) {
-        if (path === "/api/gyms" && req.method === "GET") {
-          send(res, 200, { gyms: await store.listGyms(), selected: gym });
-          return;
-        }
-        if (path === "/api/gyms" && req.method === "POST") {
-          const actual = Buffer.from(req.headers.authorization || "");
-          const expected = Buffer.from(`Bearer ${token}`);
-          if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
-            throw new ApiError(401, "No autorizado.");
-          const raw = await body(req);
-          const name = z.string().trim().min(1).max(120).parse(raw.name);
-          send(res, 201, { gym: await store.createGym(name, defaultGym) });
-          return;
-        }
         if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
         if (req.method === "POST" && path === "/api/login") {
           const key = req.socket.remoteAddress || "unknown";
@@ -232,9 +216,9 @@ export function server(
       }
       if (req.method !== "GET") throw new ApiError(405, "Método no permitido.");
       const file =
-        path === "/" || path === "/calendario/" || path === "/web/"
+        path === "/"
           ? "index.html"
-          : path.replace(/^\/(?:calendario|web)\//, "");
+          : path.replace(/^\//, "");
       if (file === "runtime.js" || path === "/runtime.js") {
         // El token solo se entrega durante el arranque inicial local. En cuanto
         // existe una cuenta, el navegador debe usar una sesión autenticada.
@@ -264,7 +248,6 @@ export function server(
         "inicio.css": "text/css",
         "inicio.js": "text/javascript",
         "menu.js": "text/javascript",
-        "logo-cobosu.png": "image/png",
         "fichajes.html": "text/html",
         "fichajes.js": "text/javascript",
         "fichajes.css": "text/css",

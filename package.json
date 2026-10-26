@@ -5,10 +5,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
-    "start": "npm run build && node scripts/start.cjs",
-    "start:clients": "node dist/index.js",
+    "start": "npm run build && node dist/index.js",
     "test": "npm run build && node --test tests/*.test.cjs web/calendar-core.test.cjs",
-    "dev:calendar": "npm run build && node scripts/dev-calendar.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",

@@ -78,12 +78,27 @@ async function api(path,method='GET',body) {
   return result;
 }
 let data;
+let awsClients = [];
+let awsClientsLoaded = false;
+async function loadBookingClients() {
+  if (!serverMode) return;
+  const result = await api('clients?all=true');
+  awsClientsLoaded = true;
+  awsClients = result.clients.map(client => ({
+    id: client.id,
+    name: `${client.firstName} ${client.lastName}`.trim(),
+    email: client.email || '',
+    phone: client.phone || '',
+    notes: client.notes || '',
+    status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
+  }));
+}
 if(serverMode) {
   if(!adminToken){location.href='login.html';return;}
   const me=await api('me');
   if(me.role==='TRAINER'){location.href='fichajes.html';return;}
   if(me.role!=='ADMIN') $('schedule-button').hidden=true;
-  try {data=await api('state');data.bookings=data.bookings.map(fromServer);sessionStorage.setItem('calendar-admin-token',adminToken);}
+  try {data=await api('state');data.bookings=data.bookings.map(fromServer);await loadBookingClients();sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
 let polling=false;
@@ -94,6 +109,7 @@ async function refreshServer(force=false) {
     const next=await api('state');
     if(force||next.revision!==data.revision) {
       data={...next,bookings:next.bookings.map(fromServer)};
+      await loadBookingClients();
       // Do not change form values or the version captured when a dialog was opened.
       if(!document.querySelector('dialog[open]')) setupSelects();
       render();
@@ -229,7 +245,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const b = id ? data.bookings.find(item => item.id === id) : null;
   state.editingVersion=b?.version;
   state.editingSnapshot=b ? {...b} : null;
-  fillSelect('booking-client', data.clients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
+  const bookingClients = serverMode && awsClientsLoaded ? awsClients : data.clients;
+  fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
   fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId));
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');

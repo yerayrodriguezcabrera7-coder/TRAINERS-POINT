@@ -26,6 +26,8 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell { min-height: 100vh; }
+.app-shell > .sidebar { display: none; }
+.app-shell > .main-content { margin-left: var(--rail, 236px); }
 
 .sidebar {
   position: fixed;

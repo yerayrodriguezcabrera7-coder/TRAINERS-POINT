@@ -1,7 +1,10 @@
+import "dotenv/config";
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { Pool } from "pg";
 import {
   AttendanceStatus,
   BookingStatus,
@@ -11,7 +14,9 @@ import {
   type ClientStatus,
 } from "@prisma/client";
 import { prisma } from "./lib/prisma";
-import { getCalendarHandler } from "./calendar-mount";
+import { Store, migration as calendarMigration } from "./calendar/store";
+import { accessMigration } from "./calendar/access";
+import { server as createCalendarServer } from "./calendar/http";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 3000);
@@ -20,6 +25,8 @@ const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "INACTIVO", "BAJA"];
 const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "OTRO"];
 const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO", "REEMBOLSADO"];
 const validAttendanceStatuses: AttendanceStatus[] = ["PENDIENTE", "ASISTIO", "NO_ASISTIO", "CANCELADA"];
+let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
+let calendarBootstrapToken = "";
 
 type ClientInput = {
   firstName: string;
@@ -614,7 +621,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(todayStart);
     todayEnd.setDate(todayEnd.getDate() + 1);
-    if (!search) {
+    if (!search && url.searchParams.get("all") !== "true") {
       where.bookings = {
         some: {
           startTime: { gte: todayStart, lt: todayEnd },
@@ -830,9 +837,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
 
-  const calendar = getCalendarHandler();
-  if (calendar) {
-    await calendar(request, response);
+  if (calendarHandler) {
+    await calendarHandler(request, response);
     return;
   }
 
@@ -840,6 +846,34 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 }
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
+  "/": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
+  "/index.html": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
+  "/inicio.html": { file: "web/inicio.html", contentType: "text/html; charset=utf-8" },
+  "/inicio.css": { file: "web/inicio.css", contentType: "text/css; charset=utf-8" },
+  "/inicio.js": { file: "web/inicio.js", contentType: "text/javascript; charset=utf-8" },
+  "/fichajes.html": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
+  "/fichajes.css": { file: "web/fichajes.css", contentType: "text/css; charset=utf-8" },
+  "/fichajes.js": { file: "web/fichajes.js", contentType: "text/javascript; charset=utf-8" },
+  "/gestion.html": { file: "web/gestion.html", contentType: "text/html; charset=utf-8" },
+  "/gestion.css": { file: "web/gestion.css", contentType: "text/css; charset=utf-8" },
+  "/gestion.js": { file: "web/gestion.js", contentType: "text/javascript; charset=utf-8" },
+  "/login.html": { file: "web/login.html", contentType: "text/html; charset=utf-8" },
+  "/login.js": { file: "web/login.js", contentType: "text/javascript; charset=utf-8" },
+  "/app.js": { file: "web/app.js", contentType: "text/javascript; charset=utf-8" },
+  "/calendar-core.js": { file: "web/calendar-core.js", contentType: "text/javascript; charset=utf-8" },
+  "/runtime.js": { file: "web/runtime.js", contentType: "text/javascript; charset=utf-8" },
+  "/menu.js": { file: "web/menu.js", contentType: "text/javascript; charset=utf-8" },
+  "/menu.css": { file: "web/menu.css", contentType: "text/css; charset=utf-8" },
+  "/styles.css": { file: "web/styles.css", contentType: "text/css; charset=utf-8" },
+  "/design.css": { file: "web/design.css", contentType: "text/css; charset=utf-8" },
+  "/clientes": { file: "public/clients.html", contentType: "text/html; charset=utf-8" },
+  "/clientes.html": { file: "public/clients.html", contentType: "text/html; charset=utf-8" },
+  "/clients.css": { file: "public/clients.css", contentType: "text/css; charset=utf-8" },
+  "/clients.js": { file: "public/clients.js", contentType: "text/javascript; charset=utf-8" },
+  "/gimnasios": { file: "public/gyms.html", contentType: "text/html; charset=utf-8" },
+  "/gyms.html": { file: "public/gyms.html", contentType: "text/html; charset=utf-8" },
+  "/gyms.css": { file: "public/gyms.css", contentType: "text/css; charset=utf-8" },
+  "/gyms.js": { file: "public/gyms.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
@@ -862,51 +896,15 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (url.pathname === "/calendario") {
-    response.writeHead(302, { Location: "/calendario/" });
-    response.end();
-    return;
-  }
-
   // Las rutas antiguas conservan sus enlaces, pero toda la operativa vive en
   // la navegación y el estilo compartidos del calendario.
-  const integratedRoute =
-    url.pathname === "/" || url.pathname === "/clientes"
-      ? "/calendario/gestion.html?section=clients"
-      : url.pathname === "/gimnasios"
-        ? "/calendario/gimnasios.html"
-        : undefined;
-  if (integratedRoute) {
-    response.writeHead(302, { Location: integratedRoute });
-    response.end();
-    return;
-  }
-
-  if (url.pathname.startsWith("/calendario/")) {
-    const calendar = getCalendarHandler();
-    if (!calendar) {
-      sendError(response, 503, "El calendario no está activo. Inicia la aplicación con npm start.");
-      return;
-    }
-    await calendar(request, response);
-    return;
-  }
-
   response.setHeader("X-Content-Type-Options", "nosniff");
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("X-Frame-Options", "DENY");
-  response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 
   try {
     if (url.pathname.startsWith("/api/")) {
-      const calendarRequest = request.headers.referer?.includes("/calendario/") || request.headers.referer?.includes("/web/");
-      if (calendarRequest && ["/api/gyms"].includes(url.pathname)) {
-        const calendar = getCalendarHandler();
-        if (calendar) {
-          await calendar(request, response);
-          return;
-        }
-      }
       await handleApi(request, response, url);
       return;
     }
@@ -927,12 +925,17 @@ const server = createServer(async (request, response) => {
       "Cache-Control": "no-store",
     });
 
+    if (url.pathname === "/runtime.js") {
+      response.end(`window.CALENDAR_SERVER=true;window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
+      return;
+    }
+
     if (request.method === "HEAD") {
       response.end();
       return;
     }
 
-    await pipeline(createReadStream(join(process.cwd(), "public", asset.file)), response);
+    await pipeline(createReadStream(join(process.cwd(), asset.file)), response);
   } catch (error) {
     if (error instanceof RangeError) {
       sendError(response, 413, "La solicitud supera el tamaño permitido.");
@@ -950,13 +953,43 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
-  console.log(`Trainers Point disponible en http://localhost:${port}/calendario/`);
-});
+async function start(): Promise<void> {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const store = new Store(pool);
+  await pool.query(calendarMigration);
+  await pool.query(accessMigration);
+  const configuredGym = (await prisma.gym.findFirst({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true } }))?.id || "trainers-point-bizkaia";
+  let gym = configuredGym;
+  const schedule = Array.from({ length: 7 }, (_, i) => ({ open: "09:00", close: i === 5 ? "14:00" : "21:00", closed: i === 6 }));
+  await store.seed(gym, {
+    timezone: "Europe/Madrid",
+    schedule,
+    employees: [{ id: "e1", name: "Entrenador de prueba", color: "#8498bc", schedule }],
+    services: [
+      { id: "s1", name: "Personal 60 minutos", duration: 60, capacity: 1 },
+      { id: "s2", name: "Valoración 45 minutos", duration: 45, capacity: 1 },
+      { id: "s3", name: "Clase grupal", duration: 60, capacity: 4 },
+    ],
+    rooms: [{ id: "r1", name: "Sala principal" }],
+    clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
+  });
+  const token = process.env.CALENDAR_ADMIN_TOKEN || randomBytes(24).toString("hex");
+  calendarBootstrapToken = token;
+  const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: true });
+  calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
+  server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
+  const close = () => {
+    void server.close(async () => {
+      calendar.close();
+      await pool.end();
+      await prisma.$disconnect();
+    });
+  };
+  process.on("SIGINT", close);
+  process.on("SIGTERM", close);
+}
 
-server.on("close", () => {
-  void prisma.$disconnect();
+void start().catch((error: unknown) => {
+  console.error("No se pudo iniciar Trainers Point:", error instanceof Error ? error.message : error);
+  process.exitCode = 1;
 });
-
-process.on("SIGINT", () => server.close());
-process.on("SIGTERM", () => server.close());
