@@ -21,6 +21,8 @@ const view = document.querySelector("#profile-view");
 const objectiveForm = document.querySelector("#objective-form");
 const objectiveInput = document.querySelector("#objective-input");
 const objectiveFeedback = document.querySelector("#objective-feedback");
+const clientDetailsForm = document.querySelector("#client-details-form");
+const clientDetailsFeedback = document.querySelector("#client-details-feedback");
 const measurementDialog = document.querySelector("#measurement-dialog");
 const measurementForm = document.querySelector("#measurement-form");
 const measurementDate = document.querySelector("#measurement-date");
@@ -41,6 +43,10 @@ function valueText(value, unit) { return value === null || value === undefined ?
 function initials(client) { return `${client.firstName?.trim().charAt(0) ?? ""}${client.lastName?.trim().charAt(0) ?? ""}`.toUpperCase(); }
 function dateText(value) { return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(value)); }
 function shortDateText(value) { return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(value)); }
+function dateTimeLocalValue(value) {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 function metricMeasurements(measurements, key) { return measurements.filter((measurement) => measurement[key] !== null && measurement[key] !== undefined); }
 function animateValue(element) {
   element.classList.remove("value-updated");
@@ -68,6 +74,42 @@ function renderHeader(client) {
   document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
+}
+
+function renderClientDetails(client) {
+  const form = clientDetailsForm;
+  form.elements.namedItem("preferredName").value = client.preferredName || "";
+  form.elements.namedItem("birthDate").value = client.birthDate ? new Date(client.birthDate).toISOString().slice(0, 10) : "";
+  form.elements.namedItem("sex").value = client.sex || "";
+  form.elements.namedItem("source").value = client.source || "";
+  form.elements.namedItem("sourceDetail").value = client.sourceDetail || "";
+  form.elements.namedItem("contactPreference").value = client.contactPreference || "";
+  form.elements.namedItem("contactSlot").value = client.contactSlot || "";
+  form.elements.namedItem("sessionsPerWeek").value = client.sessionsPerWeek ? String(client.sessionsPerWeek) : "";
+  form.elements.namedItem("firstSessionPreference").value = client.firstSessionPreference
+    ? dateTimeLocalValue(client.firstSessionPreference)
+    : "";
+  form.elements.namedItem("injuryNotes").value = client.injuryNotes || "";
+
+  const injuries = Array.isArray(client.injuries) ? client.injuries : [];
+  form.querySelectorAll('input[name="injuries"]').forEach((input) => {
+    input.checked = injuries.includes(input.value);
+  });
+  const availability = client.availability && typeof client.availability === "object" ? client.availability : {};
+  const days = Array.isArray(availability.days) ? availability.days : [];
+  const slots = Array.isArray(availability.slots) ? availability.slots : [];
+  form.querySelectorAll('input[name="availabilityDay"]').forEach((input) => {
+    input.checked = days.includes(input.value);
+  });
+  form.querySelectorAll('input[name="availabilitySlot"]').forEach((input) => {
+    input.checked = slots.includes(input.value);
+  });
+
+  for (const field of ["consentData", "consentMarketing", "consentPhotos"]) {
+    const value = client[field];
+    form.elements.namedItem(field).checked = Boolean(value);
+    form.querySelector(`[data-consent-date="${field}"]`).textContent = value ? `Registrado el ${dateText(value)}` : "Sin registro";
+  }
 }
 
 function renderSummary(measurements, previousMeasurements = []) {
@@ -213,7 +255,7 @@ function renderChart(measurements, previousMeasurements = []) {
   progressChart.append(svg);
 }
 
-function renderProgress(data, previousMeasurements = []) { progress = data; renderHeader(data.client); renderSummary(data.measurements, previousMeasurements); renderHistory(data.measurements); renderChart(data.measurements, previousMeasurements); }
+function renderProgress(data, previousMeasurements = []) { progress = data; renderHeader(data.client); renderClientDetails(data.client); renderSummary(data.measurements, previousMeasurements); renderHistory(data.measurements); renderChart(data.measurements, previousMeasurements); }
 
 async function loadProfile() {
   if (!clientId) { showError("No encontramos esta ficha. Vuelve a clientes y elige una persona."); return; }
@@ -223,6 +265,51 @@ async function loadProfile() {
     renderProgress(data); loading.hidden = true; view.hidden = false;
   } catch (error) { showError("No se pudo cargar esta ficha. Inténtalo de nuevo."); }
 }
+
+clientDetailsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  clientDetailsFeedback.textContent = "Guardando…";
+  const form = clientDetailsForm;
+  const selectedInjuries = [...form.querySelectorAll('input[name="injuries"]:checked')].map((input) => input.value);
+  const days = [...form.querySelectorAll('input[name="availabilityDay"]:checked')].map((input) => input.value);
+  const slots = [...form.querySelectorAll('input[name="availabilitySlot"]:checked')].map((input) => input.value);
+  const body = {
+    preferredName: form.elements.namedItem("preferredName").value.trim() || null,
+    birthDate: form.elements.namedItem("birthDate").value || null,
+    sex: form.elements.namedItem("sex").value || null,
+    source: form.elements.namedItem("source").value || null,
+    sourceDetail: form.elements.namedItem("sourceDetail").value.trim() || null,
+    contactPreference: form.elements.namedItem("contactPreference").value || null,
+    contactSlot: form.elements.namedItem("contactSlot").value || null,
+    sessionsPerWeek: form.elements.namedItem("sessionsPerWeek").value ? Number(form.elements.namedItem("sessionsPerWeek").value) : null,
+    firstSessionPreference: form.elements.namedItem("firstSessionPreference").value
+      ? new Date(form.elements.namedItem("firstSessionPreference").value).toISOString()
+      : null,
+    injuries: selectedInjuries.length ? selectedInjuries : null,
+    injuryNotes: form.elements.namedItem("injuryNotes").value.trim() || null,
+    availability: days.length || slots.length ? { days, slots } : null,
+  };
+  for (const field of ["consentData", "consentMarketing", "consentPhotos"]) {
+    body[field] = form.elements.namedItem(field).checked
+      ? progress.client[field] || new Date().toISOString()
+      : null;
+  }
+
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/details`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error("No se pudieron guardar los datos.");
+    progress.client = { ...progress.client, ...data.client };
+    renderClientDetails(progress.client);
+    clientDetailsFeedback.textContent = "Datos guardados.";
+  } catch (error) {
+    clientDetailsFeedback.textContent = "No se pudieron guardar los datos. Inténtalo de nuevo.";
+  }
+});
 
 objectiveForm.addEventListener("submit", async (event) => {
   event.preventDefault(); objectiveFeedback.textContent = "Guardando…";

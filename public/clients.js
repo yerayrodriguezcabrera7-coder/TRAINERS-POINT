@@ -42,6 +42,19 @@ const serviceCreateForm = document.querySelector("#service-create-form");
 const serviceCreateError = document.querySelector("#service-create-error");
 const serviceCreateSubmit = document.querySelector("#submit-service-create");
 const toast = document.querySelector("#toast");
+const intakeSteps = [...document.querySelectorAll(".intake-step")];
+const intakeStepLabel = document.querySelector("#intake-step-label");
+const intakeProgressValue = document.querySelector("#intake-progress-value");
+const intakeNextButton = document.querySelector("#intake-next");
+const intakeBackButton = document.querySelector("#intake-back");
+const intakeCreateOnlyButton = document.querySelector("#create-client-only");
+const proposalTable = document.querySelector("#proposal-table");
+const proposalReason = document.querySelector("#proposal-reason");
+const proposalEmpty = document.querySelector("#proposal-empty");
+let intakeStep = 0;
+let intakeDirty = false;
+let proposalSuggestion;
+const duplicateChecks = { phone: 0, email: 0 };
 let searchTimer;
 let toastTimer;
 let refreshController;
@@ -79,6 +92,45 @@ const attendanceLabels = {
   CANCELADA: "Cancelada",
 };
 
+const proposalServiceKeywords = [
+  { goals: ["ganar fuerza", "preparar una prueba"], keywords: ["fuerza", "rendimiento", "personal"] },
+  { goals: ["ganar masa muscular"], keywords: ["musculación", "hipertrofia", "fuerza"] },
+  { goals: ["perder grasa"], keywords: ["pérdida", "composición", "personal", "funcional"] },
+  { goals: ["salud y movilidad"], keywords: ["movilidad", "salud", "funcional"] },
+];
+const proposalSessionOptions = [1, 5, 10];
+
+function buildProposal(client, availableServices) {
+  const activeServices = availableServices.filter((service) => service && service.id && Number.isFinite(Number(service.price)));
+  if (!activeServices.length) return { service: null, options: [], reason: "Aún no hay servicios creados." };
+
+  const objective = String(client.objective || "").trim();
+  const normalizedObjective = objective.toLocaleLowerCase("es");
+  const match = proposalServiceKeywords.find((entry) =>
+    entry.goals.some((goal) => normalizedObjective.includes(goal)),
+  );
+  const service = match
+    ? activeServices.find((item) => match.keywords.some((keyword) => item.name.toLocaleLowerCase("es").includes(keyword)))
+    : null;
+  const selectedService = service || activeServices[0];
+  const frequency = Number(client.sessionsPerWeek) || 1;
+  const preferredSessions = proposalSessionOptions.reduce((best, count) =>
+    Math.abs(count - frequency * 4.5) < Math.abs(best - frequency * 4.5) ? count : best,
+  );
+  return {
+    service: selectedService,
+    options: proposalSessionOptions.map((sessions) => ({
+      sessions,
+      durationMin: Number(selectedService.durationMin) * sessions,
+      totalAmount: Number(selectedService.price) * sessions,
+      selected: sessions === preferredSessions,
+    })),
+    reason: service
+      ? `Encaja con ${objective || "el objetivo indicado"}.`
+      : `No hay una coincidencia exacta. Proponemos ${selectedService.name}.`,
+  };
+}
+
 function escapeText(value) {
   return String(value ?? "");
 }
@@ -90,6 +142,13 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function localDateString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function createInfoItem(label, value, detail, className = "") {
@@ -529,6 +588,28 @@ async function loadServices(selectedId = "") {
   renderServiceOptions(selectedId);
 }
 
+async function addClientServicePackage(clientId, body) {
+  const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-packages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "No se pudieron añadir las sesiones. Inténtalo de nuevo.");
+  return data;
+}
+
+async function saveClientMeasurement(clientId, body) {
+  const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/measurements`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "No se pudo guardar la medida. Inténtalo de nuevo.");
+  return data;
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(Number(value));
 }
@@ -693,12 +774,20 @@ function showToast(message, isError = false, action = null) {
   toast.classList.toggle("error", isError);
   toast.classList.add("visible");
   if (action) {
-    const actionButton = document.createElement("button");
-    actionButton.className = "toast-action";
-    actionButton.type = "button";
-    actionButton.textContent = action.label;
-    actionButton.addEventListener("click", action.onAction, { once: true });
-    toast.append(actionButton);
+    if (action.href) {
+      const actionLink = document.createElement("a");
+      actionLink.className = "toast-action";
+      actionLink.href = action.href;
+      actionLink.textContent = action.label;
+      toast.append(actionLink);
+    } else {
+      const actionButton = document.createElement("button");
+      actionButton.className = "toast-action";
+      actionButton.type = "button";
+      actionButton.textContent = action.label;
+      actionButton.addEventListener("click", action.onAction, { once: true });
+      toast.append(actionButton);
+    }
   }
   toastTimer = window.setTimeout(() => {
     toast.classList.remove("visible");
@@ -711,15 +800,495 @@ function closeDialog() {
   formError.hidden = true;
 }
 
+function intakeDraftHasValues() {
+  return [...createForm.querySelectorAll("input, select, textarea")].some((control) => {
+    if (control.type === "checkbox" || control.type === "radio") return control.checked;
+    return Boolean(control.value);
+  });
+}
+
+function requestCloseCreateDialog() {
+  if (intakeDirty && intakeDraftHasValues() &&
+      !window.confirm("Hay datos sin guardar. ¿Quieres descartarlos?")) return;
+  intakeDirty = false;
+  closeDialog();
+}
+
+function updateIntakeStep(nextStep, focus = true) {
+  intakeStep = Math.max(0, Math.min(3, nextStep));
+  intakeSteps.forEach((section, index) => {
+    section.hidden = index !== intakeStep;
+  });
+  document.querySelectorAll("[data-intake-nav]").forEach((button) => {
+    const index = Number(button.dataset.intakeNav);
+    if (index === intakeStep) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
+    button.disabled = index > intakeStep;
+  });
+  intakeStepLabel.textContent = `Paso ${intakeStep + 1} de 4`;
+  intakeProgressValue.style.width = `${((intakeStep + 1) / 4) * 100}%`;
+  intakeBackButton.hidden = intakeStep === 0;
+  document.querySelector("#cancel-create").hidden = intakeStep === 3;
+  intakeNextButton.hidden = intakeStep === 3;
+  intakeCreateOnlyButton.hidden = intakeStep !== 3;
+  submitButton.hidden = intakeStep !== 3;
+  if (focus) {
+    requestAnimationFrame(() => {
+      const firstField = intakeSteps[intakeStep].querySelector(
+        'input:not([type="hidden"]), select, textarea',
+      );
+      firstField?.focus();
+    });
+  }
+}
+
+function validateIntakeStep(step) {
+  formError.hidden = true;
+  intakeSteps[step].querySelectorAll("[data-field-error]").forEach((error) => {
+    const control = createForm.elements.namedItem(error.dataset.fieldError);
+    error.hidden = true;
+    error.textContent = "";
+    control?.removeAttribute("aria-invalid");
+  });
+  const requiredByStep = step === 0
+    ? ["firstName", "lastName", "phone", "email", "gymId"]
+    : step === 2
+      ? ["consentData"]
+      : [];
+  const messages = {
+    firstName: "Falta el nombre.",
+    lastName: "Faltan los apellidos.",
+    phone: "Falta el teléfono.",
+    email: "Revisa el correo electrónico.",
+    gymId: "Selecciona un centro.",
+    consentData: "Confirma el uso de datos personales.",
+  };
+  for (const name of requiredByStep) {
+    const control = createForm.elements.namedItem(name);
+    const fieldError = createForm.querySelector(`[data-field-error="${CSS.escape(name)}"]`);
+    if (!control.value && control.type !== "checkbox") {
+      fieldError.textContent = messages[name];
+      fieldError.hidden = false;
+      control.setAttribute("aria-invalid", "true");
+      control.focus();
+      return false;
+    }
+    if (control.type === "checkbox" && !control.checked) {
+      fieldError.textContent = messages[name];
+      fieldError.hidden = false;
+      control.setAttribute("aria-invalid", "true");
+      control.focus();
+      return false;
+    }
+    if (!control.checkValidity()) {
+      fieldError.textContent = messages[name];
+      fieldError.hidden = false;
+      control.setAttribute("aria-invalid", "true");
+      control.focus();
+      return false;
+    }
+  }
+  return true;
+}
+
+function intakeObjective() {
+  const selected = [...createForm.querySelectorAll('input[name="objectiveChoice"]:checked')]
+    .map((input) => input.value)
+    .filter((value) => value !== "Otro");
+  if (createForm.elements.namedItem("objectiveOther").value.trim() &&
+      createForm.querySelector("#objective-other-toggle").checked) {
+    selected.push(createForm.elements.namedItem("objectiveOther").value.trim());
+  }
+  return selected.join(" y ");
+}
+
+function intakeDraft() {
+  const form = createForm;
+  const checked = (name) => [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value);
+  const localPreference = form.elements.namedItem("firstSessionPreference").value;
+  return {
+    firstName: form.elements.namedItem("firstName").value.trim(),
+    lastName: form.elements.namedItem("lastName").value.trim(),
+    email: form.elements.namedItem("email").value.trim(),
+    phone: form.elements.namedItem("phone").value.trim(),
+    gymId: form.elements.namedItem("gymId").value,
+    preferredName: form.elements.namedItem("preferredName").value.trim(),
+    birthDate: form.elements.namedItem("birthDate").value,
+    objective: intakeObjective(),
+    sex: form.querySelector('input[name="sex"]:checked')?.value || null,
+    source: form.querySelector('input[name="source"]:checked')?.value || null,
+    sourceDetail: form.elements.namedItem("sourceDetail").value.trim(),
+    contactPreference: form.elements.namedItem("contactPreference").value || null,
+    contactSlot: form.elements.namedItem("contactSlot").value || null,
+    notes: form.elements.namedItem("notes").value.trim(),
+    injuries: checked("injuries").length ? checked("injuries") : null,
+    injuryNotes: form.elements.namedItem("injuryNotes").value.trim(),
+    availability: checked("availabilityDay").length || checked("availabilitySlot").length
+      ? { days: checked("availabilityDay"), slots: checked("availabilitySlot") }
+      : null,
+    sessionsPerWeek: form.elements.namedItem("sessionsPerWeek").value
+      ? Number(form.elements.namedItem("sessionsPerWeek").value)
+      : null,
+    firstSessionPreference: localPreference ? new Date(localPreference).toISOString() : null,
+    consentData: form.elements.namedItem("consentData").checked ? new Date().toISOString() : null,
+    consentMarketing: form.elements.namedItem("consentMarketing").checked ? new Date().toISOString() : null,
+    consentPhotos: form.elements.namedItem("consentPhotos").checked ? new Date().toISOString() : null,
+  };
+}
+
+function formatProposalDuration(durationMin) {
+  const hours = Math.floor(durationMin / 60);
+  const minutes = durationMin % 60;
+  return `${hours ? `${hours} h` : ""}${hours && minutes ? " " : ""}${minutes ? `${minutes} min` : ""}` || "0 min";
+}
+
+function renderProposal() {
+  proposalTable.replaceChildren();
+  const proposal = buildProposal(intakeDraft(), services);
+  proposalSuggestion = proposal;
+  proposalReason.textContent = proposal.service ? proposal.reason : "";
+  proposalEmpty.hidden = Boolean(proposal.service);
+  intakeCreateOnlyButton.disabled = false;
+  submitButton.disabled = !proposal.service;
+  if (!proposal.service) return;
+
+  for (const option of proposal.options) {
+    const row = document.createElement("article");
+    row.className = "proposal-row";
+    row.dataset.proposalSessions = String(option.sessions);
+    const choiceLabel = document.createElement("label");
+    choiceLabel.className = "proposal-choice";
+    const choice = document.createElement("input");
+    choice.type = "radio";
+    choice.name = "proposalChoice";
+    choice.value = String(option.sessions);
+    choice.checked = option.selected;
+    const choiceText = document.createElement("span");
+    choiceText.textContent = option.selected ? "Principal" : "Opción";
+    choiceLabel.append(choice, choiceText);
+
+    const serviceLabel = document.createElement("label");
+    serviceLabel.className = "proposal-service";
+    const serviceCaption = document.createElement("span");
+    serviceCaption.textContent = "Servicio";
+    const serviceSelect = document.createElement("select");
+    serviceSelect.name = "proposalServiceId";
+    serviceSelect.setAttribute("aria-label", `Servicio para la opción de ${option.sessions} sesiones`);
+    for (const service of services) {
+      const item = document.createElement("option");
+      item.value = service.id;
+      item.textContent = service.name;
+      item.selected = service.id === proposal.service.id;
+      serviceSelect.append(item);
+    }
+    serviceLabel.append(serviceCaption, serviceSelect);
+
+    const sessionsLabel = document.createElement("label");
+    sessionsLabel.className = "proposal-sessions";
+    const sessionsCaption = document.createElement("span");
+    sessionsCaption.textContent = "Sesiones";
+    const sessionsInput = document.createElement("input");
+    sessionsInput.name = "proposalSessions";
+    sessionsInput.type = "number";
+    sessionsInput.min = "1";
+    sessionsInput.max = "500";
+    sessionsInput.step = "1";
+    sessionsInput.value = String(option.sessions);
+    sessionsInput.setAttribute("aria-label", `Número de sesiones para esta opción`);
+    sessionsLabel.append(sessionsCaption, sessionsInput);
+
+    const duration = document.createElement("div");
+    duration.className = "proposal-duration";
+    const durationCaption = document.createElement("span");
+    durationCaption.textContent = "Duración total";
+    const durationValue = document.createElement("strong");
+    durationValue.textContent = formatProposalDuration(option.durationMin);
+    duration.append(durationCaption, durationValue);
+
+    const amountLabel = document.createElement("label");
+    amountLabel.className = "proposal-amount";
+    const amountCaption = document.createElement("span");
+    amountCaption.textContent = "Precio total (€)";
+    const amount = document.createElement("input");
+    amount.name = "proposalAmount";
+    amount.type = "number";
+    amount.min = "0";
+    amount.max = "9999999999.99";
+    amount.step = "0.01";
+    amount.value = option.totalAmount.toFixed(2);
+    amount.setAttribute("aria-label", `Importe total para la opción de ${option.sessions} sesiones`);
+    amountLabel.append(amountCaption, amount);
+    row.append(choiceLabel, serviceLabel, sessionsLabel, duration, amountLabel);
+    proposalTable.append(row);
+  }
+
+  proposalTable.querySelectorAll(".proposal-row").forEach((row) => {
+    row.addEventListener("input", (event) => {
+      if (event.target.name === "proposalAmount") return;
+      updateProposalRow(row, event.target.name === "proposalServiceId" || event.target.name === "proposalSessions");
+    });
+    row.addEventListener("change", (event) => {
+      if (event.target.name === "proposalChoice") {
+        proposalTable.querySelectorAll(".proposal-row").forEach((item) => item.classList.toggle("is-selected", item === row));
+      }
+      if (event.target.name === "proposalServiceId" || event.target.name === "proposalSessions") updateProposalRow(row, true);
+    });
+    row.classList.toggle("is-selected", row.querySelector('input[name="proposalChoice"]').checked);
+  });
+}
+
+function updateProposalRow(row, updateAmount) {
+  const serviceId = row.querySelector('select[name="proposalServiceId"]').value;
+  const service = services.find((item) => item.id === serviceId);
+  const sessionsInput = row.querySelector('input[name="proposalSessions"]');
+  const amountInput = row.querySelector('input[name="proposalAmount"]');
+  const sessions = Math.max(1, Number(sessionsInput.value) || 1);
+  sessionsInput.value = String(sessions);
+  row.querySelector(".proposal-duration strong").textContent = service
+    ? formatProposalDuration(Number(service.durationMin) * sessions)
+    : "—";
+  if (updateAmount && service) amountInput.value = (Number(service.price) * sessions).toFixed(2);
+  row.querySelector('input[name="proposalChoice"]').value = String(sessions);
+}
+
+async function enterIntakeStep(step) {
+  if (step === 3) {
+    const proposalError = document.querySelector("#proposal-error");
+    proposalError.hidden = true;
+    proposalError.textContent = "";
+    try {
+      await loadServices();
+      renderProposal();
+    } catch (error) {
+      proposalError.textContent = "No se pudieron cargar los servicios. Inténtalo de nuevo.";
+      proposalError.hidden = false;
+      proposalReason.textContent = "";
+      proposalTable.replaceChildren();
+      proposalEmpty.hidden = true;
+      intakeCreateOnlyButton.disabled = false;
+      submitButton.disabled = true;
+    }
+  }
+  updateIntakeStep(step);
+}
+
+async function checkDuplicate(field) {
+  const control = createForm.elements.namedItem(field);
+  const message = createForm.querySelector(`[data-duplicate-for="${field}"]`);
+  const value = control.value.trim();
+  const requestId = ++duplicateChecks[field];
+  message.replaceChildren();
+  if (!value || (field === "email" && !control.checkValidity()) ||
+      (field === "phone" && value.replace(/\D/g, "").length < 4)) return;
+
+  try {
+    const params = new URLSearchParams({ [field]: value });
+    const response = await fetch(`/api/clients/duplicates?${params}`, { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error("No se pudo comprobar si ya hay una ficha.");
+    if (requestId !== duplicateChecks[field]) return;
+    const match = data.matches?.find((item) => item.field === field);
+    if (match) {
+      message.append(document.createTextNode(`Ya hay una ficha con este ${field === "phone" ? "teléfono" : "correo"}: `));
+      const link = document.createElement("a");
+      link.href = getClientProfileHref(match.client.id);
+      link.textContent = `${match.client.firstName} ${match.client.lastName}`;
+      link.setAttribute("aria-label", `Abrir ficha de ${link.textContent}`);
+      message.append(link);
+    }
+  } catch (error) {
+    if (requestId !== duplicateChecks[field]) return;
+    message.textContent = "No se pudo comprobar si ya hay una ficha.";
+  }
+}
+
+async function createIntakeClient(mode) {
+  const draft = intakeDraft();
+  if (!draft.consentData) {
+    formError.textContent = "Confirma el uso de datos personales.";
+    formError.hidden = false;
+    await enterIntakeStep(2);
+    createForm.elements.namedItem("consentData").focus();
+    return;
+  }
+  const selectedRow = [...proposalTable.querySelectorAll(".proposal-row")]
+    .find((row) => row.querySelector('input[name="proposalChoice"]').checked);
+  let proposal = null;
+  if (mode === "addProposal") {
+    if (!selectedRow) {
+      formError.textContent = "Elige una propuesta o crea solo el cliente.";
+      formError.hidden = false;
+      return;
+    }
+    const sessions = Number(selectedRow.querySelector('input[name="proposalSessions"]').value);
+    const amount = Number(selectedRow.querySelector('input[name="proposalAmount"]').value);
+    const serviceId = selectedRow.querySelector('select[name="proposalServiceId"]').value;
+    if (!Number.isInteger(sessions) || sessions < 1 || sessions > 500 || !Number.isFinite(amount) || amount < 0 || !serviceId) {
+      formError.textContent = "Revisa las sesiones, el servicio y el importe de la propuesta.";
+      formError.hidden = false;
+      selectedRow.querySelector('input[name="proposalSessions"]').focus();
+      return;
+    }
+    proposal = { serviceId, sessionsBought: sessions, totalAmount: amount };
+  }
+
+  formError.hidden = true;
+  submitButton.disabled = true;
+  intakeCreateOnlyButton.disabled = true;
+  submitButton.textContent = "Guardando…";
+  intakeCreateOnlyButton.textContent = "Guardando…";
+  try {
+    const response = await fetch("/api/clients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(draft),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente.");
+
+    let packageFailed = false;
+    let measurementFailed = false;
+    if (proposal) {
+      try {
+        await addClientServicePackage(data.client.id, {
+          serviceId: proposal.serviceId,
+          sessionsBought: proposal.sessionsBought,
+          totalAmount: proposal.totalAmount,
+          paymentMethod: "OTRO",
+          paymentStatus: "PENDIENTE",
+          notes: "Propuesta inicial",
+        });
+      } catch (error) {
+        packageFailed = true;
+      }
+    }
+
+    const measurement = Object.fromEntries(
+      ["weight", "chest", "waist", "hip", "arm", "leg"]
+        .map((field) => [field, createForm.elements.namedItem(field).value])
+        .filter(([, value]) => value !== "")
+        .map(([field, value]) => [field, Number(value)]),
+    );
+    if (Object.keys(measurement).length) {
+      try {
+        await saveClientMeasurement(data.client.id, { measuredAt: localDateString(), ...measurement });
+      } catch (error) {
+        measurementFailed = true;
+      }
+    }
+
+    intakeDirty = false;
+    createDialog.close();
+    searchInput.value = "";
+    clearSearchButton.hidden = true;
+    gymFilter.value = "";
+    await loadGyms();
+    await loadClients();
+    const name = `${data.client.firstName} ${data.client.lastName}`;
+    if (packageFailed) {
+      showToast("Cliente creado. No se pudo añadir el bono, puedes hacerlo desde su ficha.", true, {
+        label: "Abrir ficha",
+        href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
+      });
+    } else if (measurementFailed) {
+      showToast("Cliente creado, pero no se pudieron guardar las medidas.", true, {
+        label: "Abrir ficha",
+        href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
+      });
+    } else {
+      showToast(`${name} creada`, false, {
+        label: "Abrir ficha",
+        href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
+      });
+    }
+  } catch (error) {
+    formError.textContent = error.message === "Ya existe un cliente con ese correo."
+      ? "Ya hay una ficha con este correo. Comprueba el aviso del campo."
+      : "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
+    formError.hidden = false;
+  } finally {
+    submitButton.disabled = false;
+    intakeCreateOnlyButton.disabled = false;
+    submitButton.textContent = "Crear cliente y añadir esta propuesta";
+    intakeCreateOnlyButton.textContent = "Crear solo el cliente";
+  }
+}
+
 document.querySelector("#open-create").addEventListener("click", () => {
   createForm.reset();
   createForm.elements.gymId.value = gymFilter.value || gyms[0]?.id || "";
   formError.hidden = true;
+  createForm.querySelectorAll("[data-field-error]").forEach((error) => {
+    error.hidden = true;
+    error.textContent = "";
+    createForm.elements.namedItem(error.dataset.fieldError)?.removeAttribute("aria-invalid");
+  });
+  document.querySelector("#proposal-error").hidden = true;
+  document.querySelector("#objective-other-field").hidden = true;
+  document.querySelector("#source-detail-field").hidden = true;
+  document.querySelectorAll(".duplicate-message").forEach((message) => message.replaceChildren());
+  proposalTable.replaceChildren();
+  intakeDirty = false;
+  updateIntakeStep(0, false);
   createDialog.showModal();
   createForm.elements.firstName.focus();
 });
-document.querySelector("#close-dialog").addEventListener("click", closeDialog);
-document.querySelector("#cancel-create").addEventListener("click", closeDialog);
+document.querySelector("#close-dialog").addEventListener("click", requestCloseCreateDialog);
+document.querySelector("#cancel-create").addEventListener("click", requestCloseCreateDialog);
+createDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  requestCloseCreateDialog();
+});
+createForm.addEventListener("input", () => { intakeDirty = true; });
+createForm.addEventListener("change", (event) => {
+  intakeDirty = true;
+  if (event.target.name === "source") {
+    document.querySelector("#source-detail-field").hidden = event.target.value !== "RECOMENDACION";
+    if (event.target.value !== "RECOMENDACION") createForm.elements.namedItem("sourceDetail").value = "";
+  }
+  if (event.target.id === "objective-other-toggle") {
+    document.querySelector("#objective-other-field").hidden = !event.target.checked;
+  }
+});
+createForm.querySelector('[name="phone"]').addEventListener("blur", () => checkDuplicate("phone"));
+createForm.querySelector('[name="email"]').addEventListener("blur", () => checkDuplicate("email"));
+intakeNextButton.addEventListener("click", async () => {
+  if (!validateIntakeStep(intakeStep)) return;
+  await enterIntakeStep(intakeStep + 1);
+});
+intakeBackButton.addEventListener("click", () => updateIntakeStep(intakeStep - 1));
+document.querySelectorAll("[data-intake-nav]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const destination = Number(button.dataset.intakeNav);
+    if (destination < intakeStep) updateIntakeStep(destination);
+  });
+});
+createForm.addEventListener("keydown", async (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    requestCloseCreateDialog();
+    return;
+  }
+  if (event.key !== "Enter" || event.target.matches("textarea") || event.target.matches("button")) return;
+  if (intakeStep < 3) {
+    event.preventDefault();
+    if (validateIntakeStep(intakeStep)) await enterIntakeStep(intakeStep + 1);
+  }
+});
+createForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (intakeStep < 3) {
+    if (validateIntakeStep(intakeStep)) await enterIntakeStep(intakeStep + 1);
+    return;
+  }
+  await createIntakeClient(event.submitter?.value || "addProposal");
+});
+document.querySelector("#open-intake-service-create").addEventListener("click", () => {
+  serviceCreateForm.reset();
+  serviceCreateError.hidden = true;
+  serviceCreateDialog.showModal();
+  serviceCreateForm.elements.name.focus();
+});
 document.querySelector("#refresh-list").addEventListener("click", loadClients);
 clientFilterButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveFilter(button.dataset.filter));
@@ -908,13 +1477,7 @@ purchaseForm.addEventListener("submit", async (event) => {
     const body = Object.fromEntries(new FormData(purchaseForm).entries());
     body.sessionsBought = Number(body.sessionsBought);
     body.totalAmount = Number(body.totalAmount);
-    const response = await fetch(`/api/clients/${encodeURIComponent(historyClientId)}/service-packages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error("No se pudieron añadir las sesiones. Inténtalo de nuevo.");
+    await addClientServicePackage(historyClientId, body);
 
     purchaseForm.reset();
     await loadServices(body.serviceId);
@@ -950,6 +1513,7 @@ serviceCreateForm.addEventListener("submit", async (event) => {
 
     serviceCreateDialog.close();
     await loadServices(data.service.id);
+    if (createDialog.open && intakeStep === 3) renderProposal();
     showToast("Servicio creado.");
   } catch (error) {
     serviceCreateError.textContent = "No se pudo crear el servicio. Inténtalo de nuevo.";
@@ -1217,9 +1781,7 @@ measurementForm.addEventListener("submit", async (event) => {
   const button = measurementForm.querySelector("button[type='submit']");
   button.disabled = true;
   try {
-    const response = await fetch(`/api/clients/${encodeURIComponent(progressClientId)}/measurements`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
-    const data = await response.json();
-    if (!response.ok) throw new Error("No se pudo guardar la medida. Inténtalo de nuevo.");
+    await saveClientMeasurement(progressClientId, body);
     measurementForm.reset();
     measurementDate.value = new Date().toISOString().slice(0, 10);
     await loadClientProgress(detailClient || { id: progressClientId });

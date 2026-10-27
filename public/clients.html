@@ -146,55 +146,144 @@
 
     <dialog id="create-dialog" class="client-dialog" aria-labelledby="dialog-title">
       <form id="create-form" novalidate>
-        <div class="dialog-heading">
+        <div class="intake-header">
           <div>
-            <p class="eyebrow">NUEVO REGISTRO</p>
+            <p class="eyebrow">NUEVA FICHA</p>
             <h2 id="dialog-title">Añadir cliente</h2>
-            <p>Añade sus datos para que el equipo pueda atenderle.</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
-        <div class="form-grid">
-          <label class="form-field">
-            <span>Nombre <b>*</b></span>
-            <input name="firstName" required maxlength="100" autocomplete="given-name" placeholder="Ej. Laura">
-          </label>
-          <label class="form-field">
-            <span>Apellidos <b>*</b></span>
-            <input name="lastName" required maxlength="100" autocomplete="family-name" placeholder="Ej. García López">
-          </label>
-          <label class="form-field">
-            <span>Correo electrónico <b>*</b></span>
-            <input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="laura@email.com">
-          </label>
-          <label class="form-field">
-            <span>Teléfono <b>*</b></span>
-            <input name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="+34 600 000 000">
-          </label>
-          <label class="form-field form-field-wide">
-            <span>Centro <b>*</b></span>
-            <select name="gymId" id="create-gym-select" required>
-              <option value="">Selecciona un centro</option>
-            </select>
-          </label>
-          <label class="form-field">
-            <span>DNI / documento</span>
-            <input name="dni" maxlength="30" autocomplete="off" placeholder="Opcional">
-          </label>
-          <label class="form-field">
-            <span>Fecha de nacimiento</span>
-            <input name="birthDate" type="date" autocomplete="bday">
-          </label>
-          <label class="form-field form-field-wide">
-            <span>Notas para el equipo</span>
-            <textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento…"></textarea>
-          </label>
+        <div class="intake-progress" aria-live="polite">
+          <span id="intake-step-label">Paso 1 de 4</span>
+          <div class="intake-progress-track"><span id="intake-progress-value"></span></div>
         </div>
-        <label class="form-field form-field-wide"><span>Objetivo</span><textarea name="objective" rows="2" maxlength="1000" placeholder="Ej. Mejorar fuerza o preparar una prueba…"></textarea></label>
-        <p class="form-error" id="form-error" role="alert" hidden></p>
-        <div class="dialog-actions">
-          <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>
-          <button class="button button-primary" id="submit-create" type="submit">Crear cliente</button>
+        <div class="intake-layout">
+          <nav class="intake-step-list" aria-label="Pasos del alta">
+            <button type="button" data-intake-nav="0" aria-current="step"><span>01</span>Quién es</button>
+            <button type="button" data-intake-nav="1"><span>02</span>Cómo es</button>
+            <button type="button" data-intake-nav="2"><span>03</span>Salud y horario</button>
+            <button type="button" data-intake-nav="3"><span>04</span>Propuesta inicial</button>
+          </nav>
+          <div class="intake-content">
+            <section class="intake-step" data-intake-step="0" aria-labelledby="intake-title-1">
+              <p class="eyebrow">PASO 1</p><h3 id="intake-title-1">Quién es</h3><p class="intake-help">Los datos para encontrar su ficha y contactar.</p>
+              <div class="form-grid intake-fields">
+                <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden></span></label>
+                <label class="form-field"><span>Apellidos <b>*</b></span><input name="lastName" required maxlength="100" autocomplete="family-name" placeholder="Ej. García López" aria-describedby="intake-error-lastName"><span class="intake-field-error" id="intake-error-lastName" data-field-error="lastName" aria-live="polite" hidden></span></label>
+                <label class="form-field form-field-wide"><span>Teléfono <b>*</b></span><input name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="+34 600 000 000" aria-describedby="intake-error-phone"><span class="intake-field-error" id="intake-error-phone" data-field-error="phone" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="phone" aria-live="polite"></span></label>
+                <label class="form-field form-field-wide"><span>Correo electrónico <b>*</b></span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="laura@email.com" aria-describedby="intake-error-email"><span class="intake-field-error" id="intake-error-email" data-field-error="email" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="email" aria-live="polite"></span></label>
+                <label class="form-field form-field-wide"><span>Centro <b>*</b></span><select name="gymId" id="create-gym-select" required aria-describedby="intake-error-gymId"><option value="">Selecciona un centro</option></select><span class="intake-field-error" id="intake-error-gymId" data-field-error="gymId" aria-live="polite" hidden></span></label>
+                <label class="form-field form-field-wide"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname" placeholder="Opcional"></label>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="1" aria-labelledby="intake-title-2" hidden>
+              <p class="eyebrow">PASO 2</p><h3 id="intake-title-2">Cómo es</h3><p class="intake-help">Preferencias para preparar su propuesta.</p>
+              <fieldset class="intake-choice-group">
+                <legend>Sexo</legend>
+                <div class="intake-segments">
+                  <label><input type="radio" name="sex" value="MUJER"><span>Mujer</span></label>
+                  <label><input type="radio" name="sex" value="HOMBRE"><span>Hombre</span></label>
+                  <label><input type="radio" name="sex" value="NO_INDICA"><span>Prefiero no indicarlo</span></label>
+                </div>
+                <small>Lo usamos para adaptar las medidas y las propuestas. Puedes dejarlo vacío.</small>
+              </fieldset>
+              <div class="form-grid intake-fields">
+                <label class="form-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Objetivo</legend>
+                  <div class="intake-chips">
+                    <label><input type="checkbox" name="objectiveChoice" value="Perder grasa"><span>Perder grasa</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Ganar fuerza"><span>Ganar fuerza</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Ganar masa muscular"><span>Ganar masa muscular</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Salud y movilidad"><span>Salud y movilidad</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Preparar una prueba"><span>Preparar una prueba</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Otro" id="objective-other-toggle"><span>Otro</span></label>
+                  </div>
+                  <label class="form-field intake-conditional" id="objective-other-field" hidden><span>¿Cuál es su objetivo?</span><input name="objectiveOther" maxlength="160"></label>
+                </fieldset>
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Cómo nos conoció</legend>
+                  <div class="intake-chips">
+                    <label><input type="radio" name="source" value="INSTAGRAM"><span>Instagram</span></label>
+                    <label><input type="radio" name="source" value="RECOMENDACION"><span>Recomendación</span></label>
+                    <label><input type="radio" name="source" value="PASO_POR_LA_PUERTA"><span>Pasó por el centro</span></label>
+                    <label><input type="radio" name="source" value="GOOGLE"><span>Google</span></label>
+                    <label><input type="radio" name="source" value="OTRO"><span>Otro</span></label>
+                  </div>
+                  <label class="form-field intake-conditional" id="source-detail-field" hidden><span>¿Quién le recomendó?</span><input name="sourceDetail" maxlength="200"></label>
+                </fieldset>
+                <label class="form-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="form-field"><span>Franja de contacto</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
+                <label class="form-field form-field-wide"><span>Notas para el equipo</span><textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento"></textarea></label>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="2" aria-labelledby="intake-title-3" hidden>
+              <p class="eyebrow">PASO 3</p><h3 id="intake-title-3">Salud y horario</h3><p class="intake-help">Solo para que la entrenadora prepare bien la primera sesión.</p>
+              <div class="form-grid intake-fields">
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Lesiones o molestias</legend>
+                  <div class="intake-chips">
+                    <label><input type="checkbox" name="injuries" value="RODILLA"><span>Rodilla</span></label>
+                    <label><input type="checkbox" name="injuries" value="ESPALDA"><span>Espalda</span></label>
+                    <label><input type="checkbox" name="injuries" value="HOMBRO"><span>Hombro</span></label>
+                    <label><input type="checkbox" name="injuries" value="CUELLO"><span>Cuello</span></label>
+                    <label><input type="checkbox" name="injuries" value="CADERA"><span>Cadera</span></label>
+                    <label><input type="checkbox" name="injuries" value="OTRA"><span>Otra</span></label>
+                  </div>
+                  <label class="form-field intake-conditional"><span>Nota</span><textarea name="injuryNotes" rows="2" maxlength="3000"></textarea></label>
+                </fieldset>
+                <fieldset class="intake-choice-group form-field-wide"><legend>Días disponibles</legend><div class="intake-chips intake-day-chips">
+                  <label><input type="checkbox" name="availabilityDay" value="L"><span>L</span></label><label><input type="checkbox" name="availabilityDay" value="M"><span>M</span></label><label><input type="checkbox" name="availabilityDay" value="X"><span>X</span></label><label><input type="checkbox" name="availabilityDay" value="J"><span>J</span></label><label><input type="checkbox" name="availabilityDay" value="V"><span>V</span></label><label><input type="checkbox" name="availabilityDay" value="S"><span>S</span></label><label><input type="checkbox" name="availabilityDay" value="D"><span>D</span></label>
+                </div></fieldset>
+                <fieldset class="intake-choice-group form-field-wide"><legend>Franjas disponibles</legend><div class="intake-chips">
+                  <label><input type="checkbox" name="availabilitySlot" value="MANANA"><span>Mañana</span></label><label><input type="checkbox" name="availabilitySlot" value="MEDIODIA"><span>Mediodía</span></label><label><input type="checkbox" name="availabilitySlot" value="TARDE"><span>Tarde</span></label>
+                </div></fieldset>
+                <label class="form-field"><span>Veces por semana</span><select name="sessionsPerWeek"><option value="">Sin indicar</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 o más</option></select></label>
+                <label class="form-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"><small>Se guarda como preferencia; no crea una reserva en el calendario.</small></label>
+                <details class="intake-measurements form-field-wide">
+                  <summary>Medidas de partida · Opcional</summary>
+                  <div class="intake-measurement-grid">
+                    <label class="form-field"><span>Peso (kg)</span><input name="weight" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                    <label class="form-field"><span>Pecho (cm)</span><input name="chest" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                    <label class="form-field"><span>Cintura (cm)</span><input name="waist" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                    <label class="form-field"><span>Cadera (cm)</span><input name="hip" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                    <label class="form-field"><span>Brazo (cm)</span><input name="arm" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                    <label class="form-field"><span>Pierna (cm)</span><input name="leg" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
+                  </div>
+                </details>
+                <fieldset class="intake-choice-group form-field-wide intake-consents">
+                  <legend>Consentimientos</legend>
+                  <label><input name="consentData" type="checkbox" required aria-describedby="intake-error-consentData"><span>Uso de datos personales <b>*</b></span></label>
+                  <label><input name="consentMarketing" type="checkbox"><span>Comunicaciones comerciales</span></label>
+                  <label><input name="consentPhotos" type="checkbox"><span>Fotos de progreso</span></label>
+                  <span class="intake-field-error" id="intake-error-consentData" data-field-error="consentData" aria-live="polite" hidden></span>
+                </fieldset>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="3" aria-labelledby="intake-title-4" hidden>
+              <p class="eyebrow">PASO 4</p><h3 id="intake-title-4">Propuesta inicial</h3><p class="intake-help">Precios y duración calculados con el catálogo actual.</p>
+              <p id="proposal-reason" class="proposal-reason"></p>
+              <p id="proposal-error" class="proposal-error" role="alert" hidden></p>
+              <div id="proposal-empty" class="proposal-empty" hidden><p>Aún no hay servicios creados.</p><button id="open-intake-service-create" class="button button-outline" type="button">Crear servicio</button></div>
+              <div id="proposal-table" class="proposal-table" aria-live="polite"></div>
+            </section>
+          </div>
+        </div>
+        <p class="form-error" id="form-error" role="alert" aria-live="assertive" hidden></p>
+        <div class="intake-footer">
+          <div class="intake-footer-start">
+            <button class="button button-outline" id="intake-back" type="button" hidden>Atrás</button>
+            <span class="intake-save-note">Se guarda al final del paso 4</span>
+          </div>
+          <div class="intake-footer-actions">
+            <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>
+            <button class="button button-primary" id="intake-next" type="button">Siguiente</button>
+            <button class="button button-outline" id="create-client-only" type="submit" value="createOnly" hidden>Crear solo el cliente</button>
+            <button class="button button-primary" id="submit-create" type="submit" value="addProposal" hidden>Crear cliente y añadir esta propuesta</button>
+          </div>
         </div>
       </form>
     </dialog>

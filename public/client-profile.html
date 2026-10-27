@@ -37,6 +37,66 @@
           </section>
 
           <div class="profile-layout">
+            <section class="profile-card client-details-section" aria-labelledby="client-details-title">
+              <div class="section-heading"><div><p class="profile-eyebrow">DATOS DE LA PERSONA</p><h2 id="client-details-title">Preferencias y salud</h2></div></div>
+              <form id="client-details-form" class="client-details-form">
+                <label class="details-field"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname"></label>
+                <label class="details-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
+                <label class="details-field"><span>Sexo</span><select name="sex"><option value="">Sin indicar</option><option value="MUJER">Mujer</option><option value="HOMBRE">Hombre</option><option value="NO_INDICA">Prefiere no indicarlo</option></select></label>
+                <label class="details-field"><span>Cómo nos conoció</span><select name="source"><option value="">Sin indicar</option><option value="INSTAGRAM">Instagram</option><option value="RECOMENDACION">Recomendación</option><option value="PASO_POR_LA_PUERTA">Pasó por el centro</option><option value="GOOGLE">Google</option><option value="OTRO">Otro</option></select></label>
+                <label class="details-field"><span>Detalle del origen</span><input name="sourceDetail" maxlength="200"></label>
+                <label class="details-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="details-field"><span>Mejor franja para contactar</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
+                <label class="details-field"><span>Sesiones por semana</span><select name="sessionsPerWeek"><option value="">Sin indicar</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 o más</option></select></label>
+                <label class="details-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"></label>
+                <fieldset class="details-choice-group">
+                  <legend>Zonas con molestias</legend>
+                  <div class="details-checks">
+                    <label><input type="checkbox" name="injuries" value="RODILLA">Rodilla</label>
+                    <label><input type="checkbox" name="injuries" value="ESPALDA">Espalda</label>
+                    <label><input type="checkbox" name="injuries" value="HOMBRO">Hombro</label>
+                    <label><input type="checkbox" name="injuries" value="CUELLO">Cuello</label>
+                    <label><input type="checkbox" name="injuries" value="CADERA">Cadera</label>
+                    <label><input type="checkbox" name="injuries" value="OTRA">Otra</label>
+                  </div>
+                </fieldset>
+                <label class="details-field details-field-wide"><span>Nota sobre molestias</span><textarea name="injuryNotes" rows="2" maxlength="3000"></textarea></label>
+                <fieldset class="details-choice-group">
+                  <legend>Días disponibles</legend>
+                  <div class="details-checks details-days">
+                    <label><input type="checkbox" name="availabilityDay" value="L">L</label>
+                    <label><input type="checkbox" name="availabilityDay" value="M">M</label>
+                    <label><input type="checkbox" name="availabilityDay" value="X">X</label>
+                    <label><input type="checkbox" name="availabilityDay" value="J">J</label>
+                    <label><input type="checkbox" name="availabilityDay" value="V">V</label>
+                    <label><input type="checkbox" name="availabilityDay" value="S">S</label>
+                    <label><input type="checkbox" name="availabilityDay" value="D">D</label>
+                  </div>
+                </fieldset>
+                <fieldset class="details-choice-group">
+                  <legend>Franjas disponibles</legend>
+                  <div class="details-checks">
+                    <label><input type="checkbox" name="availabilitySlot" value="MANANA">Mañana</label>
+                    <label><input type="checkbox" name="availabilitySlot" value="MEDIODIA">Mediodía</label>
+                    <label><input type="checkbox" name="availabilitySlot" value="TARDE">Tarde</label>
+                  </div>
+                </fieldset>
+                <fieldset class="details-choice-group details-consents">
+                  <legend>Consentimientos</legend>
+                  <label><input type="checkbox" name="consentData">Uso de datos</label>
+                  <small data-consent-date="consentData">Sin registro</small>
+                  <label><input type="checkbox" name="consentMarketing">Comunicaciones comerciales</label>
+                  <small data-consent-date="consentMarketing">Sin registro</small>
+                  <label><input type="checkbox" name="consentPhotos">Fotos de progreso</label>
+                  <small data-consent-date="consentPhotos">Sin registro</small>
+                </fieldset>
+                <div class="details-actions details-field-wide">
+                  <p id="client-details-feedback" class="profile-feedback" role="status" aria-live="polite"></p>
+                  <button class="profile-secondary-button" type="submit">Guardar datos</button>
+                </div>
+              </form>
+            </section>
+
             <section class="profile-card objective-section" aria-labelledby="objective-title">
               <div class="section-heading"><div><p class="profile-eyebrow">OBJETIVO ACTUAL</p><h2 id="objective-title">Objetivo del cliente</h2></div><span class="section-mark">01</span></div>
               <form id="objective-form"><textarea id="objective-input" maxlength="1000" rows="4" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea><button class="profile-secondary-button" type="submit">Guardar objetivo</button></form>

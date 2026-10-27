@@ -109,6 +109,7 @@ body { font-family: var(--tp-body); }
 .app-menu-account a { color: #e0d9cf; }
 .app-menu-toggle:focus-visible, .app-menu a:focus-visible, .app-menu summary:focus-visible { outline: 2px solid var(--tp-surface); outline-offset: 2px; }
 .skip-content { border-color: var(--tp-accent); border-radius: var(--tp-radius-sm); background: var(--tp-surface); color: var(--tp-black); }
+.app-menu { box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
