@@ -762,51 +762,107 @@ function sessionBadge(value) {
   return `${new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(value))} h`;
 }
 
+function getClientSignal(client, now) {
+  if (client.pendingPayments > 0) {
+    return { type: "urgent", text: "Pago pendiente", icon: "payment" };
+  }
+  if (client.servicePackageCount === 0 && client.status === "ACTIVO") {
+    return { type: "warning", text: "Sin sesiones contratadas", icon: "sessions" };
+  }
+  if (Number.isFinite(client.remainingSessions) && client.remainingSessions <= 2) {
+    return {
+      type: "warning",
+      text: `Le quedan ${client.remainingSessions} sesiones`,
+      icon: "sessions",
+    };
+  }
+  if (!client.nextSession?.startTime) return null;
+
+  const sessionDate = new Date(client.nextSession.startTime);
+  if (Number.isNaN(sessionDate.getTime())) return null;
+  const time = new Intl.DateTimeFormat("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(sessionDate);
+  const isToday =
+    sessionDate.getFullYear() === now.getFullYear() &&
+    sessionDate.getMonth() === now.getMonth() &&
+    sessionDate.getDate() === now.getDate();
+
+  if (isToday) return { type: "ok", text: `Hoy a las ${time}`, icon: "calendar" };
+  if (sessionDate > now) {
+    const day = new Intl.DateTimeFormat("es-ES", {
+      day: "numeric",
+      month: "short",
+    }).format(sessionDate);
+    return { type: "neutral", text: `Próxima: ${day} · ${time}`, icon: "calendar" };
+  }
+  return null;
+}
+
+function getClientAvatarTone(client) {
+  const name = `${client.firstName} ${client.lastName}`.trim().toLocaleLowerCase("es");
+  let hash = 0;
+  for (const character of name) {
+    hash = (hash * 31 + character.codePointAt(0)) >>> 0;
+  }
+  return hash % 6;
+}
+
 function renderClient(client) {
   const card = document.createElement("article");
   card.className = "client-card client-card-modern";
   card.tabIndex = 0;
   card.setAttribute("role", "button");
-  card.setAttribute("aria-label", `Ver ficha de ${client.firstName} ${client.lastName}`);
+  const signal = getClientSignal(client, new Date());
+  if (signal) card.classList.add(`client-card-signal-${signal.type}`);
+  const clientName = `${client.firstName} ${client.lastName}`.trim();
+  const centerName = client.gym?.name || "Sin centro";
+  card.setAttribute(
+    "aria-label",
+    `Ver ficha de ${clientName}${signal ? `. ${signal.text}` : ""}. Centro: ${centerName}.`,
+  );
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
   const avatar = document.createElement("span");
-  avatar.className = "client-avatar";
-  avatar.innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="10" r="5"/><path d="M6 28c.8-6.1 4.1-9.2 10-9.2S25.2 21.9 26 28"/></svg>`;
+  avatar.className = `client-avatar client-avatar-tone-${getClientAvatarTone(client)}`;
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = `${client.firstName?.trim().charAt(0) ?? ""}${client.lastName?.trim().charAt(0) ?? ""}`.toLocaleUpperCase("es");
   const nameBlock = document.createElement("span");
   const name = document.createElement("strong");
-  name.textContent = `${client.firstName} ${client.lastName}`;
-  const contact = document.createElement("small");
-  contact.className = "client-contact";
-  contact.textContent = client.email || client.phone || "Sin datos de contacto";
-  const status = document.createElement("span");
-  status.className = `client-status status-${client.status}`;
-  status.textContent = statusLabels[client.status] ?? "Sin estado";
-  nameBlock.append(name, contact);
+  name.className = "client-card-name";
+  name.textContent = clientName;
+  nameBlock.append(name);
   identity.append(avatar, nameBlock);
-  identity.append(status);
-  const info = document.createElement("div");
-  info.className = "client-card-info";
-  info.append(createInfoItem("PRÓXIMA SESIÓN", client.nextSession ? sessionBadge(client.nextSession.startTime) : "Sin sesión programada", client.nextSession?.service?.name || "Puedes programarla desde su ficha", client.nextSession ? "client-info-next" : ""));
-  info.append(createInfoItem("SESIONES", client.servicePackageCount > 0 ? `${client.remainingSessions} sesiones` : "Sin sesiones", client.servicePackageCount > 0 ? "Disponibles" : "Añade un servicio desde la ficha"));
-  info.append(createInfoItem("PAGOS", client.pendingPayments > 0 ? "Pago pendiente" : "Al día", client.pendingPayments > 0 ? "Revisar en la ficha" : "Sin pagos pendientes", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
-  info.append(createInfoItem("CENTRO", client.gym?.name ?? "Sin centro", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
-  const arrow = document.createElement("span");
-  arrow.className = "card-arrow";
-  arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>';
-  const footer = document.createElement("div");
-  footer.className = "client-card-footer";
-  const footerHint = document.createElement("span");
-  footerHint.textContent = client.nextSession ? `Próxima sesión · ${formatDateTime(client.nextSession.startTime)}` : "Sin próxima sesión";
-  const openButton = document.createElement("button");
-  openButton.type = "button";
-  openButton.className = "client-open-button";
-  openButton.textContent = "Ver ficha";
-  footer.append(footerHint, openButton);
-  card.append(identity, info, footer, arrow);
+
+  const details = document.createElement("div");
+  details.className = "client-card-details";
+  if (signal) {
+    const signalLine = document.createElement("div");
+    signalLine.className = `client-card-signal signal-${signal.type}`;
+    const signalIcon = document.createElement("span");
+    signalIcon.className = "client-signal-icon";
+    signalIcon.setAttribute("aria-hidden", "true");
+    const iconPaths = {
+      payment: '<path d="M3 6h18v12H3zM3 10h18m-13 4h3"/>',
+      sessions: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>',
+    };
+    signalIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[signal.icon]}</svg>`;
+    const signalText = document.createElement("span");
+    signalText.textContent = signal.text;
+    signalLine.append(signalIcon, signalText);
+    details.append(signalLine);
+  }
+
+  const center = document.createElement("span");
+  center.className = "client-card-center";
+  center.textContent = centerName;
+  details.append(center);
+  card.append(identity, details);
+
   const open = () => { window.location.href = `/clientes/${encodeURIComponent(client.id)}/ficha`; };
   card.addEventListener("click", open);
-  openButton.addEventListener("click", (event) => { event.stopPropagation(); open(); });
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;
 }
