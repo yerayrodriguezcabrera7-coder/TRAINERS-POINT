@@ -14,6 +14,32 @@ enum ClientStatus {
   BAJA
 }
 
+enum ClientSex {
+  MUJER
+  HOMBRE
+  NO_INDICA
+}
+
+enum ClientSource {
+  INSTAGRAM
+  RECOMENDACION
+  PASO_POR_LA_PUERTA
+  GOOGLE
+  OTRO
+}
+
+enum ContactPreference {
+  WHATSAPP
+  LLAMADA
+  EMAIL
+}
+
+enum ContactSlot {
+  MANANA
+  MEDIODIA
+  TARDE
+}
+
 enum ClientNoteCategory {
   OBJETIVO
   LESION
@@ -136,6 +162,20 @@ model Client {
   assignedWorkerId String?                @db.Uuid
   notes            String?
   objective        String?
+  sex              ClientSex?
+  source            ClientSource?
+  sourceDetail      String?
+  preferredName     String?
+  contactPreference ContactPreference?
+  contactSlot       ContactSlot?
+  injuries          Json?
+  injuryNotes       String?
+  availability      Json?
+  sessionsPerWeek   Int?
+  firstSessionPreference DateTime?         @db.Timestamptz(3)
+  consentData       DateTime?              @db.Timestamptz(3)
+  consentMarketing  DateTime?              @db.Timestamptz(3)
+  consentPhotos     DateTime?              @db.Timestamptz(3)
   createdAt        DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
   gym              Gym                    @relation(fields: [gymId], references: [id], onDelete: Restrict)

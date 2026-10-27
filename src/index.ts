@@ -35,11 +35,36 @@ type ClientInput = {
   email: string;
   phone: string;
   gymId: string;
-  dni?: string;
   birthDate?: string;
   notes?: string;
   objective?: string;
+  sex?: ClientSexInput | null;
+  source?: ClientSourceInput | null;
+  sourceDetail?: string | null;
+  preferredName?: string | null;
+  contactPreference?: ContactPreferenceInput | null;
+  contactSlot?: ContactSlotInput | null;
+  injuries?: string[] | null;
+  injuryNotes?: string | null;
+  availability?: { days: string[]; slots: string[] } | null;
+  sessionsPerWeek?: number | null;
+  firstSessionPreference?: Date | null;
+  consentData?: Date | null;
+  consentMarketing?: Date | null;
+  consentPhotos?: Date | null;
 };
+
+const clientSexValues = ["MUJER", "HOMBRE", "NO_INDICA"] as const;
+const clientSourceValues = ["INSTAGRAM", "RECOMENDACION", "PASO_POR_LA_PUERTA", "GOOGLE", "OTRO"] as const;
+const contactPreferenceValues = ["WHATSAPP", "LLAMADA", "EMAIL"] as const;
+const contactSlotValues = ["MANANA", "MEDIODIA", "TARDE"] as const;
+const injuryZoneValues = ["RODILLA", "ESPALDA", "HOMBRO", "CUELLO", "CADERA", "OTRA"] as const;
+const availabilityDayValues = ["L", "M", "X", "J", "V", "S", "D"] as const;
+const sessionsPerWeekValues = [1, 2, 3, 4] as const;
+type ClientSexInput = (typeof clientSexValues)[number];
+type ClientSourceInput = (typeof clientSourceValues)[number];
+type ContactPreferenceInput = (typeof contactPreferenceValues)[number];
+type ContactSlotInput = (typeof contactSlotValues)[number];
 
 type MeasurementInput = {
   measuredAt: string;
@@ -106,20 +131,64 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isOneOf<T extends readonly (string | number)[]>(value: unknown, values: T): value is T[number] {
+  return values.some((candidate) => candidate === value);
+}
+
+function parseConsentDate(value: unknown): Date | null | undefined | string {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return "La fecha del consentimiento no es válida.";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || !/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return "La fecha del consentimiento no es válida.";
+  }
+  return parsed;
+}
+
+function phoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
 function parseClientInput(value: unknown): ClientInput | string {
   if (!isRecord(value)) {
     return "El formulario no tiene un formato válido.";
+  }
+
+  if (Object.prototype.hasOwnProperty.call(value, "dni")) {
+    return "El campo DNI ya no se admite.";
   }
 
   const firstName = typeof value.firstName === "string" ? value.firstName.trim() : "";
   const lastName = typeof value.lastName === "string" ? value.lastName.trim() : "";
   const email = typeof value.email === "string" ? value.email.trim().toLowerCase() : "";
   const phone = typeof value.phone === "string" ? value.phone.trim() : "";
-  const dni = typeof value.dni === "string" ? value.dni.trim() : "";
   const notes = typeof value.notes === "string" ? value.notes.trim() : "";
   const objective = typeof value.objective === "string" ? value.objective.trim() : "";
   const birthDate = typeof value.birthDate === "string" ? value.birthDate.trim() : "";
   const gymId = typeof value.gymId === "string" ? value.gymId.trim() : "";
+  const sex = value.sex === undefined ? undefined : value.sex === null || value.sex === "" ? null : value.sex;
+  const source = value.source === undefined ? undefined : value.source === null || value.source === "" ? null : value.source;
+  const contactPreference = value.contactPreference === undefined ? undefined : value.contactPreference === null || value.contactPreference === "" ? null : value.contactPreference;
+  const contactSlot = value.contactSlot === undefined ? undefined : value.contactSlot === null || value.contactSlot === "" ? null : value.contactSlot;
+  const sourceDetail = value.sourceDetail === undefined ? undefined : value.sourceDetail === null ? null : typeof value.sourceDetail === "string" ? value.sourceDetail.trim() : "";
+  const preferredName = value.preferredName === undefined ? undefined : value.preferredName === null ? null : typeof value.preferredName === "string" ? value.preferredName.trim() : "";
+  const injuryNotes = value.injuryNotes === undefined ? undefined : value.injuryNotes === null ? null : typeof value.injuryNotes === "string" ? value.injuryNotes.trim() : "";
+  const injuries = value.injuries;
+  const availability = value.availability;
+  const sessionsPerWeek = value.sessionsPerWeek;
+  const firstSessionPreference = parseConsentDate(value.firstSessionPreference);
+  const consentData = parseConsentDate(value.consentData);
+  const consentMarketing = parseConsentDate(value.consentMarketing);
+  const consentPhotos = parseConsentDate(value.consentPhotos);
+  if (
+    (value.birthDate !== undefined && value.birthDate !== null && typeof value.birthDate !== "string") ||
+    (value.sourceDetail !== undefined && value.sourceDetail !== null && typeof value.sourceDetail !== "string") ||
+    (value.preferredName !== undefined && value.preferredName !== null && typeof value.preferredName !== "string") ||
+    (value.injuryNotes !== undefined && value.injuryNotes !== null && typeof value.injuryNotes !== "string")
+  ) {
+    return "Revisa los campos de texto de la ficha.";
+  }
 
   if (!firstName || firstName.length > 100) {
     return "El nombre es obligatorio y debe tener como máximo 100 caracteres.";
@@ -141,8 +210,43 @@ function parseClientInput(value: unknown): ClientInput | string {
     return "Selecciona un gimnasio válido.";
   }
 
-  if (dni.length > 30 || notes.length > 5000 || objective.length > 1000) {
-    return "El DNI o las notas superan la longitud permitida.";
+  if (notes.length > 5000 || objective.length > 1000) {
+    return "Las notas o el objetivo superan la longitud permitida.";
+  }
+
+  if (sex !== undefined && sex !== null && !isOneOf(sex, clientSexValues)) return "Selecciona una opción de sexo válida.";
+  if (source !== undefined && source !== null && !isOneOf(source, clientSourceValues)) return "Selecciona un origen válido.";
+  if (contactPreference !== undefined && contactPreference !== null && !isOneOf(contactPreference, contactPreferenceValues)) return "Selecciona una forma de contacto válida.";
+  if (contactSlot !== undefined && contactSlot !== null && !isOneOf(contactSlot, contactSlotValues)) return "Selecciona una franja de contacto válida.";
+  if ((sourceDetail?.length ?? 0) > 200 || (preferredName?.length ?? 0) > 100 || (injuryNotes?.length ?? 0) > 3000) {
+    return "Uno de los campos de la ficha supera la longitud permitida.";
+  }
+  if (injuries !== undefined && injuries !== null &&
+      (!Array.isArray(injuries) || injuries.length > injuryZoneValues.length ||
+       injuries.some((zone) => !isOneOf(zone, injuryZoneValues)) ||
+       new Set(injuries).size !== injuries.length)) {
+    return "Revisa las zonas de lesión seleccionadas.";
+  }
+  if (availability !== undefined && availability !== null) {
+    if (!isRecord(availability) || !Array.isArray(availability.days) || !Array.isArray(availability.slots) ||
+        availability.days.some((day) => !isOneOf(day, availabilityDayValues)) ||
+        availability.slots.some((slot) => !isOneOf(slot, contactSlotValues)) ||
+        new Set(availability.days).size !== availability.days.length ||
+        new Set(availability.slots).size !== availability.slots.length) {
+      return "Revisa los días y las franjas de disponibilidad.";
+    }
+  }
+  if (sessionsPerWeek !== undefined && sessionsPerWeek !== null &&
+      !isOneOf(sessionsPerWeek, sessionsPerWeekValues)) {
+    return "Selecciona una frecuencia semanal válida.";
+  }
+  if (
+    typeof firstSessionPreference === "string" ||
+    typeof consentData === "string" ||
+    typeof consentMarketing === "string" ||
+    typeof consentPhotos === "string"
+  ) {
+    return "Una de las fechas indicadas no es válida.";
   }
 
   if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
@@ -162,10 +266,28 @@ function parseClientInput(value: unknown): ClientInput | string {
     email,
     phone,
     gymId,
-    ...(dni ? { dni } : {}),
     ...(birthDate ? { birthDate } : {}),
     ...(notes ? { notes } : {}),
     ...(objective ? { objective } : {}),
+    ...(sex !== undefined ? { sex: sex as ClientSexInput | null } : {}),
+    ...(source !== undefined ? { source: source as ClientSourceInput | null } : {}),
+    ...(sourceDetail !== undefined ? { sourceDetail: sourceDetail || null } : {}),
+    ...(preferredName !== undefined ? { preferredName: preferredName || null } : {}),
+    ...(contactPreference !== undefined ? { contactPreference: contactPreference as ContactPreferenceInput | null } : {}),
+    ...(contactSlot !== undefined ? { contactSlot: contactSlot as ContactSlotInput | null } : {}),
+    ...(injuries !== undefined ? { injuries: injuries as string[] | null } : {}),
+    ...(injuryNotes !== undefined ? { injuryNotes: injuryNotes || null } : {}),
+    ...(availability !== undefined ? {
+      availability: availability === null ? null : {
+        days: availability.days as string[],
+        slots: availability.slots as string[],
+      },
+    } : {}),
+    ...(sessionsPerWeek !== undefined ? { sessionsPerWeek: sessionsPerWeek as number | null } : {}),
+    ...(firstSessionPreference !== undefined ? { firstSessionPreference } : {}),
+    ...(consentData !== undefined ? { consentData } : {}),
+    ...(consentMarketing !== undefined ? { consentMarketing } : {}),
+    ...(consentPhotos !== undefined ? { consentPhotos } : {}),
   };
 }
 
@@ -323,6 +445,45 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/clients/duplicates") {
+    const email = url.searchParams.get("email")?.trim().toLowerCase().slice(0, 254) ?? "";
+    const phone = url.searchParams.get("phone")?.trim().slice(0, 40) ?? "";
+    const digits = phoneDigits(phone);
+    if (!email && digits.length < 4) {
+      sendError(response, 400, "Introduce un correo o un teléfono para comprobar si ya hay una ficha.");
+      return;
+    }
+
+    const phoneCondition = digits.length >= 4
+      ? Prisma.sql`regexp_replace(phone, '[^0-9]', '', 'g') = ${digits}`
+      : Prisma.sql`FALSE`;
+    const emailCondition = email
+      ? Prisma.sql`lower(email) = ${email}`
+      : Prisma.sql`FALSE`;
+    const candidates = await prisma.$queryRaw<Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+    }>>(Prisma.sql`
+      SELECT id, "firstName", "lastName", email, phone
+      FROM "Client"
+      WHERE (${phoneCondition}) OR (${emailCondition})
+      LIMIT 100
+    `);
+    const matches = candidates.flatMap((client) => {
+      const field = email && client.email.toLowerCase() === email
+        ? "email"
+        : digits.length >= 4 && phoneDigits(client.phone) === digits
+          ? "phone"
+          : "";
+      return field ? [{ field, client: { id: client.id, firstName: client.firstName, lastName: client.lastName } }] : [];
+    });
+    sendJson(response, 200, { matches });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/services") {
     if (!hasTrustedOrigin(request, port)) {
       sendError(response, 403, "Origen de la solicitud no permitido.");
@@ -352,6 +513,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         firstName: true,
         lastName: true,
         objective: true,
+        birthDate: true,
+        sex: true,
+        source: true,
+        sourceDetail: true,
+        preferredName: true,
+        contactPreference: true,
+        contactSlot: true,
+        injuries: true,
+        injuryNotes: true,
+        availability: true,
+        sessionsPerWeek: true,
+        firstSessionPreference: true,
+        consentData: true,
+        consentMarketing: true,
+        consentPhotos: true,
         email: true,
         phone: true,
         notes: true,
@@ -376,6 +552,83 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         arm: measurement.arm === null ? null : Number(measurement.arm),
       })),
     });
+    return;
+  }
+
+  const clientDetailsMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/details$/i);
+  if (request.method === "PATCH" && clientDetailsMatch) {
+    if (!hasTrustedOrigin(request, port)) { sendError(response, 403, "Origen de la solicitud no permitido."); return; }
+    const body = await readJsonBody(request);
+    if (!isRecord(body)) { sendError(response, 400, "Los datos de la ficha no tienen un formato válido."); return; }
+    const editableFields = [
+      "birthDate", "sex", "source", "sourceDetail", "preferredName", "contactPreference", "contactSlot",
+      "injuries", "injuryNotes", "availability", "sessionsPerWeek", "firstSessionPreference", "consentData", "consentMarketing", "consentPhotos",
+    ] as const;
+    const submitted = Object.fromEntries(editableFields
+      .filter((field) => Object.prototype.hasOwnProperty.call(body, field))
+      .map((field) => [field, body[field]]));
+    if (!Object.keys(submitted).length) { sendError(response, 400, "No hay cambios para guardar."); return; }
+
+    const input = parseClientInput({
+      firstName: "Ficha",
+      lastName: "Cliente",
+      email: "ficha@example.com",
+      phone: "000",
+      gymId: "00000000-0000-4000-8000-000000000000",
+      ...submitted,
+    });
+    if (typeof input === "string") { sendError(response, 400, input); return; }
+
+    const data: Prisma.ClientUpdateInput = {};
+    if (Object.prototype.hasOwnProperty.call(body, "birthDate")) {
+      data.birthDate = input.birthDate ? new Date(`${input.birthDate}T00:00:00.000Z`) : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "sex")) data.sex = input.sex ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "source")) data.source = input.source ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "sourceDetail")) data.sourceDetail = input.sourceDetail ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "preferredName")) data.preferredName = input.preferredName ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "contactPreference")) data.contactPreference = input.contactPreference ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "contactSlot")) data.contactSlot = input.contactSlot ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "injuries")) data.injuries = input.injuries ?? Prisma.DbNull;
+    if (Object.prototype.hasOwnProperty.call(body, "injuryNotes")) data.injuryNotes = input.injuryNotes ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "availability")) data.availability = input.availability ?? Prisma.DbNull;
+    if (Object.prototype.hasOwnProperty.call(body, "sessionsPerWeek")) data.sessionsPerWeek = input.sessionsPerWeek ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "firstSessionPreference")) data.firstSessionPreference = input.firstSessionPreference ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "consentData")) data.consentData = input.consentData ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "consentMarketing")) data.consentMarketing = input.consentMarketing ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "consentPhotos")) data.consentPhotos = input.consentPhotos ?? null;
+
+    try {
+      const client = await prisma.client.update({
+        where: { id: clientDetailsMatch[1] },
+        data,
+        select: {
+          id: true,
+          birthDate: true,
+          sex: true,
+          source: true,
+          sourceDetail: true,
+          preferredName: true,
+          contactPreference: true,
+          contactSlot: true,
+          injuries: true,
+          injuryNotes: true,
+          availability: true,
+          sessionsPerWeek: true,
+          firstSessionPreference: true,
+          consentData: true,
+          consentMarketing: true,
+          consentPhotos: true,
+        },
+      });
+      sendJson(response, 200, { client });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        sendError(response, 404, "No se encontró el cliente.");
+        return;
+      }
+      throw error;
+    }
     return;
   }
 
@@ -753,7 +1006,6 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
               { lastName: { contains: search, mode: "insensitive" } },
               { email: { contains: search, mode: "insensitive" } },
               { phone: { contains: search } },
-              { dni: { contains: search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -780,9 +1032,22 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           lastName: true,
           email: true,
           phone: true,
-          dni: true,
           notes: true,
           objective: true,
+          sex: true,
+          source: true,
+          sourceDetail: true,
+          preferredName: true,
+          contactPreference: true,
+          contactSlot: true,
+          injuries: true,
+          injuryNotes: true,
+          availability: true,
+          sessionsPerWeek: true,
+          firstSessionPreference: true,
+          consentData: true,
+          consentMarketing: true,
+          consentPhotos: true,
           trainingPlans: { where: { status: "ACTIVO" }, select: { name: true }, take: 1 },
           clientNotes: { orderBy: { createdAt: "desc" }, select: { content: true }, take: 1 },
           birthDate: true,
@@ -872,6 +1137,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendError(response, 400, input);
       return;
     }
+    if (!input.consentData) {
+      sendError(response, 400, "Confirma el uso de datos personales para crear la ficha.");
+      return;
+    }
 
     try {
       const client = await prisma.client.create({
@@ -881,10 +1150,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           email: input.email,
           phone: input.phone,
           gym: { connect: { id: input.gymId } },
-          ...(input.dni ? { dni: input.dni } : {}),
           ...(input.birthDate ? { birthDate: new Date(`${input.birthDate}T00:00:00.000Z`) } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
           ...(input.objective ? { objective: input.objective } : {}),
+          ...(input.sex !== undefined ? { sex: input.sex } : {}),
+          ...(input.source !== undefined ? { source: input.source } : {}),
+          ...(input.sourceDetail !== undefined ? { sourceDetail: input.sourceDetail } : {}),
+          ...(input.preferredName !== undefined ? { preferredName: input.preferredName } : {}),
+          ...(input.contactPreference !== undefined ? { contactPreference: input.contactPreference } : {}),
+          ...(input.contactSlot !== undefined ? { contactSlot: input.contactSlot } : {}),
+          ...(input.injuries !== undefined ? { injuries: input.injuries === null ? Prisma.DbNull : input.injuries } : {}),
+          ...(input.injuryNotes !== undefined ? { injuryNotes: input.injuryNotes } : {}),
+          ...(input.availability !== undefined ? { availability: input.availability === null ? Prisma.DbNull : input.availability } : {}),
+          ...(input.sessionsPerWeek !== undefined ? { sessionsPerWeek: input.sessionsPerWeek } : {}),
+          ...(input.firstSessionPreference !== undefined ? { firstSessionPreference: input.firstSessionPreference } : {}),
+          ...(input.consentData !== undefined ? { consentData: input.consentData } : {}),
+          ...(input.consentMarketing !== undefined ? { consentMarketing: input.consentMarketing } : {}),
+          ...(input.consentPhotos !== undefined ? { consentPhotos: input.consentPhotos } : {}),
         },
         select: {
           id: true,
@@ -892,9 +1174,22 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           lastName: true,
           email: true,
           phone: true,
-          dni: true,
-          objective: true,
           birthDate: true,
+          objective: true,
+          sex: true,
+          source: true,
+          sourceDetail: true,
+          preferredName: true,
+          contactPreference: true,
+          contactSlot: true,
+          injuries: true,
+          injuryNotes: true,
+          availability: true,
+          sessionsPerWeek: true,
+          firstSessionPreference: true,
+          consentData: true,
+          consentMarketing: true,
+          consentPhotos: true,
           status: true,
           gymId: true,
           gym: { select: { id: true, name: true, city: true, province: true } },
@@ -905,7 +1200,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendJson(response, 201, { client });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        sendError(response, 409, "Ya existe un cliente con ese correo o DNI.");
+        sendError(response, 409, "Ya existe un cliente con ese correo.");
         return;
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
