@@ -1,5 +1,5 @@
 const statusLabels = {
-  LEAD: "Lead",
+  LEAD: "Nuevo interesado",
   ACTIVO: "Activo",
   INACTIVO: "Inactivo",
   BAJA: "Baja",
@@ -130,7 +130,7 @@ async function loadClients() {
       signal: refreshController.signal,
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo cargar la lista.");
+    if (!response.ok) throw new Error("No se pudieron cargar los clientes. Inténtalo de nuevo.");
 
     document.querySelector("#heading-count").textContent = `(${data.total})`;
     document.querySelector("#count-total").textContent = data.total;
@@ -162,10 +162,10 @@ async function loadClients() {
     rows.replaceChildren();
     if (clients.length === 0) {
       renderEmpty(
-        searchInput.value || statusFilter.value || gymFilter.value ? "No hay resultados" : "Aún no hay clientes",
+        searchInput.value || statusFilter.value || gymFilter.value ? "No hay clientes con estos filtros" : "Aún no hay clientes",
         searchInput.value || statusFilter.value || gymFilter.value
-          ? "Prueba con otros términos o cambia el filtro."
-          : "Añade tu primer cliente para empezar a organizar su seguimiento.",
+          ? "Prueba con otro nombre o cambia los filtros."
+          : "Pulsa «Nuevo cliente» para añadir el primero.",
       );
       return;
     }
@@ -175,7 +175,7 @@ async function loadClients() {
     rows.replaceChildren();
     const message = document.createElement("p");
     message.className = "list-message error";
-    message.textContent = error.message || "No se pudieron cargar los clientes.";
+    message.textContent = "No se pudieron cargar los clientes. Inténtalo de nuevo.";
     rows.append(message);
     document.querySelector("#results-count").textContent = "";
   }
@@ -188,14 +188,14 @@ function renderGyms() {
   gymFilter.replaceChildren();
   const allOption = document.createElement("option");
   allOption.value = "";
-  allOption.textContent = "Todos los gimnasios";
+  allOption.textContent = "Todos los centros";
   gymFilter.append(allOption);
 
   const createGymSelect = document.querySelector("#create-gym-select");
   createGymSelect.replaceChildren();
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = gyms.length ? "Selecciona un gimnasio" : "Añade un gimnasio primero";
+  placeholder.textContent = gyms.length ? "Selecciona un centro" : "Añade un centro primero";
   createGymSelect.append(placeholder);
   createGymSelect.disabled = gyms.length === 0;
   document.querySelector("#open-create").disabled = gyms.length === 0;
@@ -203,7 +203,7 @@ function renderGyms() {
   if (gyms.length === 0) {
     const empty = document.createElement("p");
     empty.className = "gym-loading";
-    empty.textContent = "Aún no hay gimnasios. Añade la primera sede para poder registrar clientes.";
+    empty.textContent = "No hay centros. Añade uno para poder crear fichas.";
     gymCards.append(empty);
     return;
   }
@@ -222,7 +222,7 @@ function renderGyms() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = `gym-card${gymFilter.value === gym.id ? " selected" : ""}`;
-    card.setAttribute("aria-label", `Filtrar clientes de ${gym.name}`);
+    card.setAttribute("aria-label", `Ver clientes de ${gym.name}`);
     const icon = document.createElement("span");
     icon.className = "gym-card-icon";
     icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>';
@@ -231,7 +231,7 @@ function renderGyms() {
     const name = document.createElement("strong");
     name.textContent = gym.name;
     const location = document.createElement("small");
-    location.textContent = [gym.city, gym.province].filter(Boolean).join(", ") || "Ubicación no especificada";
+    location.textContent = [gym.city, gym.province].filter(Boolean).join(", ") || "Sin ubicación";
     details.append(name, location);
     const count = document.createElement("span");
     count.className = "gym-card-count";
@@ -267,7 +267,7 @@ async function loadGyms() {
   try {
     const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudieron cargar los gimnasios.");
+    if (!response.ok) throw new Error("No se pudieron cargar los centros. Inténtalo de nuevo.");
     gyms = data.gyms;
     const activeGym = gyms.find((gym) => gym.id === initialGymId) ?? gyms[0];
     if (activeGym) {
@@ -279,7 +279,7 @@ async function loadGyms() {
     gymCards.replaceChildren();
     const message = document.createElement("p");
     message.className = "gym-loading error";
-    message.textContent = error.message || "No se pudieron cargar los gimnasios.";
+    message.textContent = "No se pudieron cargar los centros. Inténtalo de nuevo.";
     gymCards.append(message);
   }
 }
@@ -289,7 +289,7 @@ function renderServiceOptions(selectedId = "") {
   serviceSelect.replaceChildren();
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = services.length ? "Selecciona un servicio" : "Crea primero un servicio";
+  placeholder.textContent = services.length ? "Selecciona un servicio" : "Añade un servicio primero";
   serviceSelect.append(placeholder);
   serviceSelect.disabled = services.length === 0;
 
@@ -307,7 +307,7 @@ function renderServiceOptions(selectedId = "") {
 async function loadServices(selectedId = "") {
   const response = await fetch("/api/services", { headers: { Accept: "application/json" } });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "No se pudieron cargar los servicios.");
+  if (!response.ok) throw new Error("No se pudieron cargar los servicios. Inténtalo de nuevo.");
   services = data.services;
   renderServiceOptions(selectedId);
 }
@@ -333,7 +333,7 @@ function renderServiceHistory(data) {
   if (data.packages.length === 0) {
     const empty = document.createElement("p");
     empty.className = "history-empty";
-    empty.textContent = "Todavía no hay servicios contratados para este cliente.";
+    empty.textContent = "No hay sesiones asignadas. Añade un servicio para empezar.";
     packageList.append(empty);
   }
 
@@ -357,9 +357,9 @@ function renderServiceHistory(data) {
     metrics.className = "package-metrics";
     for (const [label, value] of [
       ["Sesiones incluidas", servicePackage.sessionsBought],
-      ["Realizadas", servicePackage.sessionsUsed],
-      ["Programadas", servicePackage.sessionsScheduled],
-      ["Restantes", servicePackage.sessionsRemaining],
+      ["Hechas", servicePackage.sessionsUsed],
+      ["Próximas", servicePackage.sessionsScheduled],
+      ["Disponibles", servicePackage.sessionsRemaining],
     ]) {
       const metric = document.createElement("div");
       metric.className = "package-metric";
@@ -409,7 +409,7 @@ function renderServiceHistory(data) {
     const cell = document.createElement("td");
     cell.colSpan = 3;
     cell.className = "history-empty";
-    cell.textContent = "No hay sesiones registradas.";
+    cell.textContent = "No hay sesiones registradas. Programa una desde «Servicios contratados».";
     empty.append(cell);
     bookingRows.append(empty);
     return;
@@ -426,7 +426,7 @@ function renderServiceHistory(data) {
     select.className = `attendance-select attendance-${booking.attendance}`;
     select.dataset.bookingId = booking.id;
     select.dataset.previousAttendance = booking.attendance;
-    select.setAttribute("aria-label", `Asistencia de ${booking.service.name} del ${formatDateTime(booking.startTime)}`);
+    select.setAttribute("aria-label", `Asistencia a ${booking.service.name} del ${formatDateTime(booking.startTime)}`);
     for (const [value, label] of Object.entries(attendanceLabels)) {
       const option = document.createElement("option");
       option.value = value;
@@ -444,7 +444,7 @@ async function openClientHistory(client) {
   historyClientId = client.id;
   document.querySelector("#history-dialog-title").textContent = `${client.firstName} ${client.lastName}`;
   document.querySelector("#history-client-subtitle").textContent =
-    "Bonos, pagos, asistencia y sesiones disponibles.";
+    "Sesiones, pagos y asistencias.";
   purchaseForm.reset();
   purchaseError.hidden = true;
   historyDialog.showModal();
@@ -459,13 +459,13 @@ async function openClientHistory(client) {
       headers: { Accept: "application/json" },
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
+    if (!response.ok) throw new Error("No se pudo cargar el historial. Inténtalo de nuevo.");
     renderServiceHistory(data);
   } catch (error) {
     packageList.replaceChildren();
     const message = document.createElement("p");
     message.className = "history-empty error";
-    message.textContent = error.message || "No se pudo cargar el historial.";
+    message.textContent = "No se pudo cargar el historial. Inténtalo de nuevo.";
     packageList.append(message);
   }
 }
@@ -533,12 +533,12 @@ rows.addEventListener("change", async (event) => {
         body: JSON.stringify({ gymId: gymSelect.value }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "No se pudo asignar el gimnasio.");
-      showToast("Gimnasio del cliente actualizado.");
+      if (!response.ok) throw new Error("No se pudo cambiar el centro. Inténtalo de nuevo.");
+      showToast("Centro actualizado.");
       await Promise.all([loadGyms(), loadClients()]);
     } catch (error) {
       gymSelect.value = gymSelect.dataset.previousGymId;
-      showToast(error.message, true);
+      showToast("No se pudo cambiar el centro. Inténtalo de nuevo.", true);
     } finally {
       gymSelect.disabled = false;
     }
@@ -557,13 +557,13 @@ rows.addEventListener("change", async (event) => {
       body: JSON.stringify({ status: select.value }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo actualizar el estado.");
+    if (!response.ok) throw new Error("No se pudo cambiar el estado. Inténtalo de nuevo.");
     showToast("Estado del cliente actualizado.");
     await loadClients();
   } catch (error) {
     select.value = previousStatus;
     select.className = `status-select status-${select.value}`;
-    showToast(error.message, true);
+    showToast("No se pudo cambiar el estado. Inténtalo de nuevo.", true);
   } finally {
     select.disabled = false;
   }
@@ -581,13 +581,13 @@ bookingRows.addEventListener("change", async (event) => {
       body: JSON.stringify({ attendance: select.value }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo guardar la asistencia.");
+    if (!response.ok) throw new Error("No se pudo guardar la asistencia. Inténtalo de nuevo.");
     showToast("Asistencia actualizada.");
     const client = { id: historyClientId, ...historyDialogClientName() };
     await openClientHistory(client);
   } catch (error) {
     select.value = select.dataset.previousAttendance;
-    showToast(error.message || "No se pudo guardar la asistencia.", true);
+    showToast("No se pudo guardar la asistencia. Inténtalo de nuevo.", true);
   } finally {
     select.disabled = false;
   }
@@ -612,11 +612,11 @@ packageList.addEventListener("submit", async (event) => {
       body: JSON.stringify({ startTime }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo programar la sesión.");
+    if (!response.ok) throw new Error("No se pudo programar la sesión. Inténtalo de nuevo.");
     showToast("Sesión programada.");
     await openClientHistory({ id: historyClientId, ...historyDialogClientName() });
   } catch (error) {
-    showToast(error.message || "No se pudo programar la sesión.", true);
+    showToast("No se pudo programar la sesión. Inténtalo de nuevo.", true);
   } finally {
     submit.disabled = false;
   }
@@ -640,17 +640,17 @@ createForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(client),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente.");
+    if (!response.ok) throw new Error("No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.");
 
     closeDialog();
-    showToast("Cliente creado correctamente.");
+    showToast("Cliente añadido.");
     searchInput.value = "";
     statusFilter.value = "";
     gymFilter.value = "";
     await loadGyms();
     await loadClients();
   } catch (error) {
-    formError.textContent = error.message || "No se pudo crear el cliente.";
+    formError.textContent = "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
     formError.hidden = false;
   } finally {
     submitButton.disabled = false;
@@ -675,14 +675,14 @@ purchaseForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(body),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo añadir el servicio.");
+    if (!response.ok) throw new Error("No se pudieron añadir las sesiones. Inténtalo de nuevo.");
 
     purchaseForm.reset();
     await loadServices(body.serviceId);
     await openClientHistory({ id: historyClientId, ...historyDialogClientName() });
-    showToast("Servicio añadido al historial.");
+    showToast("Sesiones añadidas.");
   } catch (error) {
-    purchaseError.textContent = error.message || "No se pudo añadir el servicio.";
+    purchaseError.textContent = "No se pudieron añadir las sesiones. Inténtalo de nuevo.";
     purchaseError.hidden = false;
   } finally {
     purchaseSubmit.disabled = false;
@@ -707,13 +707,13 @@ serviceCreateForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(body),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo crear el servicio.");
+    if (!response.ok) throw new Error("No se pudo crear el servicio. Inténtalo de nuevo.");
 
     serviceCreateDialog.close();
     await loadServices(data.service.id);
     showToast("Servicio creado.");
   } catch (error) {
-    serviceCreateError.textContent = error.message || "No se pudo crear el servicio.";
+    serviceCreateError.textContent = "No se pudo crear el servicio. Inténtalo de nuevo.";
     serviceCreateError.hidden = false;
   } finally {
     serviceCreateSubmit.disabled = false;
@@ -736,7 +736,7 @@ gymForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(gymData),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo guardar el gimnasio.");
+    if (!response.ok) throw new Error("No se pudo guardar el centro. Inténtalo de nuevo.");
 
     gymDialog.close();
     await loadGyms();
@@ -744,20 +744,20 @@ gymForm.addEventListener("submit", async (event) => {
     renderGyms();
     await loadClients();
     createForm.elements.gymId.value = data.gym.id;
-    showToast("Gimnasio añadido correctamente.");
+    showToast("Centro añadido.");
   } catch (error) {
-    gymFormError.textContent = error.message || "No se pudo guardar el gimnasio.";
+    gymFormError.textContent = "No se pudo guardar el centro. Inténtalo de nuevo.";
     gymFormError.hidden = false;
   } finally {
     gymSubmitButton.disabled = false;
-    gymSubmitButton.textContent = "Guardar gimnasio";
+    gymSubmitButton.textContent = "Guardar centro";
   }
 });
 
 
 function sessionBadge(value) {
   const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60000);
-  if (minutes <= 0) return "En el centro";
+  if (minutes <= 0) return "Ahora";
   if (minutes < 60) return `En ${minutes} min`;
   return `${new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(value))} h`;
 }
@@ -788,16 +788,16 @@ function renderClient(client) {
   const info = document.createElement("div");
   info.className = "client-card-info";
   info.append(createInfoItem("PRÓXIMA SESIÓN", client.nextSession ? sessionBadge(client.nextSession.startTime) : "Sin sesión programada", client.nextSession?.service?.name || "Puedes programarla desde su ficha", client.nextSession ? "client-info-next" : ""));
-  info.append(createInfoItem("BONOS", client.servicePackageCount > 0 ? `${client.remainingSessions} sesiones` : "Sin bono", client.servicePackageCount > 0 ? "Disponibles" : "Añadir desde historial"));
-  info.append(createInfoItem("PAGOS", client.pendingPayments > 0 ? "Pendiente de revisar" : "Al día", client.pendingPayments > 0 ? "Abrir ficha" : "Sin incidencias", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
-  info.append(createInfoItem("SEDE", client.gym?.name ?? "Sin gimnasio", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
+  info.append(createInfoItem("SESIONES", client.servicePackageCount > 0 ? `${client.remainingSessions} sesiones` : "Sin sesiones", client.servicePackageCount > 0 ? "Disponibles" : "Añade un servicio desde la ficha"));
+  info.append(createInfoItem("PAGOS", client.pendingPayments > 0 ? "Pago pendiente" : "Al día", client.pendingPayments > 0 ? "Revisar en la ficha" : "Sin pagos pendientes", client.pendingPayments > 0 ? "client-info-payment" : "client-info-paid"));
+  info.append(createInfoItem("CENTRO", client.gym?.name ?? "Sin centro", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
   const arrow = document.createElement("span");
   arrow.className = "card-arrow";
   arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>';
   const footer = document.createElement("div");
   footer.className = "client-card-footer";
   const footerHint = document.createElement("span");
-  footerHint.textContent = client.nextSession ? `Próxima atención · ${formatDateTime(client.nextSession.startTime)}` : "Ficha lista para completar";
+  footerHint.textContent = client.nextSession ? `Próxima sesión · ${formatDateTime(client.nextSession.startTime)}` : "Sin próxima sesión";
   const openButton = document.createElement("button");
   openButton.type = "button";
   openButton.className = "client-open-button";
@@ -869,14 +869,14 @@ async function loadClientProgress(client) {
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}/progress`, { headers: { Accept: "application/json" } });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo cargar la evolución.");
+    if (!response.ok) throw new Error("No se pudieron cargar las medidas. Inténtalo de nuevo.");
     if (progressClientId === client.id) renderProgress(data);
   } catch (error) {
     progressStatus.textContent = "No disponible";
     measurementSummary.replaceChildren();
     const message = document.createElement("p");
     message.className = "progress-empty error";
-    message.textContent = error.message;
+    message.textContent = "No se pudieron cargar las medidas. Inténtalo de nuevo.";
     measurementSummary.append(message);
   }
 }
@@ -886,10 +886,10 @@ function openClientDetail(client) {
   document.querySelector("#client-detail-status").textContent = statusLabels[client.status] ?? "Cliente";
   document.querySelector("#detail-email").textContent = client.email || "Sin email";
   document.querySelector("#detail-phone").textContent = client.phone || "Sin teléfono";
-  document.querySelector("#detail-gym").textContent = client.gym?.name || "Sin gimnasio";
-  document.querySelector("#detail-session").textContent = client.nextSession ? `${sessionBadge(client.nextSession.startTime)} · ${client.nextSession.service?.name || "Sesión"}` : "Sin sesión hoy";
-  document.querySelector("#detail-notes").textContent = client.clientNotes?.[0]?.content || client.notes || "Sin notas añadidas.";
-  document.querySelector("#detail-routine").textContent = client.trainingPlans?.[0]?.name || (client.servicePackageCount ? `${client.remainingSessions} sesiones disponibles en sus bonos.` : "No hay rutina activa registrada.");
+  document.querySelector("#detail-gym").textContent = client.gym?.name || "Sin centro";
+  document.querySelector("#detail-session").textContent = client.nextSession ? `${sessionBadge(client.nextSession.startTime)} · ${client.nextSession.service?.name || "Sesión"}` : "Sin próxima sesión";
+  document.querySelector("#detail-notes").textContent = client.clientNotes?.[0]?.content || client.notes || "No hay notas.";
+  document.querySelector("#detail-routine").textContent = client.trainingPlans?.[0]?.name || (client.servicePackageCount ? `${client.remainingSessions} sesiones disponibles.` : "No tiene sesiones asignadas. Añade un servicio desde «Sesiones y pagos».");
   objectiveInput.value = client.objective || "";
   measurementForm.reset();
   measurementDate.value = new Date().toISOString().slice(0, 10);
@@ -907,10 +907,10 @@ objectiveForm.addEventListener("submit", async (event) => {
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(progressClientId)}/objective`, { method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ objective: objectiveInput.value.trim() }) });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo guardar el objetivo.");
+    if (!response.ok) throw new Error("No se pudo guardar el objetivo. Inténtalo de nuevo.");
     if (detailClient) detailClient.objective = data.client.objective;
     showToast("Objetivo guardado.");
-  } catch (error) { showToast(error.message || "No se pudo guardar el objetivo.", true); }
+  } catch (error) { showToast("No se pudo guardar el objetivo. Inténtalo de nuevo.", true); }
   finally { button.disabled = false; }
 });
 measurementForm.addEventListener("submit", async (event) => {
@@ -924,16 +924,16 @@ measurementForm.addEventListener("submit", async (event) => {
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(progressClientId)}/measurements`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo guardar la medición.");
+    if (!response.ok) throw new Error("No se pudo guardar la medida. Inténtalo de nuevo.");
     measurementForm.reset();
     measurementDate.value = new Date().toISOString().slice(0, 10);
     await loadClientProgress(detailClient || { id: progressClientId });
     showToast("Medición guardada.");
-  } catch (error) { measurementError.textContent = error.message || "No se pudo guardar la medición."; measurementError.hidden = false; }
+  } catch (error) { measurementError.textContent = "No se pudo guardar la medida. Inténtalo de nuevo."; measurementError.hidden = false; }
   finally { button.disabled = false; }
 });
 document.querySelector("#detail-checkin").addEventListener("click", async () => {
-  if (!detailClient?.nextSession?.id) { showToast("Este usuario no tiene una sesión pendiente hoy.", true); return; }
+  if (!detailClient?.nextSession?.id) { showToast("No hay una sesión pendiente para registrar la llegada.", true); return; }
   const button = document.querySelector("#detail-checkin");
   button.disabled = true;
   try {
@@ -941,11 +941,11 @@ document.querySelector("#detail-checkin").addEventListener("click", async () => 
       method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ attendance: "ASISTIO" }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo registrar el check-in.");
-    showToast("Check-in registrado correctamente.");
+    if (!response.ok) throw new Error("No se pudo registrar la llegada. Inténtalo de nuevo.");
+    showToast("Ha llegado.");
     clientDetailDialog.close();
     await loadClients();
-  } catch (error) { showToast(error.message || "No se pudo registrar el check-in.", true); }
+  } catch (error) { showToast("No se pudo registrar la llegada. Inténtalo de nuevo.", true); }
   finally { button.disabled = false; }
 });
 

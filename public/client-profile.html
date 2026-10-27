@@ -18,7 +18,7 @@
       </header>
 
       <section class="profile-content" aria-live="polite">
-        <p class="profile-eyebrow">SEGUIMIENTO PERSONAL</p>
+        <p class="profile-eyebrow">FICHA DEL CLIENTE</p>
         <div id="profile-loading" class="profile-loading">Cargando ficha…</div>
         <div id="profile-error" class="profile-error" hidden></div>
         <div id="profile-view" hidden>
@@ -27,36 +27,36 @@
               <a class="back-link" href="/clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg>Volver a clientes</a>
               <div class="profile-title-row"><img class="profile-heading-logo" src="/assets/trainers-point-logo.png" alt=""><div id="profile-avatar" class="profile-avatar-large"></div><div><h1 id="profile-name">Cliente</h1><p id="profile-status">Activo</p></div></div>
             </div>
-            <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Añadir medición</button>
+            <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar medidas</button>
           </div>
 
           <section class="profile-overview-grid" aria-label="Resumen del cliente">
             <article class="profile-info-card"><span>CONTACTO</span><strong id="profile-email">—</strong><small id="profile-phone">—</small></article>
-            <article class="profile-info-card"><span>SEDE ASIGNADA</span><strong id="profile-gym">—</strong><small id="profile-location">—</small></article>
+            <article class="profile-info-card"><span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small></article>
             <article class="profile-info-card profile-objective-card"><span>OBJETIVO ACTUAL</span><strong id="profile-objective-preview">Sin objetivo definido</strong></article>
           </section>
 
           <div class="profile-layout">
             <section class="profile-card objective-section" aria-labelledby="objective-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">DIRECCIÓN DEL PLAN</p><h2 id="objective-title">Objetivo del cliente</h2></div><span class="section-mark">01</span></div>
+              <div class="section-heading"><div><p class="profile-eyebrow">OBJETIVO ACTUAL</p><h2 id="objective-title">Objetivo del cliente</h2></div><span class="section-mark">01</span></div>
               <form id="objective-form"><textarea id="objective-input" maxlength="1000" rows="4" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea><button class="profile-secondary-button" type="submit">Guardar objetivo</button></form>
               <p id="objective-feedback" class="profile-feedback" role="status"></p>
             </section>
 
             <section class="profile-card chart-section" aria-labelledby="chart-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">EVOLUCIÓN</p><h2 id="chart-title">Progreso en el tiempo</h2></div><span id="measurement-count" class="section-status">Sin registros</span></div>
-              <div id="chart-tabs" class="chart-tabs" role="tablist" aria-label="Medida de la gráfica"></div>
-              <div id="progress-chart" class="progress-chart"><p>Añade varias mediciones para ver la evolución.</p></div>
+              <div class="section-heading"><div><p class="profile-eyebrow">CAMBIOS</p><h2 id="chart-title">Progreso en el tiempo</h2></div><span id="measurement-count" class="section-status">Sin registros</span></div>
+              <div id="chart-tabs" class="chart-tabs" role="tablist" aria-label="Elige qué medida mostrar"></div>
+              <div id="progress-chart" class="progress-chart"><p>Aún no hay suficientes medidas. Añade otra para ver el cambio.</p></div>
             </section>
 
             <section class="profile-card measurements-section" aria-labelledby="measurements-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">DATOS CORPORALES</p><h2 id="measurements-title">Medidas actuales</h2></div><span id="last-measurement" class="section-status">Sin mediciones</span></div>
+              <div class="section-heading"><div><p class="profile-eyebrow">MEDIDAS</p><h2 id="measurements-title">Medidas actuales</h2></div><span id="last-measurement" class="section-status">Sin medidas</span></div>
               <div id="measurement-summary" class="measurement-summary-profile"></div>
             </section>
 
             <section class="profile-card history-section-profile" aria-labelledby="history-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">SEGUIMIENTO</p><h2 id="history-title">Historial de mediciones</h2></div></div>
-              <div id="measurement-history" class="measurement-history-profile"><p class="profile-empty">Todavía no hay mediciones.</p></div>
+              <div class="section-heading"><div><p class="profile-eyebrow">REGISTROS</p><h2 id="history-title">Historial de medidas</h2></div></div>
+              <div id="measurement-history" class="measurement-history-profile"><p class="profile-empty">Aún no hay medidas. Añade la primera para empezar a comparar.</p></div>
             </section>
           </div>
         </div>
@@ -65,12 +65,12 @@
 
     <dialog id="measurement-dialog" class="measurement-dialog">
       <form id="measurement-form">
-        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Añadir medición</h2><p>Registra las medidas en condiciones similares para comparar mejor.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Registrar medidas</h2><p>Anota las medidas para compararlas más adelante.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
         <div class="measurement-date-row"><label>Fecha<input id="measurement-date" name="measuredAt" type="date" required></label></div>
         <div class="measurement-fields-profile"><label>Peso<input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera<input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura<input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna<input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho<input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo<input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div>
-        <label class="measurement-notes">Notas de esta medición<textarea name="notes" rows="3" maxlength="1000" placeholder="Opcional"></textarea></label>
+        <label class="measurement-notes">Notas<textarea name="notes" rows="3" maxlength="1000" placeholder="Opcional"></textarea></label>
         <p id="measurement-error" class="profile-error" role="alert" hidden></p>
-        <div class="dialog-actions-profile"><button class="profile-secondary-button" id="cancel-measurement" type="button">Cancelar</button><button class="profile-primary-button" type="submit">Guardar medición</button></div>
+        <div class="dialog-actions-profile"><button class="profile-secondary-button" id="cancel-measurement" type="button">Cancelar</button><button class="profile-primary-button" type="submit">Guardar medidas</button></div>
       </form>
     </dialog>
     <div id="toast" class="profile-toast" role="status" aria-live="polite"></div>

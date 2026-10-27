@@ -16,7 +16,7 @@
 
       <main class="main-content">
         <header class="topbar">
-          <div class="breadcrumb"><span>Gestión</span><span class="crumb-separator">/</span><strong>Clientes</strong></div>
+          <div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Clientes</strong></div>
           <div class="topbar-right">
             <div class="profile-avatar" aria-hidden="true">TP</div>
           </div>
@@ -26,7 +26,7 @@
           <header class="page-heading">
             <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
             <div class="page-heading-copy">
-              <p class="eyebrow">CENTRO · RELACIÓN CON CLIENTES</p>
+              <p class="eyebrow">CENTRO · CLIENTES</p>
               <h1>Clientes <span id="heading-count" class="heading-count"></span></h1>
               <p class="page-description">Busca una ficha, revisa su situación y prepara la próxima sesión.</p>
             </div>
@@ -38,32 +38,32 @@
 
           <section class="stats-grid" aria-label="Resumen de clientes">
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Total clientes</span><span class="stat-icon icon-total"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
+              <div class="stat-top"><span class="stat-label">Clientes registrados</span><span class="stat-icon icon-total"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
               <strong class="stat-value" id="count-total">—</strong>
-              <span class="stat-foot">En tu cartera</span>
+              <span class="stat-foot">En total</span>
             </article>
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Activos</span><span class="stat-icon icon-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/></svg></span></div>
+              <div class="stat-top"><span class="stat-label">Clientes activos</span><span class="stat-icon icon-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/></svg></span></div>
               <strong class="stat-value" id="count-active">—</strong>
-              <span class="stat-foot">En seguimiento</span>
+              <span class="stat-foot">Entrenan actualmente</span>
             </article>
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Nuevos leads</span><span class="stat-icon icon-lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
+              <div class="stat-top"><span class="stat-label">Nuevos interesados</span><span class="stat-icon icon-lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
               <strong class="stat-value" id="count-leads">—</strong>
-              <span class="stat-foot">Pendientes de conversión</span>
+              <span class="stat-foot">Quieren más información</span>
             </article>
             <article class="stat-card">
               <div class="stat-top"><span class="stat-label">Inactivos</span><span class="stat-icon icon-inactive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2"/></svg></span></div>
               <strong class="stat-value" id="count-inactive">—</strong>
-              <span class="stat-foot">Pueden volver</span>
+              <span class="stat-foot">Sin sesiones recientes</span>
             </article>
           </section>
 
           <section class="client-panel" aria-labelledby="client-list-title">
             <div class="panel-heading">
               <div>
-                <h2 id="client-list-title">Tu cartera de clientes</h2>
-                <p>Busca por nombre y abre la ficha completa en un solo clic.</p>
+                <h2 id="client-list-title">Clientes</h2>
+                <p>Busca por nombre y abre su ficha.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
@@ -78,23 +78,23 @@
                 <span class="sr-only">Filtrar por estado</span>
                 <select id="status-filter">
                   <option value="">Todos los estados</option>
-                  <option value="LEAD">Lead</option>
+                  <option value="LEAD">Nuevo interesado</option>
                   <option value="ACTIVO">Activo</option>
                   <option value="INACTIVO">Inactivo</option>
                   <option value="BAJA">Baja</option>
                 </select>
               </label>
                 <label class="filter-select gym-filter-select">
-                  <span class="sr-only">Filtrar por gimnasio</span>
+                  <span class="sr-only">Filtrar por centro</span>
                   <select id="gym-filter">
-                    <option value="">Todos los gimnasios</option>
+                      <option value="">Todos los centros</option>
                   </select>
                 </label>
                 <label class="filter-select sort-select">
                   <span class="sr-only">Ordenar clientes</span>
                   <select id="sort-clients">
-                    <option value="next-session">Por hora de llegada / reserva</option>
-                    <option value="name">Alfabético A-Z</option>
+                    <option value="next-session">Próxima sesión</option>
+                    <option value="name">Nombre A-Z</option>
                     <option value="pending-payments">Pagos pendientes</option>
                   </select>
                 </label>
@@ -106,22 +106,22 @@
             </div>
             <div class="table-footer">
               <span id="table-summary">—</span>
-              <span class="limit-note">Mostrando hasta 100 clientes</span>
+              <span class="limit-note">Máximo 100 clientes</span>
             </div>
           </section>
           <section class="gym-panel" id="gyms" aria-labelledby="gym-list-title">
             <div class="panel-heading">
               <div>
-                <h2 id="gym-list-title">Tus gimnasios</h2>
-                <p>Gestiona las sedes y consulta sus clientes asignados.</p>
+                <h2 id="gym-list-title">Centros</h2>
+                <p>Consulta quién entrena en cada centro.</p>
               </div>
               <button class="button button-outline" id="manage-gyms" type="button">
                 <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                Añadir gimnasio
+                Añadir centro
               </button>
             </div>
             <div class="gym-cards" id="gym-cards">
-              <p class="gym-loading">Cargando gimnasios…</p>
+              <p class="gym-loading">Cargando centros…</p>
             </div>
           </section>
         </section>
@@ -134,9 +134,9 @@
         <div class="detail-hero"><div class="detail-avatar" id="detail-avatar"></div><div><p class="eyebrow">FICHA DE CLIENTE</p><h2 id="client-detail-title">Cliente</h2><p id="client-detail-status">Activo</p></div></div>
         <div class="detail-grid">
           <section class="detail-section"><span class="detail-label">CONTACTO</span><strong id="detail-email">—</strong><span id="detail-phone">—</span></section>
-          <section class="detail-section"><span class="detail-label">SEDE ASIGNADA</span><strong id="detail-gym">—</strong><span id="detail-session">Sin sesión hoy</span></section>
-          <section class="detail-section"><span class="detail-label">NOTAS DEL ENTRENADOR</span><p id="detail-notes">Sin notas añadidas.</p></section>
-          <section class="detail-section"><span class="detail-label">RUTINA ACTIVA</span><p id="detail-routine">Consulta el historial para ver sus rutinas.</p></section>
+          <section class="detail-section"><span class="detail-label">CENTRO</span><strong id="detail-gym">—</strong><span id="detail-session">Sin próxima sesión</span></section>
+          <section class="detail-section"><span class="detail-label">NOTAS DEL EQUIPO</span><p id="detail-notes">No hay notas.</p></section>
+          <section class="detail-section"><span class="detail-label">ENTRENAMIENTO ACTUAL</span><p id="detail-routine">Consulta sus sesiones disponibles.</p></section>
         </div>
         <section class="progress-panel" aria-labelledby="progress-title">
           <div class="progress-panel-heading"><div><p class="detail-label">EVOLUCIÓN DEL CLIENTE</p><h3 id="progress-title">Objetivo y medidas</h3></div><span id="progress-status" class="progress-status">Cargando…</span></div>
@@ -145,7 +145,7 @@
           <div id="measurement-history" class="measurement-history"></div>
           <form id="measurement-form" class="measurement-form"><div class="measurement-form-heading"><div><strong>Añadir medición</strong><small>Registra siempre en las mismas condiciones.</small></div><input id="measurement-date" name="measuredAt" type="date" required></div><div class="measurement-fields"><label>Peso <input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera <input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura <input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna <input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho <input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo <input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div><textarea name="notes" rows="2" maxlength="1000" placeholder="Notas de esta medición (opcional)"></textarea><button class="button button-primary" type="submit">Guardar medición</button><p id="measurement-error" class="form-error" role="alert" hidden></p></form>
         </section>
-        <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver historial completo</button><button class="button button-primary" id="detail-checkin" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Registrar check-in</button></div>
+        <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver sesiones y pagos</button><button class="button button-primary" id="detail-checkin" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Ha llegado</button></div>
       </div>
     </dialog>
 
@@ -155,7 +155,7 @@
           <div>
             <p class="eyebrow">NUEVO REGISTRO</p>
             <h2 id="dialog-title">Añadir cliente</h2>
-            <p>Crea una ficha clara para que todo el equipo pueda atenderle mejor.</p>
+            <p>Añade sus datos para que el equipo pueda atenderle.</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
@@ -177,9 +177,9 @@
             <input name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="+34 600 000 000">
           </label>
           <label class="form-field form-field-wide">
-            <span>Gimnasio <b>*</b></span>
+            <span>Centro <b>*</b></span>
             <select name="gymId" id="create-gym-select" required>
-              <option value="">Selecciona un gimnasio</option>
+              <option value="">Selecciona un centro</option>
             </select>
           </label>
           <label class="form-field">
@@ -191,11 +191,11 @@
             <input name="birthDate" type="date" autocomplete="bday">
           </label>
           <label class="form-field form-field-wide">
-            <span>Notas iniciales</span>
+            <span>Notas para el equipo</span>
             <textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento…"></textarea>
           </label>
         </div>
-        <label class="form-field form-field-wide"><span>Objetivo del cliente</span><textarea name="objective" rows="2" maxlength="1000" placeholder="Ej. Mejorar fuerza, perder grasa o preparar una prueba…"></textarea></label>
+        <label class="form-field form-field-wide"><span>Objetivo</span><textarea name="objective" rows="2" maxlength="1000" placeholder="Ej. Mejorar fuerza o preparar una prueba…"></textarea></label>
         <p class="form-error" id="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>
@@ -208,15 +208,15 @@
       <form id="gym-form" novalidate>
         <div class="dialog-heading">
           <div>
-            <p class="eyebrow">SEDES TRAINERS POINT</p>
-            <h2 id="gym-dialog-title">Añadir gimnasio</h2>
-            <p>Las nuevas sedes estarán disponibles al asignar clientes.</p>
+            <p class="eyebrow">CENTROS TRAINERS POINT</p>
+            <h2 id="gym-dialog-title">Añadir centro</h2>
+            <p>Después podrás asignarlo a cada cliente.</p>
           </div>
           <button class="icon-button" id="close-gym-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <div class="form-grid">
           <label class="form-field form-field-wide">
-            <span>Nombre del gimnasio <b>*</b></span>
+            <span>Nombre del centro <b>*</b></span>
             <input name="name" required maxlength="120" placeholder="Ej. Bizkaia Sant Marti">
           </label>
           <label class="form-field">
@@ -235,7 +235,7 @@
         <p class="form-error" id="gym-form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-outline" id="cancel-gym" type="button">Cancelar</button>
-          <button class="button button-primary" id="submit-gym" type="submit">Guardar gimnasio</button>
+          <button class="button button-primary" id="submit-gym" type="submit">Guardar centro</button>
         </div>
       </form>
     </dialog>
@@ -246,7 +246,7 @@
           <div>
             <p class="eyebrow">SERVICIOS Y SESIONES</p>
             <h2 id="history-dialog-title">Historial del cliente</h2>
-            <p id="history-client-subtitle">Bonos, pagos, asistencia y sesiones disponibles.</p>
+            <p id="history-client-subtitle">Sesiones, pagos y asistencias.</p>
           </div>
           <button class="icon-button" id="close-history-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
@@ -255,7 +255,7 @@
           <div class="history-section-heading">
             <div>
               <h3 id="packages-title">Servicios contratados</h3>
-              <p>Las sesiones restantes se descuentan al marcar una asistencia.</p>
+              <p>Las sesiones disponibles bajan al marcar una asistencia.</p>
             </div>
             <button class="button button-outline" id="open-service-create" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear servicio</button>
           </div>
@@ -263,7 +263,7 @@
             <p class="history-empty">Cargando historial…</p>
           </div>
           <form id="purchase-form" class="purchase-form">
-            <h3>Añadir servicio o bono</h3>
+            <h3>Añadir sesiones</h3>
             <div class="form-grid">
               <label class="form-field form-field-wide">
                 <span>Servicio <b>*</b></span>
@@ -313,13 +313,13 @@
           <div class="history-section-heading">
             <div>
               <h3 id="booking-history-title">Historial de sesiones</h3>
-              <p>Marca si el cliente asistió, no asistió o canceló.</p>
+              <p>Indica si asistió, faltó o canceló.</p>
             </div>
           </div>
           <div class="history-table-wrap">
             <table class="history-table">
               <thead><tr><th>FECHA</th><th>SERVICIO</th><th>ASISTENCIA</th></tr></thead>
-              <tbody id="booking-history-rows"><tr><td colspan="3" class="history-empty">No hay sesiones registradas.</td></tr></tbody>
+              <tbody id="booking-history-rows"><tr><td colspan="3" class="history-empty">No hay sesiones registradas. Programa una desde «Servicios contratados».</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -332,7 +332,7 @@
           <div>
             <p class="eyebrow">CATÁLOGO DE SERVICIOS</p>
             <h2 id="service-create-title">Crear servicio</h2>
-            <p>Este servicio podrá añadirse al historial de clientes.</p>
+            <p>Este servicio estará disponible para asignarlo a clientes.</p>
           </div>
           <button class="icon-button" id="close-service-create" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
