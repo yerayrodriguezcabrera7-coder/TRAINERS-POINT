@@ -36,77 +36,72 @@
             </button>
           </header>
 
-          <section class="stats-grid" aria-label="Resumen de clientes">
-            <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Clientes registrados</span><span class="stat-icon icon-total"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
-              <strong class="stat-value" id="count-total">—</strong>
-              <span class="stat-foot">En total</span>
-            </article>
-            <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Clientes activos</span><span class="stat-icon icon-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/></svg></span></div>
-              <strong class="stat-value" id="count-active">—</strong>
-              <span class="stat-foot">Entrenan actualmente</span>
-            </article>
-            <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Nuevos interesados</span><span class="stat-icon icon-lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
-              <strong class="stat-value" id="count-leads">—</strong>
-              <span class="stat-foot">Quieren más información</span>
-            </article>
-            <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Inactivos</span><span class="stat-icon icon-inactive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2"/></svg></span></div>
+          <section class="stats-grid" aria-label="Filtros rápidos de clientes">
+            <button class="stat-card stat-card-primary" type="button" data-filter="attention" aria-pressed="false">
+              <span class="stat-label">Necesitan atención</span>
+              <strong class="stat-value" id="count-attention">—</strong>
+              <span class="stat-foot">Pagos o sesiones</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="today" aria-pressed="false">
+              <span class="stat-label">Hoy</span>
+              <strong class="stat-value" id="count-today">—</strong>
+              <span class="stat-foot">Reservas de hoy</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="low-sessions" aria-pressed="false">
+              <span class="stat-label">Sesiones por acabarse</span>
+              <strong class="stat-value" id="count-low-sessions">—</strong>
+              <span class="stat-foot">Dos o menos disponibles</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="inactive" aria-pressed="false">
+              <span class="stat-label">Pueden volver</span>
               <strong class="stat-value" id="count-inactive">—</strong>
-              <span class="stat-foot">Sin sesiones recientes</span>
-            </article>
+              <span class="stat-foot">Clientes inactivos</span>
+            </button>
           </section>
 
           <section class="client-panel" aria-labelledby="client-list-title">
             <div class="panel-heading">
               <div>
                 <h2 id="client-list-title">Clientes</h2>
-                <p>Busca por nombre y abre su ficha.</p>
+                <p>Consulta las sesiones de hoy o busca una ficha.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
 
+            <div class="client-filter-chips" role="group" aria-label="Filtrar clientes">
+              <button class="filter-chip" type="button" data-filter="all" aria-pressed="false">Todos</button>
+              <button class="filter-chip" type="button" data-filter="today" aria-pressed="true">Hoy</button>
+              <button class="filter-chip" type="button" data-filter="pending-payment" aria-pressed="false">Pago pendiente</button>
+              <button class="filter-chip" type="button" data-filter="no-sessions" aria-pressed="false">Sin sesiones</button>
+              <button class="filter-chip" type="button" data-filter="leads" aria-pressed="false">Nuevos interesados</button>
+            </div>
+
             <div class="toolbar">
-              <label class="search-box">
+              <div class="search-box">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
-                <span class="sr-only">Buscar clientes</span>
-                <input id="search-input" type="search" placeholder="Buscar por nombre..." autocomplete="off">
-              </label>
-              <label class="filter-select">
-                <span class="sr-only">Filtrar por estado</span>
-                <select id="status-filter">
-                  <option value="">Todos los estados</option>
-                  <option value="LEAD">Nuevo interesado</option>
-                  <option value="ACTIVO">Activo</option>
-                  <option value="INACTIVO">Inactivo</option>
-                  <option value="BAJA">Baja</option>
-                </select>
-              </label>
-                <label class="filter-select gym-filter-select">
+                <label class="sr-only" for="search-input">Buscar por nombre, teléfono o correo</label>
+                <input id="search-input" type="search" placeholder="Nombre, teléfono o correo" autocomplete="off">
+                <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+              </div>
+                <label class="filter-select gym-filter-select" id="gym-filter-wrapper" hidden>
                   <span class="sr-only">Filtrar por centro</span>
                   <select id="gym-filter">
                       <option value="">Todos los centros</option>
                   </select>
                 </label>
-                <label class="filter-select sort-select">
-                  <span class="sr-only">Ordenar clientes</span>
-                  <select id="sort-clients">
-                    <option value="next-session">Próxima sesión</option>
-                    <option value="name">Nombre A-Z</option>
-                    <option value="pending-payments">Pagos pendientes</option>
-                  </select>
-                </label>
                 <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar lista" title="Actualizar lista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"/></svg></button>
             </div>
 
-            <div class="client-list" id="client-rows" aria-live="polite">
+            <div id="today-view" class="today-view" aria-live="polite" hidden>
+              <p class="list-message">Cargando las sesiones de hoy…</p>
+            </div>
+
+            <div class="client-list" id="client-rows" aria-live="polite" hidden>
                 <p class="list-message">Cargando clientes…</p>
             </div>
             <div class="table-footer">
               <span id="table-summary">—</span>
-              <span class="limit-note">Máximo 100 clientes</span>
+              <span id="limit-note" class="limit-note" hidden>Máximo 100 clientes</span>
             </div>
           </section>
           <section class="gym-panel" id="gyms" aria-labelledby="gym-list-title">

@@ -6,14 +6,22 @@ const statusLabels = {
 };
 
 const rows = document.querySelector("#client-rows");
+const todayView = document.querySelector("#today-view");
+const clientToolbar = document.querySelector(".toolbar");
+const tableSummary = document.querySelector("#table-summary");
+const limitNote = document.querySelector("#limit-note");
+const resultsCount = document.querySelector("#results-count");
 const searchInput = document.querySelector("#search-input");
-const statusFilter = document.querySelector("#status-filter");
+const clearSearchButton = document.querySelector("#clear-search");
 const gymFilter = document.querySelector("#gym-filter");
+const gymFilterWrapper = document.querySelector("#gym-filter-wrapper");
+const clientFilterButtons = [...document.querySelectorAll(".filter-chip")];
+const validFilters = new Set(["all", "today", "attention", "pending-payment", "no-sessions", "leads", "low-sessions", "inactive"]);
+const initialFilter = new URLSearchParams(window.location.search).get("filtro");
 const initialGymId =
   new URLSearchParams(window.location.search).get("gymId") ||
   localStorage.getItem("calendar-selected-gym") ||
   "";
-const sortSelect = document.querySelector("#sort-clients");
 const gymCards = document.querySelector("#gym-cards");
 const createDialog = document.querySelector("#create-dialog");
 const createForm = document.querySelector("#create-form");
@@ -40,6 +48,15 @@ let refreshController;
 let gyms = [];
 let services = [];
 let historyClientId;
+let clientsData = [];
+let activeFilter = validFilters.has(initialFilter) ? initialFilter : "today";
+const arrivedBookings = new Map();
+let timelineTimer;
+if (initialFilter !== activeFilter) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("filtro", activeFilter);
+  window.history.replaceState(null, "", url);
+}
 
 const paymentMethodLabels = {
   EFECTIVO: "Efectivo",
@@ -109,19 +126,239 @@ function renderEmpty(message, detail) {
   rows.append(state);
 }
 
+function formatTime(value) {
+  return new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function getClientProfileHref(clientId) {
+  const params = new URLSearchParams({ filtro: activeFilter });
+  return `/clientes/${encodeURIComponent(clientId)}/ficha?${params}`;
+}
+
+function isToday(value, now = new Date()) {
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) &&
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+}
+
+function renderTodayEmpty() {
+  todayView.replaceChildren();
+  const message = document.createElement("p");
+  message.className = "today-empty";
+  message.textContent = searchInput.value || gymFilter.value
+    ? "No hay sesiones hoy con estos filtros."
+    : "Hoy no hay reservas. Puedes crear una desde el calendario.";
+  todayView.append(message);
+}
+
+function renderToday(clients, animateBookingId = "") {
+  todayView.replaceChildren();
+  const now = new Date();
+  const appointments = clients
+    .filter((client) => client.nextSession && isToday(client.nextSession.startTime, now))
+    .sort((a, b) => new Date(a.nextSession.startTime) - new Date(b.nextSession.startTime));
+  if (!appointments.length) {
+    renderTodayEmpty();
+    return;
+  }
+
+  const nextBooking = appointments.find((client) =>
+    !arrivedBookings.has(client.nextSession.id) &&
+    new Date(client.nextSession.startTime).getTime() > now.getTime(),
+  )?.nextSession.id;
+  const timeline = document.createElement("div");
+  timeline.className = "today-timeline";
+  timeline.setAttribute("role", "list");
+
+  for (const client of appointments) {
+    const booking = client.nextSession;
+    const bookingTime = new Date(booking.startTime);
+    const arrived = arrivedBookings.get(booking.id);
+    const row = document.createElement("article");
+    row.className = "today-appointment";
+    row.setAttribute("role", "listitem");
+    row.dataset.bookingId = booking.id;
+    row.dataset.startTime = String(bookingTime.getTime());
+    if (arrived && booking.id !== animateBookingId) row.classList.add("is-arrived");
+    else if (!arrived && booking.id === nextBooking) row.classList.add("is-next");
+    else if (!arrived && bookingTime.getTime() <= now.getTime()) row.classList.add("is-past");
+
+    const time = document.createElement("time");
+    time.className = "today-appointment-time";
+    time.dateTime = bookingTime.toISOString();
+    time.textContent = formatTime(booking.startTime);
+
+    const details = document.createElement("div");
+    details.className = "today-appointment-details";
+    const name = document.createElement("a");
+    name.className = "today-appointment-name";
+    name.href = getClientProfileHref(client.id);
+    name.textContent = `${client.firstName} ${client.lastName}`.trim();
+    const service = document.createElement("span");
+    service.className = "today-appointment-service";
+    service.textContent = booking.service?.name || "Sesión";
+    details.append(name, service);
+
+    if (arrived) {
+      const arrival = document.createElement("span");
+      arrival.className = "today-arrival-label";
+      arrival.innerHTML = '<svg class="today-arrival-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+      const arrivalText = document.createElement("span");
+      arrivalText.textContent = `Llegó a las ${formatTime(arrived.attendedAt)}`;
+      arrival.append(arrivalText);
+      details.append(arrival);
+      if (booking.id === animateBookingId) {
+        requestAnimationFrame(() => row.classList.add("is-arrived"));
+      }
+    } else {
+      const label = document.createElement("span");
+      label.className = "today-appointment-status";
+      details.append(label);
+      const checkin = document.createElement("button");
+      checkin.className = "today-checkin";
+      checkin.type = "button";
+      checkin.textContent = "Ha llegado";
+      checkin.setAttribute("aria-label", `Registrar llegada de ${client.firstName} ${client.lastName}`);
+      checkin.disabled = bookingTime.getTime() > now.getTime();
+      checkin.addEventListener("click", () => registerArrival(client, checkin));
+      row.append(time, details, checkin);
+      timeline.append(row);
+      continue;
+    }
+
+    row.append(time, details);
+    timeline.append(row);
+  }
+  todayView.append(timeline);
+  updateTimelineMarkers();
+}
+
+function updateTimelineMarkers() {
+  const appointmentRows = [...todayView.querySelectorAll(".today-appointment")];
+  const now = Date.now();
+  const nextId = appointmentRows.find((row) =>
+    !row.querySelector(".today-arrival-label") && Number(row.dataset.startTime) > now,
+  )?.dataset.bookingId;
+
+  for (const row of appointmentRows) {
+    if (row.querySelector(".today-arrival-label")) continue;
+    const startTime = Number(row.dataset.startTime);
+    const isNext = row.dataset.bookingId === nextId;
+    const isPast = startTime <= now;
+    row.classList.toggle("is-next", isNext);
+    row.classList.toggle("is-past", isPast);
+    const status = row.querySelector(".today-appointment-status");
+    status.textContent = isNext ? "Próxima" : "Pendiente de llegada";
+    status.hidden = !isNext && !isPast;
+    row.querySelector(".today-checkin").disabled = !isPast;
+  }
+}
+
+function syncTimelineTimer() {
+  window.clearInterval(timelineTimer);
+  if (activeFilter === "today") {
+    timelineTimer = window.setInterval(updateTimelineMarkers, 15000);
+  }
+}
+
+function clientMatchesFilter(client, filter = activeFilter) {
+  if (filter === "today" || filter === "all") return true;
+  if (filter === "attention") {
+    const signal = getClientSignal(client, new Date());
+    return signal?.type === "urgent" || signal?.type === "warning";
+  }
+  if (filter === "pending-payment") return client.pendingPayments > 0;
+  if (filter === "no-sessions") return client.servicePackageCount === 0 && client.status === "ACTIVO";
+  if (filter === "leads") return client.status === "LEAD";
+  if (filter === "low-sessions") return Number.isFinite(client.remainingSessions) && client.remainingSessions <= 2;
+  if (filter === "inactive") return client.status === "INACTIVO";
+  return true;
+}
+
+function getVisibleClients() {
+  return clientsData.filter((client) => clientMatchesFilter(client));
+}
+
+function syncFilterControls() {
+  clientFilterButtons.forEach((button) => {
+    const selected = button.dataset.filter === activeFilter;
+    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("is-active", selected);
+  });
+  document.querySelectorAll(".stat-card[data-filter]").forEach((button) => {
+    const selected = button.dataset.filter === activeFilter;
+    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("is-active", selected);
+  });
+}
+
+function renderAllClients() {
+  rows.replaceChildren();
+  const visibleClients = getVisibleClients();
+  if (!visibleClients.length) {
+    const hasFilters = searchInput.value || gymFilter.value || activeFilter !== "all";
+    renderEmpty(
+      hasFilters ? "No hay clientes con estos filtros" : "Aún no hay clientes",
+      hasFilters
+        ? "Prueba con otro nombre o cambia los filtros."
+        : "Pulsa «Nuevo cliente» para añadir el primero.",
+    );
+    return;
+  }
+  visibleClients.forEach((client, index) => rows.append(renderClient(client, index)));
+}
+
+function renderActiveClientView(animateBookingId = "") {
+  const isTodayView = activeFilter === "today";
+  todayView.hidden = !isTodayView;
+  rows.hidden = isTodayView;
+  clientToolbar.hidden = false;
+  const todayCount = clientsData.filter((client) => client.nextSession && isToday(client.nextSession.startTime)).length;
+  const upcomingCount = clientsData.filter((client) => client.nextSession).length;
+  const visibleCount = isTodayView ? todayCount : getVisibleClients().length;
+  resultsCount.textContent = `${visibleCount} ${visibleCount === 1 ? (isTodayView ? "reserva" : "cliente") : (isTodayView ? "reservas" : "clientes")}`;
+  tableSummary.textContent = isTodayView
+    ? `${todayCount} ${todayCount === 1 ? "sesión hoy" : "sesiones hoy"}`
+    : activeFilter === "all"
+      ? `${upcomingCount} ${upcomingCount === 1 ? "cliente con sesión próxima" : "clientes con sesiones próximas"}`
+      : `${visibleCount} ${visibleCount === 1 ? "cliente" : "clientes"} con este filtro`;
+  limitNote.hidden = isTodayView;
+  syncFilterControls();
+  if (isTodayView) renderToday(clientsData, animateBookingId);
+  else renderAllClients();
+}
+
+function setActiveFilter(filter, focusButton = false) {
+  if (!validFilters.has(filter)) return;
+  activeFilter = filter;
+  const url = new URL(window.location.href);
+  url.searchParams.set("filtro", filter);
+  window.history.replaceState(null, "", url);
+  syncTimelineTimer();
+  if (focusButton) {
+    document.querySelector(`[data-filter="${CSS.escape(filter)}"]`)?.focus();
+  }
+  renderActiveClientView();
+}
+
 async function loadClients() {
   refreshController?.abort();
   refreshController = new AbortController();
   rows.replaceChildren();
+  todayView.replaceChildren();
+  const isTodayView = activeFilter === "today";
+  todayView.hidden = !isTodayView;
+  rows.hidden = isTodayView;
   const loadingMessage = document.createElement("p");
   loadingMessage.className = "list-message";
   loadingMessage.textContent = "Cargando clientes…";
-  rows.append(loadingMessage);
+  (isTodayView ? todayView : rows).append(loadingMessage);
 
   const params = new URLSearchParams();
   params.set("all", "true");
   if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
-  if (statusFilter.value) params.set("status", statusFilter.value);
   if (gymFilter.value) params.set("gymId", gymFilter.value);
 
   try {
@@ -132,58 +369,38 @@ async function loadClients() {
     const data = await response.json();
     if (!response.ok) throw new Error("No se pudieron cargar los clientes. Inténtalo de nuevo.");
 
-    document.querySelector("#heading-count").textContent = `(${data.total})`;
-    document.querySelector("#count-total").textContent = data.total;
-    document.querySelector("#count-active").textContent = data.counts.ACTIVO ?? 0;
-    document.querySelector("#count-leads").textContent = data.counts.LEAD ?? 0;
-    document.querySelector("#count-inactive").textContent = data.counts.INACTIVO ?? 0;
     const clients = [...data.clients];
     const compareNames = (a, b) =>
       `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, "es");
-    if (sortSelect.value === "pending-payments") {
-      clients.sort((a, b) => b.pendingPayments - a.pendingPayments || compareNames(a, b));
-    } else if (sortSelect.value === "name") {
-      clients.sort(compareNames);
-    } else {
-      clients.sort((a, b) => {
-        const aStart = a.nextSession ? new Date(a.nextSession.startTime).getTime() : Number.POSITIVE_INFINITY;
-        const bStart = b.nextSession ? new Date(b.nextSession.startTime).getTime() : Number.POSITIVE_INFINITY;
-        return aStart - bStart || compareNames(a, b);
-      });
-    }
-    const upcomingCount = clients.filter((client) => client.nextSession).length;
-    document.querySelector("#results-count").textContent =
-      `${data.clients.length} ${data.clients.length === 1 ? "cliente" : "clientes"}`;
-    document.querySelector("#table-summary").textContent =
-      data.clients.length === 0
-        ? "Sin resultados"
-        : `${upcomingCount} ${upcomingCount === 1 ? "cliente con sesión próxima" : "clientes con sesiones próximas"}`;
-
-    rows.replaceChildren();
-    if (clients.length === 0) {
-      renderEmpty(
-        searchInput.value || statusFilter.value || gymFilter.value ? "No hay clientes con estos filtros" : "Aún no hay clientes",
-        searchInput.value || statusFilter.value || gymFilter.value
-          ? "Prueba con otro nombre o cambia los filtros."
-          : "Pulsa «Nuevo cliente» para añadir el primero.",
-      );
-      return;
-    }
-    clients.forEach((client, index) => rows.append(renderClient(client, index)));
+    clients.sort((a, b) => {
+      const aStart = a.nextSession ? new Date(a.nextSession.startTime).getTime() : Number.POSITIVE_INFINITY;
+      const bStart = b.nextSession ? new Date(b.nextSession.startTime).getTime() : Number.POSITIVE_INFINITY;
+      return aStart - bStart || compareNames(a, b);
+    });
+    clientsData = clients;
+    document.querySelector("#heading-count").textContent = `(${data.total})`;
+    document.querySelector("#count-attention").textContent = clients.filter((client) => clientMatchesFilter(client, "attention")).length;
+    document.querySelector("#count-today").textContent = clients.filter((client) => client.nextSession && isToday(client.nextSession.startTime)).length;
+    document.querySelector("#count-low-sessions").textContent = clients.filter((client) => clientMatchesFilter(client, "low-sessions")).length;
+    document.querySelector("#count-inactive").textContent = clients.filter((client) => client.status === "INACTIVO").length;
+    clearSearchButton.hidden = !searchInput.value;
+    renderActiveClientView();
   } catch (error) {
     if (error.name === "AbortError") return;
     rows.replaceChildren();
     const message = document.createElement("p");
     message.className = "list-message error";
     message.textContent = "No se pudieron cargar los clientes. Inténtalo de nuevo.";
-    rows.append(message);
-    document.querySelector("#results-count").textContent = "";
+    if (activeFilter === "today") todayView.replaceChildren(message);
+    else rows.append(message);
+    resultsCount.textContent = "";
   }
 }
 
 function renderGyms() {
   const selectedGymId = gymFilter.value;
   const selectedCreateGymId = document.querySelector("#create-gym-select").value;
+  gymFilterWrapper.hidden = gyms.length <= 1;
   gymCards.replaceChildren();
   gymFilter.replaceChildren();
   const allOption = document.createElement("option");
@@ -470,12 +687,23 @@ async function openClientHistory(client) {
   }
 }
 
-function showToast(message, isError = false) {
+function showToast(message, isError = false, action = null) {
   window.clearTimeout(toastTimer);
-  toast.textContent = message;
+  toast.replaceChildren(document.createTextNode(message));
   toast.classList.toggle("error", isError);
   toast.classList.add("visible");
-  toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 3200);
+  if (action) {
+    const actionButton = document.createElement("button");
+    actionButton.className = "toast-action";
+    actionButton.type = "button";
+    actionButton.textContent = action.label;
+    actionButton.addEventListener("click", action.onAction, { once: true });
+    toast.append(actionButton);
+  }
+  toastTimer = window.setTimeout(() => {
+    toast.classList.remove("visible");
+    toast.replaceChildren();
+  }, action ? 8000 : 3200);
 }
 
 function closeDialog() {
@@ -493,6 +721,12 @@ document.querySelector("#open-create").addEventListener("click", () => {
 document.querySelector("#close-dialog").addEventListener("click", closeDialog);
 document.querySelector("#cancel-create").addEventListener("click", closeDialog);
 document.querySelector("#refresh-list").addEventListener("click", loadClients);
+clientFilterButtons.forEach((button) => {
+  button.addEventListener("click", () => setActiveFilter(button.dataset.filter));
+});
+document.querySelectorAll(".stat-card[data-filter]").forEach((button) => {
+  button.addEventListener("click", () => setActiveFilter(button.dataset.filter));
+});
 document.querySelector("#manage-gyms").addEventListener("click", () => {
   gymForm.reset();
   gymFormError.hidden = true;
@@ -512,15 +746,20 @@ document.querySelector("#open-service-create").addEventListener("click", () => {
 });
 
 searchInput.addEventListener("input", () => {
+  clearSearchButton.hidden = !searchInput.value;
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(loadClients, 250);
 });
-statusFilter.addEventListener("change", loadClients);
+clearSearchButton.addEventListener("click", () => {
+  searchInput.value = "";
+  clearSearchButton.hidden = true;
+  searchInput.focus();
+  loadClients();
+});
 gymFilter.addEventListener("change", () => {
   renderGyms();
-  loadGyms().then(loadClients);
+  loadClients();
 });
-sortSelect.addEventListener("change", loadClients);
 
 rows.addEventListener("change", async (event) => {
   const gymSelect = event.target.closest(".gym-client-select");
@@ -645,7 +884,7 @@ createForm.addEventListener("submit", async (event) => {
     closeDialog();
     showToast("Cliente añadido.");
     searchInput.value = "";
-    statusFilter.value = "";
+    clearSearchButton.hidden = true;
     gymFilter.value = "";
     await loadGyms();
     await loadClients();
@@ -861,7 +1100,7 @@ function renderClient(client) {
   details.append(center);
   card.append(identity, details);
 
-  const open = () => { window.location.href = `/clientes/${encodeURIComponent(client.id)}/ficha`; };
+  const open = () => { window.location.href = getClientProfileHref(client.id); };
   card.addEventListener("click", open);
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;
@@ -988,21 +1227,69 @@ measurementForm.addEventListener("submit", async (event) => {
   } catch (error) { measurementError.textContent = "No se pudo guardar la medida. Inténtalo de nuevo."; measurementError.hidden = false; }
   finally { button.disabled = false; }
 });
-document.querySelector("#detail-checkin").addEventListener("click", async () => {
-  if (!detailClient?.nextSession?.id) { showToast("No hay una sesión pendiente para registrar la llegada.", true); return; }
-  const button = document.querySelector("#detail-checkin");
+async function updateBookingAttendance(bookingId, attendance) {
+  const response = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/attendance`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ attendance }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error("No se pudo actualizar la llegada.");
+  return data.booking;
+}
+
+async function undoArrival(client) {
+  const booking = client.nextSession;
+  if (!booking?.id || !arrivedBookings.has(booking.id)) return;
+  showToast("Anulando llegada…");
+  try {
+    await updateBookingAttendance(booking.id, "PENDIENTE");
+    arrivedBookings.delete(booking.id);
+    booking.attendance = "PENDIENTE";
+    booking.attendedAt = null;
+    renderActiveClientView();
+    showToast("Llegada anulada.");
+  } catch (error) {
+    showToast("No se pudo anular la llegada. Inténtalo de nuevo.", true);
+  }
+}
+
+async function registerArrival(client, button) {
+  const booking = client.nextSession;
+  if (!booking?.id) {
+    showToast("No hay una sesión pendiente para registrar la llegada.", true);
+    return false;
+  }
   button.disabled = true;
   try {
-    const response = await fetch(`/api/bookings/${encodeURIComponent(detailClient.nextSession.id)}/attendance`, {
-      method: "PATCH", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ attendance: "ASISTIO" }),
+    const updatedBooking = await updateBookingAttendance(booking.id, "ASISTIO");
+    const attendedAt = updatedBooking.attendedAt || new Date().toISOString();
+    arrivedBookings.set(booking.id, { attendedAt });
+    booking.attendance = "ASISTIO";
+    booking.attendedAt = attendedAt;
+    renderActiveClientView(booking.id);
+    showToast("Llegada registrada.", false, {
+      label: "Deshacer",
+      onAction: () => undoArrival(client),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error("No se pudo registrar la llegada. Inténtalo de nuevo.");
-    showToast("Ha llegado.");
-    clientDetailDialog.close();
-    await loadClients();
-  } catch (error) { showToast("No se pudo registrar la llegada. Inténtalo de nuevo.", true); }
-  finally { button.disabled = false; }
+    return true;
+  } catch (error) {
+    showToast("No se pudo registrar la llegada. Inténtalo de nuevo.", true);
+    return false;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.querySelector("#detail-checkin").addEventListener("click", async (event) => {
+  if (!detailClient?.nextSession?.id) {
+    showToast("No hay una sesión pendiente para registrar la llegada.", true);
+    return;
+  }
+  const registered = await registerArrival(detailClient, event.currentTarget);
+  if (registered) clientDetailDialog.close();
 });
 
+syncTimelineTimer();
+syncFilterControls();
 loadGyms().then(loadClients);

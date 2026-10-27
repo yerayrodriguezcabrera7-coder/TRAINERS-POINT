@@ -8,6 +8,13 @@ const metrics = [
 ];
 
 const clientId = window.location.pathname.match(/^\/clientes\/([0-9a-f-]+)\/ficha$/i)?.[1];
+const returnFilter = new URLSearchParams(window.location.search).get("filtro");
+if (returnFilter) {
+  const returnUrl = `/clientes?filtro=${encodeURIComponent(returnFilter)}`;
+  document.querySelectorAll(".profile-breadcrumb a, .back-link").forEach((link) => {
+    link.href = returnUrl;
+  });
+}
 const loading = document.querySelector("#profile-loading");
 const errorBox = document.querySelector("#profile-error");
 const view = document.querySelector("#profile-view");
@@ -28,7 +35,7 @@ let selectedMetric = "weight";
 function showError(message) { loading.hidden = true; view.hidden = true; errorBox.textContent = message; errorBox.hidden = false; }
 function valueText(value, unit) { return value === null || value === undefined ? "—" : `${Number(value).toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${unit}`; }
 function initials(client) { return `${client.firstName?.trim().charAt(0) ?? ""}${client.lastName?.trim().charAt(0) ?? ""}`.toUpperCase(); }
-function dateText(value) { return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)); }
+function dateText(value) { return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(value)); }
 
 function renderHeader(client) {
   document.title = `Ficha de ${client.firstName} ${client.lastName} | Trainers Point`;
