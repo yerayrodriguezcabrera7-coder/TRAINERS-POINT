@@ -13,86 +13,47 @@
   <body>
     <div class="app-shell">
       <aside data-app-menu aria-label="Navegación principal"></aside>
-      <aside class="sidebar" aria-label="Navegación principal">
-        <a class="brand" href="/clientes" aria-label="Trainers Point inicio">
-          <span class="brand-mark">T<span>.</span></span>
-          <span class="brand-name">trainers<span>point</span></span>
-        </a>
-
-        <p class="nav-label">GESTIÓN</p>
-        <nav>
-          <a class="nav-link active" href="/clientes" aria-current="page">
-            <span class="nav-icon" aria-hidden="true">◉</span>
-            Clientes
-          </a>
-          <a class="nav-link" href="/index.html">
-            <span class="nav-icon" aria-hidden="true">▦</span>
-            Calendario
-          </a>
-          <span class="nav-link disabled" aria-disabled="true">
-            <span class="nav-icon" aria-hidden="true">◇</span>
-            Servicios
-          </span>
-          <span class="nav-link disabled" aria-disabled="true">
-            <span class="nav-icon" aria-hidden="true">▤</span>
-            Productos
-          </span>
-          <a class="nav-link gym-nav-link" href="/gimnasios" id="open-gyms">
-            <span class="nav-icon" aria-hidden="true">⌂</span>
-            Gimnasios
-          </a>
-        </nav>
-
-        <div class="sidebar-bottom">
-          <div class="workspace-avatar">TP</div>
-          <div>
-            <strong>Trainers Point</strong>
-            <span>Panel local</span>
-          </div>
-          <span class="online-indicator" title="Servidor local"></span>
-        </div>
-      </aside>
 
       <main class="main-content">
         <header class="topbar">
           <div class="breadcrumb"><span>Gestión</span><span class="crumb-separator">/</span><strong>Clientes</strong></div>
           <div class="topbar-right">
-            <span class="local-badge"><span></span> Entorno local</span>
             <div class="profile-avatar" aria-hidden="true">TP</div>
           </div>
         </header>
 
         <section class="page-content">
-          <div class="page-heading">
-            <div>
+          <header class="page-heading">
+            <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
+            <div class="page-heading-copy">
               <p class="eyebrow">CENTRO · RELACIÓN CON CLIENTES</p>
               <h1>Clientes <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Encuentra una ficha, entiende su situación y deja preparada la siguiente sesión.</p>
+              <p class="page-description">Busca una ficha, revisa su situación y prepara la próxima sesión.</p>
             </div>
             <button class="button button-primary" id="open-create" type="button">
-              <span class="button-plus" aria-hidden="true">+</span>
+              <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               Nuevo cliente
             </button>
-          </div>
+          </header>
 
           <section class="stats-grid" aria-label="Resumen de clientes">
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Total clientes</span><span class="stat-icon icon-total">◎</span></div>
+              <div class="stat-top"><span class="stat-label">Total clientes</span><span class="stat-icon icon-total"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
               <strong class="stat-value" id="count-total">—</strong>
               <span class="stat-foot">En tu cartera</span>
             </article>
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Activos</span><span class="stat-icon icon-active">↗</span></div>
+              <div class="stat-top"><span class="stat-label">Activos</span><span class="stat-icon icon-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/></svg></span></div>
               <strong class="stat-value" id="count-active">—</strong>
               <span class="stat-foot">En seguimiento</span>
             </article>
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Nuevos leads</span><span class="stat-icon icon-lead">✳</span></div>
+              <div class="stat-top"><span class="stat-label">Nuevos leads</span><span class="stat-icon icon-lead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/></svg></span></div>
               <strong class="stat-value" id="count-leads">—</strong>
               <span class="stat-foot">Pendientes de conversión</span>
             </article>
             <article class="stat-card">
-              <div class="stat-top"><span class="stat-label">Inactivos</span><span class="stat-icon icon-inactive">⌁</span></div>
+              <div class="stat-top"><span class="stat-label">Inactivos</span><span class="stat-icon icon-inactive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2 7M3 4v7h7m2-5v6l4 2"/></svg></span></div>
               <strong class="stat-value" id="count-inactive">—</strong>
               <span class="stat-foot">Pueden volver</span>
             </article>
@@ -109,10 +70,9 @@
 
             <div class="toolbar">
               <label class="search-box">
-                <span class="search-icon" aria-hidden="true"></span>
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
                 <span class="sr-only">Buscar clientes</span>
                 <input id="search-input" type="search" placeholder="Buscar por nombre..." autocomplete="off">
-                <kbd>⌘ K</kbd>
               </label>
               <label class="filter-select">
                 <span class="sr-only">Filtrar por estado</span>
@@ -138,7 +98,7 @@
                     <option value="pending-payments">Pagos pendientes</option>
                   </select>
                 </label>
-                <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar lista" title="Actualizar lista">↻</button>
+                <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar lista" title="Actualizar lista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"/></svg></button>
             </div>
 
             <div class="client-list" id="client-rows" aria-live="polite">
@@ -156,7 +116,7 @@
                 <p>Gestiona las sedes y consulta sus clientes asignados.</p>
               </div>
               <button class="button button-outline" id="manage-gyms" type="button">
-                <span class="button-plus" aria-hidden="true">+</span>
+                <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Añadir gimnasio
               </button>
             </div>
@@ -164,14 +124,13 @@
               <p class="gym-loading">Cargando gimnasios…</p>
             </div>
           </section>
-          <p class="privacy-note">Los datos personales se muestran solo en este entorno local de desarrollo.</p>
         </section>
       </main>
     </div>
 
     <dialog id="client-detail-dialog" class="client-detail-dialog" aria-labelledby="client-detail-title">
       <div class="client-detail-shell">
-        <button class="icon-button detail-close" id="close-client-detail" type="button" aria-label="Cerrar">×</button>
+        <button class="icon-button detail-close" id="close-client-detail" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         <div class="detail-hero"><div class="detail-avatar" id="detail-avatar"></div><div><p class="eyebrow">FICHA DE CLIENTE</p><h2 id="client-detail-title">Cliente</h2><p id="client-detail-status">Activo</p></div></div>
         <div class="detail-grid">
           <section class="detail-section"><span class="detail-label">CONTACTO</span><strong id="detail-email">—</strong><span id="detail-phone">—</span></section>
@@ -186,7 +145,7 @@
           <div id="measurement-history" class="measurement-history"></div>
           <form id="measurement-form" class="measurement-form"><div class="measurement-form-heading"><div><strong>Añadir medición</strong><small>Registra siempre en las mismas condiciones.</small></div><input id="measurement-date" name="measuredAt" type="date" required></div><div class="measurement-fields"><label>Peso <input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera <input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura <input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna <input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho <input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo <input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div><textarea name="notes" rows="2" maxlength="1000" placeholder="Notas de esta medición (opcional)"></textarea><button class="button button-primary" type="submit">Guardar medición</button><p id="measurement-error" class="form-error" role="alert" hidden></p></form>
         </section>
-        <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver historial completo</button><button class="button button-primary" id="detail-checkin" type="button">✓ Registrar check-in</button></div>
+        <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver historial completo</button><button class="button button-primary" id="detail-checkin" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Registrar check-in</button></div>
       </div>
     </dialog>
 
@@ -198,7 +157,7 @@
             <h2 id="dialog-title">Añadir cliente</h2>
             <p>Crea una ficha clara para que todo el equipo pueda atenderle mejor.</p>
           </div>
-          <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar">×</button>
+          <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <div class="form-grid">
           <label class="form-field">
@@ -253,7 +212,7 @@
             <h2 id="gym-dialog-title">Añadir gimnasio</h2>
             <p>Las nuevas sedes estarán disponibles al asignar clientes.</p>
           </div>
-          <button class="icon-button" id="close-gym-dialog" type="button" aria-label="Cerrar">×</button>
+          <button class="icon-button" id="close-gym-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <div class="form-grid">
           <label class="form-field form-field-wide">
@@ -289,7 +248,7 @@
             <h2 id="history-dialog-title">Historial del cliente</h2>
             <p id="history-client-subtitle">Bonos, pagos, asistencia y sesiones disponibles.</p>
           </div>
-          <button class="icon-button" id="close-history-dialog" type="button" aria-label="Cerrar">×</button>
+          <button class="icon-button" id="close-history-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
 
         <section class="history-section" aria-labelledby="packages-title">
@@ -298,7 +257,7 @@
               <h3 id="packages-title">Servicios contratados</h3>
               <p>Las sesiones restantes se descuentan al marcar una asistencia.</p>
             </div>
-            <button class="button button-outline" id="open-service-create" type="button">+ Crear servicio</button>
+            <button class="button button-outline" id="open-service-create" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear servicio</button>
           </div>
           <div id="service-package-list" class="service-package-list">
             <p class="history-empty">Cargando historial…</p>
@@ -375,7 +334,7 @@
             <h2 id="service-create-title">Crear servicio</h2>
             <p>Este servicio podrá añadirse al historial de clientes.</p>
           </div>
-          <button class="icon-button" id="close-service-create" type="button" aria-label="Cerrar">×</button>
+          <button class="icon-button" id="close-service-create" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <div class="form-grid">
           <label class="form-field form-field-wide">

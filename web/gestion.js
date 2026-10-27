@@ -2,13 +2,18 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const labels = {clients:'Clientes',services:'Servicios',employees:'Profesionales',shifts:'Turnos',users:'Usuarios',roles:'Permisos por puesto'};
+  const labels = {services:'Servicios',employees:'Profesionales',shifts:'Turnos',users:'Usuarios',roles:'Permisos por puesto'};
   const roleNames = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador'};
   const statusNames = {ACTIVE:'Activo',INACTIVE:'Inactivo',BLOCKED:'Bloqueado'};
   const bookingNames = {PENDING:'Pendiente',CONFIRMED:'Confirmada',CANCELLED:'Cancelada',COMPLETED:'Finalizada',NO_SHOW:'No asistió'};
   const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
-  let section = new URLSearchParams(location.search).get('section') || 'clients';
-  if (!labels[section]) section='clients';
+  const requestedSection = new URLSearchParams(location.search).get('section');
+  if (requestedSection === 'clients') {
+    window.location.replace('/clientes');
+    return;
+  }
+  let section = requestedSection || 'services';
+  if (!labels[section]) section='services';
   let data, editing, revision, shifts=[];
   const token = () => sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
   async function api(path,method='GET',body) {
@@ -18,20 +23,20 @@
     if(!r.ok) throw Error(result.details?.map(d=>d.message).join(' · ') || result.error || 'No se pudo guardar.');
     return result;
   }
-  const canEdit = () => data.role==='ADMIN' || (data.role==='RECEPTION' && section==='clients');
+  const canEdit = () => data.role==='ADMIN';
   const list = () => data[section==='shifts'?'employees':section] || [];
   const isActive = item => item.enabled!==false && item.active!==false && (!item.status || item.status==='ACTIVE');
   const nameFor = (kind,id) => (kind==='employees'?data.staffNames || data.employees:data[kind]).find(x=>x.id===id)?.name || '—';
   function notice(message,error=false) {$('notice').textContent=message;$('notice').hidden=false;$('notice').classList.toggle('error',error);}
   async function load() {
     data=await api('manage');
-    const allowed=data.role==='ADMIN'?Object.keys(labels):data.role==='RECEPTION'?['clients','services','shifts']:['shifts'];
+    const allowed=data.role==='ADMIN'?Object.keys(labels):data.role==='RECEPTION'?['services','shifts']:['shifts'];
     if(!allowed.includes(section)) {section=allowed[0];history.replaceState(null,'','?section='+section);}
     $('sections').innerHTML=allowed.map(s=>`<a href="?section=${s}" ${s===section?'aria-current="page"':''}>${labels[s]}</a>`).join('');
     $('page-title').textContent=labels[section];
     $('page-subtitle').textContent=section==='shifts'?'Horario semanal y cambios para fechas concretas.':`${roleNames[data.role]} · Datos guardados en el centro`;
     $('add').hidden=!canEdit() || ['shifts','roles'].includes(section);
-    $('add').textContent=section==='clients'?'＋ Nuevo cliente':section==='services'?'＋ Nuevo servicio':section==='users'?'＋ Nuevo usuario':'＋ Nuevo empleado';
+    $('add').textContent=section==='services'?'＋ Nuevo servicio':section==='users'?'＋ Nuevo usuario':'＋ Nuevo empleado';
     render();
   }
   function render() {

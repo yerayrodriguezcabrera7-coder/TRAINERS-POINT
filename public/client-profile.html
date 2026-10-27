@@ -15,7 +15,6 @@
     <main class="profile-page" id="main">
       <header class="profile-topbar">
         <div class="profile-breadcrumb"><a href="/clientes">Clientes</a><span>/</span><strong>Ficha</strong></div>
-        <span class="profile-local-badge"><span></span> Entorno local</span>
       </header>
 
       <section class="profile-content" aria-live="polite">
@@ -25,10 +24,10 @@
         <div id="profile-view" hidden>
           <div class="profile-heading">
             <div class="profile-heading-main">
-              <a class="back-link" href="/clientes">← Volver a clientes</a>
-              <div class="profile-title-row"><div id="profile-avatar" class="profile-avatar-large"></div><div><h1 id="profile-name">Cliente</h1><p id="profile-status">Activo</p></div></div>
+              <a class="back-link" href="/clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg>Volver a clientes</a>
+              <div class="profile-title-row"><img class="profile-heading-logo" src="/assets/trainers-point-logo.png" alt=""><div id="profile-avatar" class="profile-avatar-large"></div><div><h1 id="profile-name">Cliente</h1><p id="profile-status">Activo</p></div></div>
             </div>
-            <button class="profile-primary-button" id="open-measurement" type="button">+ Añadir medición</button>
+            <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Añadir medición</button>
           </div>
 
           <section class="profile-overview-grid" aria-label="Resumen del cliente">
@@ -66,7 +65,7 @@
 
     <dialog id="measurement-dialog" class="measurement-dialog">
       <form id="measurement-form">
-        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Añadir medición</h2><p>Registra las medidas en condiciones similares para comparar mejor.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar">×</button></div>
+        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Añadir medición</h2><p>Registra las medidas en condiciones similares para comparar mejor.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
         <div class="measurement-date-row"><label>Fecha<input id="measurement-date" name="measuredAt" type="date" required></label></div>
         <div class="measurement-fields-profile"><label>Peso<input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera<input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura<input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna<input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho<input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo<input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div>
         <label class="measurement-notes">Notas de esta medición<textarea name="notes" rows="3" maxlength="1000" placeholder="Opcional"></textarea></label>

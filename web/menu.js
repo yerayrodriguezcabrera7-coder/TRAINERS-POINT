@@ -2,6 +2,8 @@
   const host = document.querySelector('[data-app-menu]');
   if (!host) return;
   const icons = {
+    menu:'<path d="M4 7h16M4 12h11M4 17h16"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
     home:'<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3Z"/>',
     calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/>',
     people:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m1-16a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v3"/>',
@@ -32,20 +34,20 @@
   const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
-      const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
+      const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
       return href
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(href===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
   const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
-  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation">⇆</button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><span aria-hidden="true">＋</span></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
+  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
   if (brand) brand.innerHTML = '<img class="app-menu-logo" src="/assets/trainers-point-logo.png" alt="Trainers Point">';
   if (firstGroup) {
     const gymLink = document.createElement('a');
     gymLink.className = 'app-menu-item'; gymLink.href = '/gimnasios'; gymLink.title = 'Gimnasios';
-    gymLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons.globe+'</svg><span class="app-menu-label">Gimnasios</span>';
+    gymLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons.globe+'</svg><span class="app-menu-label">Gimnasios</span>';
     if (location.pathname === '/gimnasios') gymLink.setAttribute('aria-current','page');
     firstGroup.append(gymLink);
   }
@@ -86,7 +88,7 @@
       const me=await response.json();
       if(me.role!=='ADMIN')host.querySelectorAll('a.app-menu-item').forEach(a=>{
         const href=a.getAttribute('href');
-        const allowed=['fichajes.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','gestion.html?section=clients','gestion.html?section=services']:[])];
+        const allowed=['fichajes.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','clientes','gestion.html?section=services']:[])];
         if(!allowed.includes(href)) a.hidden=true;
       });
       host.querySelectorAll('.menu-group').forEach(group=>{group.hidden=![...group.querySelectorAll('a')].some(a=>!a.hidden);});

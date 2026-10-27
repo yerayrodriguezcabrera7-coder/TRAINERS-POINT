@@ -1009,6 +1009,8 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/menu.js": { file: "web/menu.js", contentType: "text/javascript; charset=utf-8" },
   "/menu.css": { file: "web/menu.css", contentType: "text/css; charset=utf-8" },
   "/assets/trainers-point-logo.png": { file: "public/assets/trainers-point-logo.png", contentType: "image/png" },
+  "/assets/fonts/bahnschrift.ttf": { file: "public/assets/fonts/bahnschrift.ttf", contentType: "font/ttf" },
+  "/assets/fonts/arial.ttf": { file: "public/assets/fonts/arial.ttf", contentType: "font/ttf" },
   "/styles.css": { file: "web/styles.css", contentType: "text/css; charset=utf-8" },
   "/design.css": { file: "web/design.css", contentType: "text/css; charset=utf-8" },
   "/clientes": { file: "public/clients.html", contentType: "text/html; charset=utf-8" },

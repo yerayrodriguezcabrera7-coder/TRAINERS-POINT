@@ -5,20 +5,14 @@ const statusLabels = {
   BAJA: "Baja",
 };
 
-const avatarColors = [
-  ["#eaf3ec", "#477458"],
-  ["#eef0fa", "#6c70a1"],
-  ["#fff2e7", "#ad7950"],
-  ["#e9f2f5", "#527b86"],
-  ["#f5edf3", "#956b88"],
-  ["#f2f1e7", "#87804f"],
-];
-
 const rows = document.querySelector("#client-rows");
 const searchInput = document.querySelector("#search-input");
 const statusFilter = document.querySelector("#status-filter");
 const gymFilter = document.querySelector("#gym-filter");
-const initialGymId = new URLSearchParams(window.location.search).get("gymId") || "";
+const initialGymId =
+  new URLSearchParams(window.location.search).get("gymId") ||
+  localStorage.getItem("calendar-selected-gym") ||
+  "";
 const sortSelect = document.querySelector("#sort-clients");
 const gymCards = document.querySelector("#gym-cards");
 const createDialog = document.querySelector("#create-dialog");
@@ -81,21 +75,6 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function formatDateTime(value) {
-  if (!value) return "Sin sesión programada";
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function initials(client) {
-  return `${client.firstName?.trim().charAt(0) ?? ""}${client.lastName?.trim().charAt(0) ?? ""}`.toUpperCase();
-}
-
 function createInfoItem(label, value, detail, className = "") {
   const item = document.createElement("div");
   item.className = `client-info-item ${className}`.trim();
@@ -115,118 +94,13 @@ function createInfoItem(label, value, detail, className = "") {
   return item;
 }
 
-function renderClient(client, index) {
-  const card = document.createElement("article");
-  card.className = "client-card client-card-modern";
-  const identity = document.createElement("div");
-  identity.className = "client-card-identity";
-  const person = document.createElement("div");
-  person.className = "client-cell";
-
-  const avatar = document.createElement("span");
-  avatar.className = "client-avatar";
-  avatar.textContent = initials(client);
-  const colors = avatarColors[index % avatarColors.length];
-  avatar.style.backgroundColor = colors[0];
-  avatar.style.color = colors[1];
-
-  const nameBlock = document.createElement("span");
-  const name = document.createElement("strong");
-  name.textContent = `${escapeText(client.firstName)} ${escapeText(client.lastName)}`;
-  const email = document.createElement("small");
-  email.textContent = escapeText(client.email);
-  nameBlock.append(name, email);
-  person.append(avatar, nameBlock);
-  const status = document.createElement("span");
-  status.className = `client-status status-${client.status}`;
-  status.textContent = statusLabels[client.status] ?? "Sin estado";
-  identity.append(person, status);
-
-  const info = document.createElement("div");
-  info.className = "client-card-info";
-  const nextSession = client.nextSession;
-  info.append(
-    createInfoItem(
-      "PRÓXIMA SESIÓN",
-      nextSession ? formatDateTime(nextSession.startTime) : "Sin sesión programada",
-      nextSession?.service?.name ?? "Se mostrará al programar una sesión",
-      nextSession ? "client-info-next" : "",
-    ),
-    createInfoItem(
-      "SESIONES RESTANTES",
-      client.servicePackageCount > 0 ? String(client.remainingSessions) : "—",
-      client.servicePackageCount > 0 ? "En bonos contratados" : "Sin bonos contratados",
-    ),
-    createInfoItem(
-      "PAGOS POR REVISAR",
-      String(client.pendingPayments),
-      client.pendingPayments === 1 ? "1 pago pendiente o fallido" : "Pagos pendientes o fallidos",
-      client.pendingPayments > 0 ? "client-info-payment" : "",
-    ),
-    createInfoItem(
-      "GIMNASIO",
-      client.gym?.name ?? "Sin gimnasio",
-      [client.gym?.city, client.gym?.province].filter(Boolean).join(", "),
-    ),
-  );
-
-  const actions = document.createElement("div");
-  actions.className = "client-card-actions";
-  if (gyms.length > 0) {
-    const gymSelect = document.createElement("select");
-    gymSelect.className = "gym-client-select";
-    gymSelect.setAttribute("aria-label", `Gimnasio de ${client.firstName} ${client.lastName}`);
-    gymSelect.dataset.clientId = client.id;
-    gymSelect.dataset.previousGymId = client.gymId ?? "";
-
-    for (const gym of gyms) {
-      const option = document.createElement("option");
-      option.value = gym.id;
-      option.textContent = gym.name;
-      option.selected = gym.id === client.gymId;
-      gymSelect.append(option);
-    }
-    actions.append(gymSelect);
-  } else {
-    const missingGym = document.createElement("span");
-    missingGym.className = "gym-missing";
-    missingGym.textContent = "Sin sedes";
-    actions.append(missingGym);
-  }
-  const select = document.createElement("select");
-  select.className = `status-select status-${client.status}`;
-  select.setAttribute("aria-label", `Estado de ${client.firstName} ${client.lastName}`);
-  select.dataset.clientId = client.id;
-  select.dataset.previousStatus = client.status;
-  for (const [status, label] of Object.entries(statusLabels)) {
-    const option = document.createElement("option");
-    option.value = status;
-    option.textContent = label;
-    option.selected = status === client.status;
-    select.append(option);
-  }
-  actions.append(select);
-
-  const action = document.createElement("button");
-  action.className = "row-action history-action";
-  action.type = "button";
-  action.title = "Ver historial de servicios";
-  action.setAttribute("aria-label", `Ver historial de servicios de ${client.firstName} ${client.lastName}`);
-  action.textContent = "Historial";
-  action.addEventListener("click", () => openClientHistory(client));
-  actions.append(action);
-
-  card.append(identity, info, actions);
-  return card;
-}
-
 function renderEmpty(message, detail) {
   rows.replaceChildren();
   const state = document.createElement("div");
   state.className = "empty-state";
   const icon = document.createElement("span");
   icon.className = "empty-icon";
-  icon.textContent = "◎";
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9h9"/></svg>';
   const title = document.createElement("strong");
   title.textContent = message;
   const description = document.createElement("span");
@@ -351,7 +225,7 @@ function renderGyms() {
     card.setAttribute("aria-label", `Filtrar clientes de ${gym.name}`);
     const icon = document.createElement("span");
     icon.className = "gym-card-icon";
-    icon.textContent = "⌂";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>';
     const details = document.createElement("span");
     details.className = "gym-card-details";
     const name = document.createElement("strong");
@@ -395,7 +269,11 @@ async function loadGyms() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudieron cargar los gimnasios.");
     gyms = data.gyms;
-    if (initialGymId && gyms.some((gym) => gym.id === initialGymId)) gymFilter.value = initialGymId;
+    const activeGym = gyms.find((gym) => gym.id === initialGymId) ?? gyms[0];
+    if (activeGym) {
+      gymFilter.value = activeGym.id;
+      localStorage.setItem("calendar-selected-gym", activeGym.id);
+    }
     renderGyms();
   } catch (error) {
     gymCards.replaceChildren();
@@ -615,11 +493,6 @@ document.querySelector("#open-create").addEventListener("click", () => {
 document.querySelector("#close-dialog").addEventListener("click", closeDialog);
 document.querySelector("#cancel-create").addEventListener("click", closeDialog);
 document.querySelector("#refresh-list").addEventListener("click", loadClients);
-document.querySelector("#open-gyms").addEventListener("click", (event) => {
-  if (event.currentTarget.getAttribute("href") !== "#gyms") return;
-  event.preventDefault();
-  document.querySelector("#gyms").scrollIntoView({ behavior: "smooth" });
-});
 document.querySelector("#manage-gyms").addEventListener("click", () => {
   gymForm.reset();
   gymFormError.hidden = true;
@@ -881,12 +754,6 @@ gymForm.addEventListener("submit", async (event) => {
   }
 });
 
-document.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    searchInput.focus();
-  }
-});
 
 function sessionBadge(value) {
   const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60000);
@@ -926,7 +793,7 @@ function renderClient(client) {
   info.append(createInfoItem("SEDE", client.gym?.name ?? "Sin gimnasio", [client.gym?.city, client.gym?.province].filter(Boolean).join(", ")));
   const arrow = document.createElement("span");
   arrow.className = "card-arrow";
-  arrow.textContent = "↗";
+  arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>';
   const footer = document.createElement("div");
   footer.className = "client-card-footer";
   const footerHint = document.createElement("span");
@@ -1023,7 +890,6 @@ function openClientDetail(client) {
   document.querySelector("#detail-session").textContent = client.nextSession ? `${sessionBadge(client.nextSession.startTime)} · ${client.nextSession.service?.name || "Sesión"}` : "Sin sesión hoy";
   document.querySelector("#detail-notes").textContent = client.clientNotes?.[0]?.content || client.notes || "Sin notas añadidas.";
   document.querySelector("#detail-routine").textContent = client.trainingPlans?.[0]?.name || (client.servicePackageCount ? `${client.remainingSessions} sesiones disponibles en sus bonos.` : "No hay rutina activa registrada.");
-  document.querySelector("#detail-checkin").textContent = "✓ Registrar check-in";
   objectiveInput.value = client.objective || "";
   measurementForm.reset();
   measurementDate.value = new Date().toISOString().slice(0, 10);
