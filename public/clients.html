@@ -171,7 +171,9 @@
                 <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden></span></label>
                 <label class="form-field"><span>Apellidos <b>*</b></span><input name="lastName" required maxlength="100" autocomplete="family-name" placeholder="Ej. García López" aria-describedby="intake-error-lastName"><span class="intake-field-error" id="intake-error-lastName" data-field-error="lastName" aria-live="polite" hidden></span></label>
                 <label class="form-field form-field-wide"><span>Teléfono <b>*</b></span><input name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="+34 600 000 000" aria-describedby="intake-error-phone"><span class="intake-field-error" id="intake-error-phone" data-field-error="phone" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="phone" aria-live="polite"></span></label>
+                <label class="form-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off" placeholder="Opcional"></label>
                 <label class="form-field form-field-wide"><span>Correo electrónico <b>*</b></span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="laura@email.com" aria-describedby="intake-error-email"><span class="intake-field-error" id="intake-error-email" data-field-error="email" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="email" aria-live="polite"></span></label>
+                <label class="form-field form-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address" placeholder="Opcional"></label>
                 <label class="form-field form-field-wide"><span>Centro <b>*</b></span><select name="gymId" id="create-gym-select" required aria-describedby="intake-error-gymId"><option value="">Selecciona un centro</option></select><span class="intake-field-error" id="intake-error-gymId" data-field-error="gymId" aria-live="polite" hidden></span></label>
                 <label class="form-field form-field-wide"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname" placeholder="Opcional"></label>
               </div>
@@ -213,7 +215,7 @@
                   </div>
                   <label class="form-field intake-conditional" id="source-detail-field" hidden><span>¿Quién le recomendó?</span><input name="sourceDetail" maxlength="200"></label>
                 </fieldset>
-                <label class="form-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="form-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
                 <label class="form-field"><span>Franja de contacto</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
                 <label class="form-field form-field-wide"><span>Notas para el equipo</span><textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento"></textarea></label>
               </div>
@@ -240,19 +242,7 @@
                 <fieldset class="intake-choice-group form-field-wide"><legend>Franjas disponibles</legend><div class="intake-chips">
                   <label><input type="checkbox" name="availabilitySlot" value="MANANA"><span>Mañana</span></label><label><input type="checkbox" name="availabilitySlot" value="MEDIODIA"><span>Mediodía</span></label><label><input type="checkbox" name="availabilitySlot" value="TARDE"><span>Tarde</span></label>
                 </div></fieldset>
-                <label class="form-field"><span>Veces por semana</span><select name="sessionsPerWeek"><option value="">Sin indicar</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 o más</option></select></label>
                 <label class="form-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"><small>Se guarda como preferencia; no crea una reserva en el calendario.</small></label>
-                <details class="intake-measurements form-field-wide">
-                  <summary>Medidas de partida · Opcional</summary>
-                  <div class="intake-measurement-grid">
-                    <label class="form-field"><span>Peso (kg)</span><input name="weight" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                    <label class="form-field"><span>Pecho (cm)</span><input name="chest" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                    <label class="form-field"><span>Cintura (cm)</span><input name="waist" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                    <label class="form-field"><span>Cadera (cm)</span><input name="hip" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                    <label class="form-field"><span>Brazo (cm)</span><input name="arm" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                    <label class="form-field"><span>Pierna (cm)</span><input name="leg" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"></label>
-                  </div>
-                </details>
                 <fieldset class="intake-choice-group form-field-wide intake-consents">
                   <legend>Consentimientos</legend>
                   <label><input name="consentData" type="checkbox" required aria-describedby="intake-error-consentData"><span>Uso de datos personales <b>*</b></span></label>

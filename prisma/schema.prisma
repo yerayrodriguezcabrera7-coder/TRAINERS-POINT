@@ -30,6 +30,7 @@ enum ClientSource {
 
 enum ContactPreference {
   WHATSAPP
+  SMS
   LLAMADA
   EMAIL
 }
@@ -156,6 +157,7 @@ model Client {
   email            String                 @unique
   phone            String
   dni              String?                @unique
+  address          String?
   birthDate        DateTime?              @db.Date
   status           ClientStatus           @default(LEAD)
   gymId            String                 @db.Uuid
