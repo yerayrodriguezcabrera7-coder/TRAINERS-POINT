@@ -40,12 +40,14 @@
             <section class="profile-card client-details-section" aria-labelledby="client-details-title">
               <div class="section-heading"><div><p class="profile-eyebrow">DATOS DE LA PERSONA</p><h2 id="client-details-title">Preferencias y salud</h2></div></div>
               <form id="client-details-form" class="client-details-form">
+                <label class="details-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off"></label>
+                <label class="details-field details-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address"></label>
                 <label class="details-field"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname"></label>
                 <label class="details-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
                 <label class="details-field"><span>Sexo</span><select name="sex"><option value="">Sin indicar</option><option value="MUJER">Mujer</option><option value="HOMBRE">Hombre</option><option value="NO_INDICA">Prefiere no indicarlo</option></select></label>
                 <label class="details-field"><span>Cómo nos conoció</span><select name="source"><option value="">Sin indicar</option><option value="INSTAGRAM">Instagram</option><option value="RECOMENDACION">Recomendación</option><option value="PASO_POR_LA_PUERTA">Pasó por el centro</option><option value="GOOGLE">Google</option><option value="OTRO">Otro</option></select></label>
                 <label class="details-field"><span>Detalle del origen</span><input name="sourceDetail" maxlength="200"></label>
-                <label class="details-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="details-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
                 <label class="details-field"><span>Mejor franja para contactar</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
                 <label class="details-field"><span>Sesiones por semana</span><select name="sessionsPerWeek"><option value="">Sin indicar</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 o más</option></select></label>
                 <label class="details-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"></label>

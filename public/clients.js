@@ -254,6 +254,8 @@ function renderToday(clients, animateBookingId = "") {
     const name = document.createElement("a");
     name.className = "today-appointment-name";
     name.href = getClientProfileHref(client.id);
+    name.target = "_blank";
+    name.rel = "noopener noreferrer";
     name.textContent = `${client.firstName} ${client.lastName}`.trim();
     const service = document.createElement("span");
     service.className = "today-appointment-service";
@@ -911,6 +913,8 @@ function intakeDraft() {
     lastName: form.elements.namedItem("lastName").value.trim(),
     email: form.elements.namedItem("email").value.trim(),
     phone: form.elements.namedItem("phone").value.trim(),
+    dni: form.elements.namedItem("dni").value.trim(),
+    address: form.elements.namedItem("address").value.trim(),
     gymId: form.elements.namedItem("gymId").value,
     preferredName: form.elements.namedItem("preferredName").value.trim(),
     birthDate: form.elements.namedItem("birthDate").value,
@@ -925,9 +929,6 @@ function intakeDraft() {
     injuryNotes: form.elements.namedItem("injuryNotes").value.trim(),
     availability: checked("availabilityDay").length || checked("availabilitySlot").length
       ? { days: checked("availabilityDay"), slots: checked("availabilitySlot") }
-      : null,
-    sessionsPerWeek: form.elements.namedItem("sessionsPerWeek").value
-      ? Number(form.elements.namedItem("sessionsPerWeek").value)
       : null,
     firstSessionPreference: localPreference ? new Date(localPreference).toISOString() : null,
     consentData: form.elements.namedItem("consentData").checked ? new Date().toISOString() : null,
@@ -1092,6 +1093,8 @@ async function checkDuplicate(field) {
       message.append(document.createTextNode(`Ya hay una ficha con este ${field === "phone" ? "teléfono" : "correo"}: `));
       const link = document.createElement("a");
       link.href = getClientProfileHref(match.client.id);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
       link.textContent = `${match.client.firstName} ${match.client.lastName}`;
       link.setAttribute("aria-label", `Abrir ficha de ${link.textContent}`);
       message.append(link);
@@ -1147,7 +1150,6 @@ async function createIntakeClient(mode) {
     if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente.");
 
     let packageFailed = false;
-    let measurementFailed = false;
     if (proposal) {
       try {
         await addClientServicePackage(data.client.id, {
@@ -1163,20 +1165,6 @@ async function createIntakeClient(mode) {
       }
     }
 
-    const measurement = Object.fromEntries(
-      ["weight", "chest", "waist", "hip", "arm", "leg"]
-        .map((field) => [field, createForm.elements.namedItem(field).value])
-        .filter(([, value]) => value !== "")
-        .map(([field, value]) => [field, Number(value)]),
-    );
-    if (Object.keys(measurement).length) {
-      try {
-        await saveClientMeasurement(data.client.id, { measuredAt: localDateString(), ...measurement });
-      } catch (error) {
-        measurementFailed = true;
-      }
-    }
-
     intakeDirty = false;
     createDialog.close();
     searchInput.value = "";
@@ -1187,11 +1175,6 @@ async function createIntakeClient(mode) {
     const name = `${data.client.firstName} ${data.client.lastName}`;
     if (packageFailed) {
       showToast("Cliente creado. No se pudo añadir el bono, puedes hacerlo desde su ficha.", true, {
-        label: "Abrir ficha",
-        href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
-      });
-    } else if (measurementFailed) {
-      showToast("Cliente creado, pero no se pudieron guardar las medidas.", true, {
         label: "Abrir ficha",
         href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
       });
@@ -1664,7 +1647,7 @@ function renderClient(client) {
   details.append(center);
   card.append(identity, details);
 
-  const open = () => { window.location.href = getClientProfileHref(client.id); };
+  const open = () => { window.open(getClientProfileHref(client.id), "_blank", "noopener,noreferrer"); };
   card.addEventListener("click", open);
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;

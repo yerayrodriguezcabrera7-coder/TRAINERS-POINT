@@ -78,6 +78,8 @@ function renderHeader(client) {
 
 function renderClientDetails(client) {
   const form = clientDetailsForm;
+  form.elements.namedItem("dni").value = client.dni || "";
+  form.elements.namedItem("address").value = client.address || "";
   form.elements.namedItem("preferredName").value = client.preferredName || "";
   form.elements.namedItem("birthDate").value = client.birthDate ? new Date(client.birthDate).toISOString().slice(0, 10) : "";
   form.elements.namedItem("sex").value = client.sex || "";
@@ -274,6 +276,8 @@ clientDetailsForm.addEventListener("submit", async (event) => {
   const days = [...form.querySelectorAll('input[name="availabilityDay"]:checked')].map((input) => input.value);
   const slots = [...form.querySelectorAll('input[name="availabilitySlot"]:checked')].map((input) => input.value);
   const body = {
+    dni: form.elements.namedItem("dni").value.trim() || null,
+    address: form.elements.namedItem("address").value.trim() || null,
     preferredName: form.elements.namedItem("preferredName").value.trim() || null,
     birthDate: form.elements.namedItem("birthDate").value || null,
     sex: form.elements.namedItem("sex").value || null,
@@ -302,12 +306,14 @@ clientDetailsForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(body),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error("No se pudieron guardar los datos.");
+    if (!response.ok) throw new Error(data.error || "No se pudieron guardar los datos.");
     progress.client = { ...progress.client, ...data.client };
     renderClientDetails(progress.client);
     clientDetailsFeedback.textContent = "Datos guardados.";
   } catch (error) {
-    clientDetailsFeedback.textContent = "No se pudieron guardar los datos. Inténtalo de nuevo.";
+    clientDetailsFeedback.textContent = error instanceof Error && error.message
+      ? error.message
+      : "No se pudieron guardar los datos. Inténtalo de nuevo.";
   }
 });
 

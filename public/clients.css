@@ -627,9 +627,6 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
 .intake-conditional[hidden] { display: none !important; }
 .intake-day-chips label { min-width: 48px; }
 .intake-day-chips span { width: 100%; }
-.intake-measurements { border: 1px solid var(--tp-line); border-radius: var(--tp-radius-md); padding: 12px; }
-.intake-measurements summary { min-height: 32px; color: var(--tp-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
-.intake-measurement-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-top: 10px; }
 .intake-consents { display: grid; gap: 7px; }
 .intake-consents label { display: flex; min-height: 48px; align-items: center; gap: 10px; color: var(--tp-ink); font-size: 12px; cursor: pointer; }
 .intake-consents input { width: 20px; height: 20px; accent-color: var(--tp-accent); }
@@ -1159,5 +1156,4 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
   .intake-footer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .intake-footer-actions .button { width: 100%; padding-inline: 8px; }
   #submit-create, #create-client-only { grid-column: 1 / -1; }
-  .intake-measurement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

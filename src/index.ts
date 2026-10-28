@@ -35,6 +35,8 @@ type ClientInput = {
   email: string;
   phone: string;
   gymId: string;
+  dni?: string | null;
+  address?: string | null;
   birthDate?: string;
   notes?: string;
   objective?: string;
@@ -56,7 +58,7 @@ type ClientInput = {
 
 const clientSexValues = ["MUJER", "HOMBRE", "NO_INDICA"] as const;
 const clientSourceValues = ["INSTAGRAM", "RECOMENDACION", "PASO_POR_LA_PUERTA", "GOOGLE", "OTRO"] as const;
-const contactPreferenceValues = ["WHATSAPP", "LLAMADA", "EMAIL"] as const;
+const contactPreferenceValues = ["WHATSAPP", "SMS", "LLAMADA", "EMAIL"] as const;
 const contactSlotValues = ["MANANA", "MEDIODIA", "TARDE"] as const;
 const injuryZoneValues = ["RODILLA", "ESPALDA", "HOMBRO", "CUELLO", "CADERA", "OTRA"] as const;
 const availabilityDayValues = ["L", "M", "X", "J", "V", "S", "D"] as const;
@@ -155,14 +157,12 @@ function parseClientInput(value: unknown): ClientInput | string {
     return "El formulario no tiene un formato válido.";
   }
 
-  if (Object.prototype.hasOwnProperty.call(value, "dni")) {
-    return "El campo DNI ya no se admite.";
-  }
-
   const firstName = typeof value.firstName === "string" ? value.firstName.trim() : "";
   const lastName = typeof value.lastName === "string" ? value.lastName.trim() : "";
   const email = typeof value.email === "string" ? value.email.trim().toLowerCase() : "";
   const phone = typeof value.phone === "string" ? value.phone.trim() : "";
+  const dni = value.dni === undefined ? undefined : value.dni === null ? null : typeof value.dni === "string" ? value.dni.trim() : "";
+  const address = value.address === undefined ? undefined : value.address === null ? null : typeof value.address === "string" ? value.address.trim() : "";
   const notes = typeof value.notes === "string" ? value.notes.trim() : "";
   const objective = typeof value.objective === "string" ? value.objective.trim() : "";
   const birthDate = typeof value.birthDate === "string" ? value.birthDate.trim() : "";
@@ -183,6 +183,8 @@ function parseClientInput(value: unknown): ClientInput | string {
   const consentPhotos = parseConsentDate(value.consentPhotos);
   if (
     (value.birthDate !== undefined && value.birthDate !== null && typeof value.birthDate !== "string") ||
+    (value.dni !== undefined && value.dni !== null && typeof value.dni !== "string") ||
+    (value.address !== undefined && value.address !== null && typeof value.address !== "string") ||
     (value.sourceDetail !== undefined && value.sourceDetail !== null && typeof value.sourceDetail !== "string") ||
     (value.preferredName !== undefined && value.preferredName !== null && typeof value.preferredName !== "string") ||
     (value.injuryNotes !== undefined && value.injuryNotes !== null && typeof value.injuryNotes !== "string")
@@ -212,6 +214,9 @@ function parseClientInput(value: unknown): ClientInput | string {
 
   if (notes.length > 5000 || objective.length > 1000) {
     return "Las notas o el objetivo superan la longitud permitida.";
+  }
+  if ((dni?.length ?? 0) > 40 || (address?.length ?? 0) > 300) {
+    return "El DNI o la dirección superan la longitud permitida.";
   }
 
   if (sex !== undefined && sex !== null && !isOneOf(sex, clientSexValues)) return "Selecciona una opción de sexo válida.";
@@ -266,6 +271,8 @@ function parseClientInput(value: unknown): ClientInput | string {
     email,
     phone,
     gymId,
+    ...(dni !== undefined ? { dni: dni || null } : {}),
+    ...(address !== undefined ? { address: address || null } : {}),
     ...(birthDate ? { birthDate } : {}),
     ...(notes ? { notes } : {}),
     ...(objective ? { objective } : {}),
@@ -512,6 +519,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         id: true,
         firstName: true,
         lastName: true,
+        dni: true,
+        address: true,
         objective: true,
         birthDate: true,
         sex: true,
@@ -561,7 +570,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const body = await readJsonBody(request);
     if (!isRecord(body)) { sendError(response, 400, "Los datos de la ficha no tienen un formato válido."); return; }
     const editableFields = [
-      "birthDate", "sex", "source", "sourceDetail", "preferredName", "contactPreference", "contactSlot",
+      "dni", "address", "birthDate", "sex", "source", "sourceDetail", "preferredName", "contactPreference", "contactSlot",
       "injuries", "injuryNotes", "availability", "sessionsPerWeek", "firstSessionPreference", "consentData", "consentMarketing", "consentPhotos",
     ] as const;
     const submitted = Object.fromEntries(editableFields
@@ -580,6 +589,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     if (typeof input === "string") { sendError(response, 400, input); return; }
 
     const data: Prisma.ClientUpdateInput = {};
+    if (Object.prototype.hasOwnProperty.call(body, "dni")) data.dni = input.dni ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "address")) data.address = input.address ?? null;
     if (Object.prototype.hasOwnProperty.call(body, "birthDate")) {
       data.birthDate = input.birthDate ? new Date(`${input.birthDate}T00:00:00.000Z`) : null;
     }
@@ -604,6 +615,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         data,
         select: {
           id: true,
+          dni: true,
+          address: true,
           birthDate: true,
           sex: true,
           source: true,
@@ -623,6 +636,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       });
       sendJson(response, 200, { client });
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const target = error.meta?.target;
+        const dniConflict = Array.isArray(target)
+          ? target.includes("dni")
+          : typeof target === "string" && target.toLowerCase().includes("dni");
+        if (dniConflict) {
+          sendError(response, 409, "Ese DNI ya está asociado a otra ficha.");
+          return;
+        }
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
         sendError(response, 404, "No se encontró el cliente.");
         return;
@@ -1149,6 +1172,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           lastName: input.lastName,
           email: input.email,
           phone: input.phone,
+          ...(input.dni !== undefined ? { dni: input.dni } : {}),
+          ...(input.address !== undefined ? { address: input.address } : {}),
           gym: { connect: { id: input.gymId } },
           ...(input.birthDate ? { birthDate: new Date(`${input.birthDate}T00:00:00.000Z`) } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
@@ -1172,6 +1197,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           id: true,
           firstName: true,
           lastName: true,
+          dni: true,
+          address: true,
           email: true,
           phone: true,
           birthDate: true,
@@ -1200,6 +1227,14 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendJson(response, 201, { client });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const target = error.meta?.target;
+        const dniConflict = Array.isArray(target)
+          ? target.includes("dni")
+          : typeof target === "string" && target.toLowerCase().includes("dni");
+        if (dniConflict) {
+          sendError(response, 409, "Ese DNI ya está asociado a otra ficha.");
+          return;
+        }
         sendError(response, 409, "Ya existe un cliente con ese correo.");
         return;
       }
