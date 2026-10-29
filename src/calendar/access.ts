@@ -12,14 +12,15 @@ const accountSchema = z.object({
   username: z.email().transform(v => v.toLowerCase()),
   employeeId: z.string().min(1).max(100).optional().nullable(),
   clientId: z.string().min(1).max(100).optional().nullable(),
+  name: z.string().min(1).max(200).optional().nullable(),
   role: z.enum(roles),
   enabled: z.boolean(),
   password: z.string().min(10).max(128).optional(),
 }).superRefine((data, ctx) => {
   if (data.role === "CLIENT") {
-    if (!data.clientId) ctx.addIssue({ code: "custom", message: "Selecciona una ficha de cliente.", path: ["clientId"] });
+    if (!data.clientId && !data.name) ctx.addIssue({ code: "custom", message: "Selecciona una ficha de cliente o escribe su nombre.", path: ["clientId"] });
   } else {
-    if (!data.employeeId) ctx.addIssue({ code: "custom", message: "Selecciona un empleado activo.", path: ["employeeId"] });
+    if (!data.employeeId && !data.name) ctx.addIssue({ code: "custom", message: "Escribe el nombre de la persona.", path: ["name"] });
   }
 });
 export const accessMigration = `
@@ -82,12 +83,60 @@ export class Access {
     try {
       await db.query("BEGIN");
       const gymRow = await db.query("SELECT config FROM calendar.gyms WHERE id=$1 FOR UPDATE", [gym]);
+      const config = gymRow.rows[0]?.config || { employees: [], clients: [] };
+      let employeeId = input.role === "CLIENT" ? null : input.employeeId;
+      let clientId = input.role === "CLIENT" ? input.clientId : null;
+
       if (input.role === "CLIENT") {
-        const client = gymRow.rows[0]?.config.clients.find((c: any) => c.id === input.clientId);
+        if (!clientId && input.name) {
+          let client = config.clients?.find((c: any) => c.name.toLowerCase() === input.name!.trim().toLowerCase());
+          if (!client) {
+            client = { id: randomUUID(), name: input.name.trim(), email: input.username, phone: "", status: "ACTIVE", notes: "" };
+            config.clients = config.clients || [];
+            config.clients.push(client);
+            await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, config]);
+          }
+          clientId = client.id;
+        }
+        const client = config.clients?.find((c: any) => c.id === clientId);
         if (!client || (input.enabled && client.status === "BLOCKED"))
           throw new ApiError(400, "Selecciona un cliente activo.");
+        if (input.name && client.name !== input.name.trim()) {
+          client.name = input.name.trim();
+          await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, config]);
+        }
       } else {
-        const employee = gymRow.rows[0]?.config.employees.find((e: any) => e.id === input.employeeId);
+        if (input.name) {
+          const trimmed = input.name.trim();
+          let employee = employeeId ? config.employees?.find((e: any) => e.id === employeeId) : null;
+          if (!employee) {
+            employee = config.employees?.find((e: any) => e.name.toLowerCase() === trimmed.toLowerCase());
+          }
+          if (!employee && config.employees?.length === 1 && config.employees[0].name === "Entrenador de prueba") {
+            employee = config.employees[0];
+          }
+          if (employee) {
+            employee.name = trimmed;
+            employee.active = true;
+            employeeId = employee.id;
+            await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, config]);
+          } else {
+            const newId = randomUUID();
+            const newEmp = {
+              id: newId,
+              name: trimmed,
+              jobTitle: input.role === "RECEPTION" ? "Recepción" : input.role === "TRAINER" ? "Entrenador" : "Administrador",
+              color: "#ff7f0a",
+              active: true,
+              schedule: config.schedule || [],
+            };
+            config.employees = config.employees || [];
+            config.employees.push(newEmp);
+            employeeId = newId;
+            await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, config]);
+          }
+        }
+        const employee = config.employees?.find((e: any) => e.id === employeeId);
         if (!employee || (input.enabled && employee.active === false))
           throw new ApiError(400, "Selecciona un empleado activo.");
       }
@@ -101,8 +150,6 @@ export class Access {
         if (!others.rows.length) throw new ApiError(409, "Debe quedar al menos un administrador activo.");
       }
       const userId = id || randomUUID();
-      const employeeId = input.role === "CLIENT" ? null : input.employeeId;
-      const clientId = input.role === "CLIENT" ? input.clientId : null;
       await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,client_id,username,role,password_hash,enabled)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET
         employee_id=EXCLUDED.employee_id,client_id=EXCLUDED.client_id,username=EXCLUDED.username,role=EXCLUDED.role,

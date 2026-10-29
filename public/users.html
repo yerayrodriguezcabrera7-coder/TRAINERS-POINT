@@ -121,13 +121,13 @@
               </select>
             </label>
 
-            <!-- Campo Empleado: con el nombre de cada profesional -->
+            <!-- Campo Nombre de la persona: donde el usuario escribe el nombre -->
             <label class="form-field form-field-wide" id="employee-field">
-              <span>Empleado <b>*</b></span>
-              <select name="employeeId" id="user-employee" required>
-                <!-- Opciones dinámicas con nombre del empleado -->
-              </select>
-              <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Selecciona el profesional al que se asocian sus fichajes y citas.</small>
+              <span id="employee-label">Nombre de la persona <b>*</b></span>
+              <input name="name" id="user-name" type="text" list="employee-suggestions" required maxlength="200" placeholder="Escribe el nombre de la persona" autocomplete="name">
+              <datalist id="employee-suggestions"></datalist>
+              <input type="hidden" name="employeeId" id="user-employee-id">
+              <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Nombre completo para su perfil, turnos y fichajes.</small>
             </label>
 
             <!-- Campo Cliente (solo para rol === CLIENT) -->

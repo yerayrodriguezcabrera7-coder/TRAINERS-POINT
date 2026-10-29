@@ -182,15 +182,15 @@
     const roleSelect = $('user-role');
     const empField = $('employee-field');
     const cliField = $('client-field');
-    const empSelect = $('user-employee');
+    const nameInput = $('user-name');
     const cliSelect = $('user-client');
 
     const updateVisibility = () => {
       const isClient = roleSelect.value === 'CLIENT';
       empField.hidden = isClient;
       cliField.hidden = !isClient;
-      empSelect.disabled = isClient;
-      cliSelect.disabled = !isClient;
+      if (nameInput) nameInput.disabled = isClient;
+      if (cliSelect) cliSelect.disabled = !isClient;
     };
 
     roleSelect.addEventListener('change', updateVisibility);
@@ -198,14 +198,18 @@
   }
 
   function populateDropdowns() {
-    const empSelect = $('user-employee');
+    const datalist = $('employee-suggestions');
     const cliSelect = $('user-client');
 
-    const employees = manageData?.employees || [];
-    empSelect.innerHTML = employees.map(e => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+    const employees = (manageData?.employees || []).filter(e => e.name !== 'Entrenador de prueba');
+    if (datalist) {
+      datalist.innerHTML = employees.map(e => `<option value="${esc(e.name)}"></option>`).join('');
+    }
 
     const clients = manageData?.clients || [];
-    cliSelect.innerHTML = clients.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    if (cliSelect) {
+      cliSelect.innerHTML = clients.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    }
   }
 
   function openEditor(user = null) {
@@ -233,9 +237,13 @@
       $('user-username').value = user.username;
       $('user-enabled').value = String(user.enabled !== false);
       if (user.role === 'CLIENT') {
-        $('user-client').value = user.clientId || '';
+        if ($('user-client')) $('user-client').value = user.clientId || '';
+        $('user-name').value = '';
+        $('user-employee-id').value = '';
       } else {
-        $('user-employee').value = user.employeeId || '';
+        const pName = resolvePersonName(user);
+        $('user-name').value = pName === 'Entrenador de prueba' ? '' : pName;
+        $('user-employee-id').value = user.employeeId || '';
       }
       passInput.required = false;
       passLabel.innerHTML = 'Nueva contraseña <span style="font-weight: normal; color: var(--tp-muted);">(opcional)</span>';
@@ -245,6 +253,8 @@
       titleEl.textContent = 'Nuevo usuario';
       $('user-role').value = manageData?.users?.length ? 'TRAINER' : 'ADMIN';
       $('user-enabled').value = 'true';
+      $('user-name').value = '';
+      $('user-employee-id').value = '';
       passInput.required = true;
       passLabel.innerHTML = 'Contraseña <b>*</b>';
       passHelp.hidden = true;
@@ -342,11 +352,18 @@
       const username = form.username.value.trim();
       const enabled = form.enabled.value === 'true';
       const password = form.password.value;
-      const employeeId = role !== 'CLIENT' ? form.employeeId.value : null;
+      const name = role !== 'CLIENT' ? (form.name ? form.name.value.trim() : '') : '';
+      const employeeId = role !== 'CLIENT' ? (form.employeeId ? form.employeeId.value : null) : null;
       const clientId = role === 'CLIENT' ? form.clientId.value : null;
 
       if (!username) {
         errorEl.textContent = 'Indica el correo electrónico de acceso.';
+        errorEl.hidden = false;
+        return;
+      }
+
+      if (role !== 'CLIENT' && !name) {
+        errorEl.textContent = 'Escribe el nombre de la persona.';
         errorEl.hidden = false;
         return;
       }
@@ -367,7 +384,8 @@
         role,
         username,
         enabled,
-        ...(role === 'CLIENT' ? { clientId } : { employeeId }),
+        ...(name ? { name } : {}),
+        ...(role === 'CLIENT' ? { clientId } : (employeeId ? { employeeId } : {})),
         ...(password ? { password } : {}),
       };
 

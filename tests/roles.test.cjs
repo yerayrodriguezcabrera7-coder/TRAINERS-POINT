@@ -345,9 +345,22 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     // Abrir diálogo de creación
     doc.getElementById("open-create").click();
     assert.equal(doc.getElementById("user-dialog").open, true);
-    assert.ok(doc.getElementById("user-employee").textContent.includes("Admin Uno"), "El selector de empleados contiene los nombres");
+    assert.ok(doc.getElementById("user-name") !== null, "El campo de nombre de la persona existe");
+    assert.ok(doc.getElementById("employee-suggestions").innerHTML.includes("Admin Uno"), "Las sugerencias contienen los nombres de los empleados");
 
     dom.window.close();
+
+    // Crear usuario directamente con 'name' (crea el empleado automáticamente)
+    const newStaffRes = await req("manage/users", adminToken, "POST", {
+      record: { name: "Nuevo Fichaje", username: "nuevo@tp.test", password: "Password-1234", role: "RECEPTION", enabled: true },
+    });
+    assert.equal(newStaffRes.status, 201);
+    const newStaffManage = await (await req("manage", adminToken)).json();
+    const newStaff = newStaffManage.users.find((u) => u.username === "nuevo@tp.test");
+    assert.equal(newStaff.name, "Nuevo Fichaje");
+    assert.equal(newStaff.role, "RECEPTION");
+    const newEmp = newStaffManage.employees.find((e) => e.name === "Nuevo Fichaje");
+    assert.ok(newEmp, "El empleado se creó en el centro con su nombre");
 
   } finally {
     await new Promise((r) => app.close(r));
