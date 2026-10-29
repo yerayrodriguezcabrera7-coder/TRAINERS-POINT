@@ -8,7 +8,7 @@ document.getElementById('login-form').addEventListener('submit', async event => 
     if (!response.ok) throw new Error(result.error);
     sessionStorage.removeItem('calendar-admin-token');
     sessionStorage.setItem('calendar-user-token', result.token);
-    location.href = result.role === 'TRAINER' ? 'fichajes.html' : 'inicio.html';
+    location.href = result.role === 'TRAINER' ? 'index.html' : 'inicio.html';
   } catch (e) { error.textContent=e.message || 'No se pudo conectar.'; error.hidden=false; }
   finally { button.disabled=false; }
 });

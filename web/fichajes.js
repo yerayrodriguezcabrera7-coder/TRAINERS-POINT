@@ -4,6 +4,7 @@
   const serverMode = window.CALENDAR_SERVER === true;
   let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
   let data = { timezone: 'Europe/Madrid', employees: [], records: [], serverNow: new Date().toISOString() };
+  let me = null;
   let activePanel = 'clocking';
   let search = '';
   let toastTimer;
@@ -47,8 +48,13 @@
     toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000);
   }
 
+  async function loadMe() {
+    try { me = await api('me'); } catch (_) {}
+  }
+
   async function load(from = dateKey(), to = from, quiet = false) {
     try {
+      if (!me) await loadMe();
       const next = await api(`attendance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
       data = next;
       sessionStorage.setItem('calendar-admin-token', adminToken);
@@ -85,11 +91,12 @@
       const open = openRecord(employee.id);
       const color = /^#[0-9a-f]{6}$/i.test(employee.color) ? employee.color : '#758b94';
       const soft = `${color}18`;
+      const canClock = !me || me.role === 'ADMIN' || me.employeeId === employee.id;
       return `<article class="employee-row${open ? ' is-working' : ''}" role="row" data-employee="${escapeHTML(employee.id)}">
         <div class="employee-person" role="cell"><span class="avatar" style="--employee-color:${color};--employee-soft:${soft}">${escapeHTML(initials(employee.name))}</span><div><strong>${escapeHTML(employee.name)}</strong><small>Empleado del centro</small></div></div>
         <div class="status" role="cell"><strong><span class="status-dot"></span>${open ? 'Trabajando' : 'Fuera'}</strong><small>${open ? `Entrada · ${formatDateTime(open.clockIn).split(', ').pop()}` : 'Sin jornada abierta'}</small></div>
         <div class="shift-time" role="cell" data-timer="${open ? escapeHTML(open.id) : ''}">${open ? formatDuration(duration(open, now)) : '00:00:00'}<small>${open ? 'Jornada en curso' : 'Tiempo de la jornada'}</small></div>
-        <button class="clock-button ${open ? 'out' : 'in'}" data-clock="${escapeHTML(employee.id)}" data-action="${open ? 'OUT' : 'IN'}">${open ? '■ Salir' : '▶ Entrar'}</button>
+        ${canClock ? `<button class="clock-button ${open ? 'out' : 'in'}" data-clock="${escapeHTML(employee.id)}" data-action="${open ? 'OUT' : 'IN'}">${open ? '■ Salir' : '▶ Entrar'}</button>` : '<span style="color:#8a999f;font-size:12px;font-weight:600;padding:8px 0;">Solo lectura</span>'}
       </article>`;
     }).join('');
     $('employee-list').querySelectorAll('[data-clock]').forEach(button => button.addEventListener('click', () => clock(button.dataset.clock, button.dataset.action, button)));
@@ -117,6 +124,10 @@
   }
 
   async function clock(employeeId, action, button) {
+    if (me && me.role !== 'ADMIN' && me.employeeId !== employeeId) {
+      warn('Solo puedes registrar tus propios fichajes.');
+      return;
+    }
     button.disabled = true;
     try {
       await api('attendance/clock', 'POST', { employeeId, action });

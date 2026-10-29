@@ -50,7 +50,7 @@ export class Store {
     const clients = await this.clientsDb.client.findMany({
       where: { gymId: externalGym.id },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
     config.clients = clients.map(client => ({
       id: client.id,
@@ -60,6 +60,7 @@ export class Store {
       notes: client.notes || "",
       status: client.status === "ACTIVO" || client.status === "LEAD" ? "ACTIVE" as const : client.status === "BAJA" ? "BLOCKED" as const : "INACTIVE" as const,
       birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : "",
+      assignedWorkerId: (client as any).assignedWorkerId || null,
     }));
     const services = await this.clientsDb.service.findMany({
       where: { isActive: true },
@@ -316,7 +317,7 @@ export class Store {
     return slots;
   }
 
-  async attendance(gym: string, from?: string, to?: string, employeeId?: string) {
+  async attendance(gym: string, from?: string, to?: string, employeeId?: string, viewerRole?: string) {
     const current = await this.state(gym);
     const zone = current.timezone;
     const first = from
@@ -335,16 +336,31 @@ export class Store {
        ORDER BY clock_in DESC`,
       [gym, start.toUTC().toISO(), end.toUTC().toISO()],
     );
+
+    let employeesList = current.employees;
+    let recordsList = rows;
+
+    if (viewerRole === "TRAINER") {
+      employeesList = current.employees.filter((e: any) => e.id === employeeId);
+      recordsList = rows.filter(r => r.employeeId === employeeId);
+    } else if (viewerRole === "RECEPTION") {
+      employeesList = current.employees;
+      recordsList = rows.filter(r => !r.clockOut || r.employeeId === employeeId);
+    } else if (employeeId) {
+      employeesList = current.employees.filter((e: any) => e.id === employeeId);
+      recordsList = rows.filter(r => r.employeeId === employeeId);
+    }
+
     return {
       timezone: zone,
-      employees: current.employees.filter((e: any) => (!employeeId || e.id === employeeId) && (e.active !== false || rows.some(r => r.employeeId === e.id))).map(
+      employees: employeesList.filter((e: any) => (!employeeId || viewerRole === "RECEPTION" || e.id === employeeId) && (e.active !== false || recordsList.some(r => r.employeeId === e.id))).map(
         ({ id, name, color }: { id: string; name: string; color: string }) => ({
           id,
           name,
           color,
         }),
       ),
-      records: employeeId ? rows.filter(r => r.employeeId === employeeId) : rows,
+      records: recordsList,
       serverNow: new Date().toISOString(),
       from: first,
       to: last,

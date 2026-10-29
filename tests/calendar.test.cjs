@@ -449,7 +449,7 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
     const trainer=await login('trainer@example.com','Trainer-test-123');
     const receptionist=await login('desk@example.com','Reception-test-123');
     assert.equal((await request('login','', 'POST',{username:'trainer@example.com',password:'wrong'})).status,401);
-    assert.equal((await request('state',trainer)).status,403);
+    const trainerState=await (await request('state',trainer)).json();assert.equal(trainerState.employees.length,1);assert.equal(trainerState.employees[0].id,'e2');assert.equal((await request('bookings',trainer,'POST',{booking:{}})).status,403);
     const view=await (await request('manage',trainer)).json();assert.equal(view.employees.length,1);assert.equal(view.employees[0].id,'e2');assert.deepEqual(view.clients,[]);assert.deepEqual(view.users,[]);
     assert.equal((await request('config',trainer,'PUT',{config:c,revision:0})).status,403);
     assert.equal((await request('manage/users',trainer,'POST',adminBody)).status,403);

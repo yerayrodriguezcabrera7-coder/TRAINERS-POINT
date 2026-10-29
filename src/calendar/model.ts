@@ -32,6 +32,7 @@ export const clientSchema = named.extend({
   notes: z.string().max(2000),
   status: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).optional(),
   birthDate: date.or(z.literal("")).optional(),
+  assignedWorkerId: z.string().optional().nullable(),
 });
 const period = z.object({ open: time, close: time }).refine(p => p.open < p.close);
 export const employeeSchema = named.extend({

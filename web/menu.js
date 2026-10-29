@@ -86,13 +86,34 @@
       const response = await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
       if(!response.ok)return;
       const me=await response.json();
-      if(me.role!=='ADMIN')host.querySelectorAll('a.app-menu-item').forEach(a=>{
-        const href=a.getAttribute('href');
-        const allowed=['fichajes.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','clientes','gestion.html?section=services']:[])];
-        if(!allowed.includes(href)) a.hidden=true;
+      const normalize = href => (href || '').replace(/^\//, '');
+      const allowedByRole = {
+        ADMIN: null,
+        RECEPTION: ['inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'gestion.html?section=shifts'],
+        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'gestion.html?section=shifts'],
+        CLIENT: [],
+      };
+      const allowed = allowedByRole[me.role];
+      if (allowed !== null) {
+        host.querySelectorAll('a.app-menu-item').forEach(a => {
+          const href = normalize(a.getAttribute('href'));
+          if (!allowed.includes(href)) a.hidden = true;
+        });
+        host.querySelector('.menu-future')?.setAttribute('hidden', '');
+      }
+      host.querySelectorAll('.menu-group').forEach(group => {
+        group.hidden = ![...group.querySelectorAll('a')].some(a => !a.hidden);
       });
-      host.querySelectorAll('.menu-group').forEach(group=>{group.hidden=![...group.querySelectorAll('a')].some(a=>!a.hidden);});
-      if(me.role==='TRAINER')host.querySelector('.app-menu-brand').href='fichajes.html';
+      if (me.role === 'TRAINER') {
+        const brandLink = host.querySelector('.app-menu-brand');
+        if (brandLink) brandLink.href = '/index.html';
+      }
+      if (me.role === 'CLIENT') {
+        const nav = host.querySelector('#app-navigation');
+        if (nav) nav.hidden = true;
+        const center = host.querySelector('.app-menu-center');
+        if (center) center.hidden = true;
+      }
       const footer=document.createElement('div');footer.className='app-menu-account';
       const label=document.createElement('small');label.textContent=me.name;
       const link=document.createElement('a');link.href='login.html';link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';

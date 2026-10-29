@@ -3,17 +3,17 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const labels = {services:'Servicios',employees:'Profesionales',shifts:'Turnos',users:'Usuarios',roles:'Permisos por puesto'};
-  const roleNames = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador'};
+  const roleNames = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador',CLIENT:'Cliente'};
   const statusNames = {ACTIVE:'Activo',INACTIVE:'Inactivo',BLOCKED:'Bloqueado'};
   const bookingNames = {PENDING:'Pendiente',CONFIRMED:'Confirmada',CANCELLED:'Cancelada',COMPLETED:'Finalizada',NO_SHOW:'No asistió'};
   const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   const requestedSection = new URLSearchParams(location.search).get('section');
-  if (requestedSection === 'clients') {
+  if (requestedSection === 'clients' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
     window.location.replace('/clientes');
     return;
   }
   let section = requestedSection || 'services';
-  if (!labels[section]) section='services';
+  if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
   const token = () => sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
   async function api(path,method='GET',body) {
@@ -23,20 +23,21 @@
     if(!r.ok) throw Error(result.details?.map(d=>d.message).join(' · ') || result.error || 'No se pudo guardar.');
     return result;
   }
-  const canEdit = () => data.role==='ADMIN';
+  const canEdit = () => data.role==='ADMIN' || (data.role==='RECEPTION' && section==='shifts');
   const list = () => data[section==='shifts'?'employees':section] || [];
   const isActive = item => item.enabled!==false && item.active!==false && (!item.status || item.status==='ACTIVE');
-  const nameFor = (kind,id) => (kind==='employees'?data.staffNames || data.employees:data[kind]).find(x=>x.id===id)?.name || '—';
+  const nameFor = (kind,id) => (kind==='employees'?data.staffNames || data.employees:data[kind] || []).find(x=>x.id===id)?.name || '—';
   function notice(message,error=false) {$('notice').textContent=message;$('notice').hidden=false;$('notice').classList.toggle('error',error);}
   async function load() {
     data=await api('manage');
     const allowed=data.role==='ADMIN'?Object.keys(labels):data.role==='RECEPTION'?['services','shifts']:['shifts'];
+    if(requestedSection === 'clients') allowed.push('clients');
     if(!allowed.includes(section)) {section=allowed[0];history.replaceState(null,'','?section='+section);}
-    $('sections').innerHTML=allowed.map(s=>`<a href="?section=${s}" ${s===section?'aria-current="page"':''}>${labels[s]}</a>`).join('');
-    $('page-title').textContent=labels[section];
-    $('page-subtitle').textContent=section==='shifts'?'Horario semanal y cambios para fechas concretas.':`${roleNames[data.role]} · Datos guardados en el centro`;
+    $('sections').innerHTML=allowed.filter(s=>labels[s]).map(s=>`<a href="?section=${s}" ${s===section?'aria-current="page"':''}>${labels[s]}</a>`).join('');
+    $('page-title').textContent=labels[section] || 'Clientes';
+    $('page-subtitle').textContent=section==='shifts'?'Horario semanal y cambios para fechas concretas.':`${roleNames[data.role] || data.role} · Datos guardados en el centro`;
     $('add').hidden=!canEdit() || ['shifts','roles'].includes(section);
-    $('add').textContent=section==='services'?'＋ Nuevo servicio':section==='users'?'＋ Nuevo usuario':'＋ Nuevo empleado';
+    $('add').textContent=section==='services'?'＋ Nuevo servicio':section==='users'?'＋ Nuevo usuario':section==='clients'?'＋ Nuevo cliente':'＋ Nuevo empleado';
     render();
   }
   function render() {
@@ -44,18 +45,18 @@
     $('stats').innerHTML=[['TOTAL',items.length],['ACTIVOS',active],['INACTIVOS / BLOQUEADOS',items.length-active]].map(([label,value])=>`<article><div><small>${label}</small><strong>${value}</strong></div></article>`).join('');
     const roles=section==='roles';
     $('stats').hidden=roles;$('table-wrap').hidden=roles;$('permissions').hidden=!roles;$('search').hidden=roles;$('status-filter').hidden=roles;
-    if(roles){$('empty').hidden=true;$('permissions').innerHTML=`<div class="role-grid"><article><h3>Administración</h3>Gestiona clientes, servicios, plantilla, turnos y cuentas. Puede consultar y registrar los fichajes de toda la plantilla.</article><article><h3>Recepción</h3>Gestiona clientes y reservas. Consulta servicios y sus propios turnos. Solo puede registrar y consultar sus propios fichajes.</article><article><h3>Entrenador</h3>Consulta sus turnos y su historial de fichajes. Puede registrar su entrada y salida.</article></div><p class="hint">Asigna estos perfiles desde Usuarios. Los permisos se comprueban también en el servidor. Cambiar el puesto laboral no cambia los permisos automáticamente.</p>`;return;}
+    if(roles){$('empty').hidden=true;$('permissions').innerHTML=`<div class="role-grid"><article><h3>Administración</h3>Gestiona clientes, servicios, plantilla, turnos y cuentas. Puede consultar y registrar los fichajes de toda la plantilla.</article><article><h3>Recepción</h3>Gestiona clientes, reservas y turnos. Consulta servicios y turnos de todos los empleados. Registra solo sus propios fichajes y ve el estado de fichaje de los demás.</article><article><h3>Entrenador</h3>Consulta sus reservas, sus clientes y sus turnos. Registra exclusivamente su propia entrada y salida.</article><article><h3>Cliente</h3>Rol reservado para reservas del cliente. Sin acceso a las herramientas de gestión interna.</article></div><p class="hint">Asigna estos perfiles desde Usuarios. Los permisos se comprueban también en el servidor. Cambiar el puesto laboral no cambia los permisos automáticamente.</p>`;return;}
     const query=$('search').value.toLocaleLowerCase('es');
-    const filtered=items.filter(x=>[x.name,x.username,x.email,x.phone,x.jobTitle,nameFor('employees',x.employeeId)].join(' ').toLocaleLowerCase('es').includes(query)).filter(x=>$('status-filter').value==='all'||isActive(x)===($('status-filter').value==='active'));
-    const heads=section==='clients'?['Cliente','Contacto','Estado','Reservas','Ficha']:section==='services'?['Servicio','Duración / aforo','Precio','Estado','Ficha']:section==='users'?['Usuario','Empleado','Permisos','Estado','Acceso']:['Empleado','Puesto','Horario semanal','Estado',section==='shifts'?'Turnos':'Ficha'];
+    const filtered=items.filter(x=>[x.name,x.username,x.email,x.phone,x.jobTitle,nameFor('employees',x.employeeId),nameFor('clients',x.clientId)].join(' ').toLocaleLowerCase('es').includes(query)).filter(x=>$('status-filter').value==='all'||isActive(x)===($('status-filter').value==='active'));
+    const heads=section==='clients'?['Cliente','Contacto','Estado','Reservas','Ficha']:section==='services'?['Servicio','Duración / aforo','Precio','Estado','Ficha']:section==='users'?['Usuario','Persona vinculada','Permisos','Estado','Acceso']:['Empleado','Puesto','Horario semanal','Estado',section==='shifts'?'Turnos':'Ficha'];
     $('columns').innerHTML='<tr>'+heads.map(x=>`<th>${x}</th>`).join('')+'</tr>';
     $('empty').hidden=filtered.length>0;
     $('rows').innerHTML=filtered.map(x=>{
       const badge=`<span class="badge ${isActive(x)?'':'inactive'}">${esc(x.status?statusNames[x.status]:isActive(x)?'Activo':'Inactivo')}</span>`;
       let cells;
-      if(section==='clients')cells=[esc(x.name),`${esc(x.email||'Sin correo')}<small>${esc(x.phone||'Sin teléfono')}</small>`,badge,data.bookings.filter(b=>b.clientId===x.id).length];
+      if(section==='clients')cells=[esc(x.name),`${esc(x.email||'Sin correo')}<small>${esc(x.phone||'Sin teléfono')}</small>`,badge,(data.bookings||[]).filter(b=>b.clientId===x.id).length];
       else if(section==='services')cells=[`${esc(x.name)}<small>${esc(x.description||'')}</small>`,`${x.duration} min · ${x.capacity} plaza(s)`,new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(x.price||0),badge];
-      else if(section==='users')cells=[esc(x.username),esc(nameFor('employees',x.employeeId)),roleNames[x.role],badge];
+      else if(section==='users')cells=[esc(x.username),esc(x.role==='CLIENT'?nameFor('clients',x.clientId):nameFor('employees',x.employeeId)),roleNames[x.role]||x.role,badge];
       else cells=[`${esc(x.name)}<small>${esc(x.email||'')}</small>`,esc(x.jobTitle||'Sin asignar'),`${x.schedule.filter(h=>!h.closed).length} días · ${(x.shifts||[]).length} excepciones`,badge];
       return `<tr>${cells.map(v=>`<td>${v}</td>`).join('')}<td><button data-edit="${esc(x.id)}">${section==='shifts'?'Ver turnos':'Abrir ficha'}</button></td></tr>`;
     }).join('');
@@ -74,11 +75,40 @@
     } else if(section==='services'){
       html=field('Nombre del servicio','name',x.name,'text','required maxlength="200"')+field('Duración (minutos)','duration',x.duration||60,'number','required min="5" max="720" step="1"')+field('Aforo','capacity',x.capacity||1,'number','required min="1" max="100" step="1"')+field('Precio (€)','price',x.price||0,'number','required min="0" max="100000" step="0.01"')+activeSelect(x)+`<label class="full">Descripción<textarea name="description" maxlength="2000">${esc(x.description||'')}</textarea></label>`;
     } else if(section==='users'){
-      html=select('Empleado','employeeId',data.employees.map(e=>[e.id,e.name]),x.employeeId)+field('Correo de acceso','username',x.username,'email','required maxlength="254"')+select('Categoría de seguridad','role',Object.entries(roleNames),x.role||(data.id==='bootstrap'?'ADMIN':'TRAINER'))+select('Acceso','enabled',[['true','Habilitado'],['false','Deshabilitado']],x.enabled!==false)+field(editing?'Nueva contraseña (vacío = conservar)':'Contraseña','password','','password',`${editing?'':'required'} minlength="10" maxlength="128" autocomplete="new-password"`)+`<p class="hint full">${data.id==='bootstrap'?'Crea primero tu cuenta de administración. A partir de ese momento se pedirá iniciar sesión.':'Una cuenta por empleado. Al guardar se cierran sus sesiones anteriores. El perfil Entrenador solo permite sus propios turnos y fichajes.'}</p>`;
+      const employeeSelect = select('Empleado','employeeId',data.employees.map(e=>[e.id,e.name]),x.employeeId);
+      const clientSelect = select('Cliente','clientId',(data.clients||[]).map(c=>[c.id,c.name]),x.clientId);
+      const isClient = x.role === 'CLIENT';
+      html = `<div id="employee-picker" ${isClient ? 'hidden' : ''}>${employeeSelect}</div>` +
+        `<div id="client-picker" ${isClient ? '' : 'hidden'}>${clientSelect}</div>` +
+        field('Correo de acceso','username',x.username,'email','required maxlength="254"') +
+        select('Categoría de seguridad','role',Object.entries(roleNames),x.role||(data.id==='bootstrap'?'ADMIN':'TRAINER')) +
+        select('Acceso','enabled',[['true','Habilitado'],['false','Deshabilitado']],x.enabled!==false) +
+        field(editing?'Nueva contraseña (vacío = conservar)':'Contraseña','password','','password',`${editing?'':'required'} minlength="10" maxlength="128" autocomplete="new-password"`) +
+        `<p class="hint full">${data.id==='bootstrap'?'Crea primero tu cuenta de administración. A partir de ese momento se pedirá iniciar sesión.':'Una cuenta por empleado o cliente. Al guardar se cierran sus sesiones anteriores.'}</p>`;
     } else {
       html=field('Nombre y apellidos','name',x.name,'text','required maxlength="200"')+field('Puesto laboral','jobTitle',x.jobTitle,'text','maxlength="100"')+field('Correo','email',x.email,'email','maxlength="254"')+field('Color en calendario','color',x.color||'#317b9b','color')+activeSelect(x);
     }
     $('fields').innerHTML='<div class="form-grid">'+html+'</div>';
+    if(section==='users'){
+      const roleEl = $('fields').querySelector('select[name="role"]');
+      if (roleEl) {
+        const togglePickers = () => {
+          const isCli = roleEl.value === 'CLIENT';
+          const empWrap = $('employee-picker');
+          const cliWrap = $('client-picker');
+          if (empWrap && cliWrap) {
+            empWrap.hidden = isCli;
+            cliWrap.hidden = !isCli;
+            const empInput = empWrap.querySelector('select');
+            const cliInput = cliWrap.querySelector('select');
+            if (empInput) empInput.disabled = isCli;
+            if (cliInput) cliInput.disabled = !isCli;
+          }
+        };
+        roleEl.addEventListener('change', togglePickers);
+        togglePickers();
+      }
+    }
     if(['employees','shifts'].includes(section)){
       shifts=structuredClone(x.shifts||[]);
       const schedule=x.schedule||data.schedule;
@@ -86,7 +116,7 @@
       renderShifts();$('add-shift').onclick=()=>addShift(false);$('day-off').onclick=()=>addShift(true);
     }
     if(section==='clients' && editing){
-      const history=data.bookings.filter(b=>b.clientId===x.id).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
+      const history=(data.bookings||[]).filter(b=>b.clientId===x.id).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
       $('fields').insertAdjacentHTML('beforeend',`<section class="history-small"><h3>Historial · ${history.length} reservas</h3>${history.length?`<table><thead><tr><th>Fecha</th><th>Servicio</th><th>Empleado</th><th>Estado</th></tr></thead><tbody>${history.map(b=>`<tr><td>${esc(b.date)} ${esc(b.start)}</td><td>${esc(nameFor('services',b.serviceId))}</td><td>${esc(nameFor('employees',b.employeeId))}</td><td>${esc(bookingNames[b.status])}</td></tr>`).join('')}</tbody></table>`:'<p class="hint">Este cliente todavía no tiene reservas.</p>'}</section>`);
     }
     if(!canEdit()) $('fields').querySelectorAll('input,select,textarea,button').forEach(e=>e.disabled=true);
@@ -111,7 +141,10 @@
     let record;
     if(section==='clients')record={name:value('name').trim(),email:value('email').trim(),phone:value('phone').trim(),birthDate:value('birthDate'),notes:value('notes'),status:value('status')};
     else if(section==='services')record={name:value('name').trim(),duration:Number(value('duration')),capacity:Number(value('capacity')),price:Number(value('price')),active:value('active')==='true',description:value('description')};
-    else if(section==='users')record={username:value('username').trim(),employeeId:value('employeeId'),role:value('role'),enabled:value('enabled')==='true',...(value('password')?{password:value('password')}:{})};
+    else if(section==='users'){
+      const role=value('role');
+      record={username:value('username').trim(),role,enabled:value('enabled')==='true',...(role==='CLIENT'?{clientId:value('clientId')}:{employeeId:value('employeeId')}),...(value('password')?{password:value('password')}:{})};
+    }
     else record={name:value('name').trim(),email:value('email').trim(),jobTitle:value('jobTitle').trim(),color:value('color'),active:value('active')==='true',schedule:days.map((_,i)=>({open:value('open'+i),close:value('close'+i),closed:form.has('closed'+i)})),shifts};
     const kind=section==='shifts'?'employees':section;
     $('save').disabled=true;

@@ -15,7 +15,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "./lib/prisma";
 import { Store, migration as calendarMigration } from "./calendar/store";
-import { accessMigration } from "./calendar/access";
+import { accessMigration, Access, type Identity } from "./calendar/access";
 import { server as createCalendarServer } from "./calendar/http";
 import { progressMigration } from "./progress-migration";
 
@@ -28,6 +28,9 @@ const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO",
 const validAttendanceStatuses: AttendanceStatus[] = ["PENDIENTE", "ASISTIO", "NO_ASISTIO", "CANCELADA"];
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
 let calendarBootstrapToken = "";
+let calendarAccess: Access | undefined;
+let calendarPool: Pool | undefined;
+let currentConfiguredGym = "trainers-point-bizkaia";
 
 type ClientInput = {
   firstName: string;
@@ -442,6 +445,60 @@ function hasTrustedOrigin(request: IncomingMessage, port: number): boolean {
 }
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
+  const isPublic = url.pathname === "/api/health" || url.pathname === "/api/login" || url.pathname.startsWith("/api/public/");
+  if (!isPublic && calendarAccess) {
+    const bearer = (request.headers.authorization || "").replace(/^Bearer /, "");
+    const selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;
+    let identity: Identity | null = null;
+    if (bearer && bearer === calendarBootstrapToken && (await calendarAccess.needsSetup(selectedGym))) {
+      identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null };
+    } else if (bearer) {
+      try {
+        identity = await calendarAccess.identify(selectedGym, bearer);
+      } catch {
+        identity = null;
+      }
+    }
+    if (!identity) {
+      const calendarOnlyRoutes = ["/api/me", "/api/logout", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
+      const isCalendarOnly = calendarOnlyRoutes.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
+      if (isCalendarOnly && calendarHandler) {
+        await calendarHandler(request, response);
+        return;
+      }
+      sendError(response, 401, "Inicia sesión para continuar.");
+      return;
+    }
+    if (identity.role === "CLIENT") {
+      const isMeOrLogout = url.pathname === "/api/me" || url.pathname === "/api/logout";
+      if (!isMeOrLogout) {
+        sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
+        return;
+      }
+    }
+    if (url.pathname.startsWith("/api/gyms")) {
+      if (identity.role !== "ADMIN") {
+        sendError(response, 403, "Solo administración puede gestionar sedes.");
+        return;
+      }
+    }
+    if (identity.role === "TRAINER") {
+      if (url.pathname.startsWith("/api/services") && request.method !== "GET") {
+        sendError(response, 403, "Tu perfil no permite modificar servicios.");
+        return;
+      }
+      if (url.pathname.startsWith("/api/clients") && request.method !== "GET") {
+        sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
+        return;
+      }
+      if (url.pathname.startsWith("/api/service-packages") || url.pathname.includes("/attendance")) {
+        sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
+        return;
+      }
+    }
+    (request as any).identity = identity;
+    (request as any).selectedGym = selectedGym;
+  }
   if (request.method === "GET" && url.pathname === "/api/services") {
     const services = await prisma.service.findMany({
       where: { isActive: true },
@@ -519,7 +576,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         id: true,
         firstName: true,
         lastName: true,
-        dni: true,
+        dni: true, assignedWorkerId: true,
         address: true,
         objective: true,
         birthDate: true,
@@ -545,6 +602,17 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
     });
     if (!client) { sendError(response, 404, "No se encontró el cliente."); return; }
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1",
+        [(request as any).selectedGym || currentConfiguredGym, empId, client.id]
+      )).rows.length > 0 : false;
+      if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
+        sendError(response, 403, "No tienes acceso a esta ficha de cliente.");
+        return;
+      }
+    }
     const measurements = await prisma.clientMeasurement.findMany({
       where: { clientId: client.id },
       orderBy: { measuredAt: "asc" },
@@ -615,7 +683,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         data,
         select: {
           id: true,
-          dni: true,
+          dni: true, assignedWorkerId: true,
           address: true,
           birthDate: true,
           sex: true,
@@ -717,13 +785,26 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");
       return;
     }
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1",
+        [(request as any).selectedGym || currentConfiguredGym, empId, client.id]
+      )).rows.length > 0 : false;
+      if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
+        sendError(response, 403, "No tienes acceso a esta ficha de cliente."); return; } /*
+        return;
+      }
+      return;
+    }
 
+*/ }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
       include: { service: { select: { id: true, name: true, durationMin: true } } },
@@ -1033,6 +1114,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           }
         : {}),
     };
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(todayStart);
@@ -1044,8 +1126,24 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           attendance: AttendanceStatus.PENDIENTE,
         },
       };
+
     }
 
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT data->>'clientId' as cid FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2",
+        [(request as any).selectedGym || currentConfiguredGym, empId]
+      )).rows.map((r: any) => r.cid) : [];
+      const trainerConditions: Prisma.ClientWhereInput[] = [];
+      if (empId) trainerConditions.push({ assignedWorkerId: empId });
+      if (trainerBookings.length) trainerConditions.push({ id: { in: trainerBookings } });
+      if (trainerConditions.length) {
+        where.AND = [{ OR: trainerConditions }];
+      } else {
+        where.id = "00000000-0000-0000-0000-000000000000";
+      }
+    }
     const [clients, total, grouped] = await Promise.all([
       prisma.client.findMany({
         where,
@@ -1197,7 +1295,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           id: true,
           firstName: true,
           lastName: true,
-          dni: true,
+          dni: true, assignedWorkerId: true,
           address: true,
           email: true,
           phone: true,
@@ -1407,7 +1505,7 @@ const server = createServer(async (request, response) => {
     });
 
     if (url.pathname === "/runtime.js") {
-      response.end(`window.CALENDAR_SERVER=true;window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
+      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||window.CALENDAR_DEV_TOKEN||sessionStorage.getItem('calendar-admin-token')||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
       return;
     }
 
@@ -1436,12 +1534,15 @@ const server = createServer(async (request, response) => {
 
 async function start(): Promise<void> {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  calendarPool = pool;
   const store = new Store(pool);
+  calendarAccess = new Access(pool);
   await pool.query(calendarMigration);
   await pool.query(accessMigration);
   await pool.query(progressMigration);
   const configuredGym = (await prisma.gym.findFirst({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true } }))?.id || "trainers-point-bizkaia";
   let gym = configuredGym;
+  currentConfiguredGym = gym;
   const schedule = Array.from({ length: 7 }, (_, i) => ({ open: "09:00", close: i === 5 ? "14:00" : "21:00", closed: i === 6 }));
   await store.seed(gym, {
     timezone: "Europe/Madrid",
