@@ -12,6 +12,10 @@
     window.location.replace('/clientes');
     return;
   }
+  if (requestedSection === 'users' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+    window.location.replace('/usuarios');
+    return;
+  }
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
@@ -48,7 +52,7 @@
     if(roles){$('empty').hidden=true;$('permissions').innerHTML=`<div class="role-grid"><article><h3>Administración</h3>Gestiona clientes, servicios, plantilla, turnos y cuentas. Puede consultar y registrar los fichajes de toda la plantilla.</article><article><h3>Recepción</h3>Gestiona clientes, reservas y turnos. Consulta servicios y turnos de todos los empleados. Registra solo sus propios fichajes y ve el estado de fichaje de los demás.</article><article><h3>Entrenador</h3>Consulta sus reservas, sus clientes y sus turnos. Registra exclusivamente su propia entrada y salida.</article><article><h3>Cliente</h3>Rol reservado para reservas del cliente. Sin acceso a las herramientas de gestión interna.</article></div><p class="hint">Asigna estos perfiles desde Usuarios. Los permisos se comprueban también en el servidor. Cambiar el puesto laboral no cambia los permisos automáticamente.</p>`;return;}
     const query=$('search').value.toLocaleLowerCase('es');
     const filtered=items.filter(x=>[x.name,x.username,x.email,x.phone,x.jobTitle,nameFor('employees',x.employeeId),nameFor('clients',x.clientId)].join(' ').toLocaleLowerCase('es').includes(query)).filter(x=>$('status-filter').value==='all'||isActive(x)===($('status-filter').value==='active'));
-    const heads=section==='clients'?['Cliente','Contacto','Estado','Reservas','Ficha']:section==='services'?['Servicio','Duración / aforo','Precio','Estado','Ficha']:section==='users'?['Usuario','Persona vinculada','Permisos','Estado','Acceso']:['Empleado','Puesto','Horario semanal','Estado',section==='shifts'?'Turnos':'Ficha'];
+    const heads=section==='clients'?['Cliente','Contacto','Estado','Reservas','Ficha']:section==='services'?['Servicio','Duración / aforo','Precio','Estado','Ficha']:section==='users'?['Usuario','Empleado','Permisos','Estado','Acceso']:['Empleado','Puesto','Horario semanal','Estado',section==='shifts'?'Turnos':'Ficha'];
     $('columns').innerHTML='<tr>'+heads.map(x=>`<th>${x}</th>`).join('')+'</tr>';
     $('empty').hidden=filtered.length>0;
     $('rows').innerHTML=filtered.map(x=>{
@@ -56,7 +60,7 @@
       let cells;
       if(section==='clients')cells=[esc(x.name),`${esc(x.email||'Sin correo')}<small>${esc(x.phone||'Sin teléfono')}</small>`,badge,(data.bookings||[]).filter(b=>b.clientId===x.id).length];
       else if(section==='services')cells=[`${esc(x.name)}<small>${esc(x.description||'')}</small>`,`${x.duration} min · ${x.capacity} plaza(s)`,new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(x.price||0),badge];
-      else if(section==='users')cells=[esc(x.username),esc(x.role==='CLIENT'?nameFor('clients',x.clientId):nameFor('employees',x.employeeId)),roleNames[x.role]||x.role,badge];
+      else if(section==='users')cells=[esc(x.username),esc(x.name||(x.role==='CLIENT'?nameFor('clients',x.clientId):nameFor('employees',x.employeeId))),roleNames[x.role]||x.role,badge];
       else cells=[`${esc(x.name)}<small>${esc(x.email||'')}</small>`,esc(x.jobTitle||'Sin asignar'),`${x.schedule.filter(h=>!h.closed).length} días · ${(x.shifts||[]).length} excepciones`,badge];
       return `<tr>${cells.map(v=>`<td>${v}</td>`).join('')}<td><button data-edit="${esc(x.id)}">${section==='shifts'?'Ver turnos':'Abrir ficha'}</button></td></tr>`;
     }).join('');

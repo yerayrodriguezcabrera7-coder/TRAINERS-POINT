@@ -25,13 +25,13 @@
     ['Inicio','home','/inicio.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/gestion.html?section=services'],
     ['Profesionales','staff','/gestion.html?section=employees'], ['Fichajes','clock','/fichajes.html'],
-    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','gestion.html?section=users'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
+    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
+  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : (location.pathname === '/usuarios' || location.pathname === '/usuarios.html') ? '/usuarios' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';

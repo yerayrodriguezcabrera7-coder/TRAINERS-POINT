@@ -52,8 +52,23 @@ export class Access {
     return !(await this.pool.query("SELECT 1 FROM calendar.users WHERE gym_id=$1 LIMIT 1",[gym])).rows.length;
   }
   async list(gym: string) {
-    return (await this.pool.query(`SELECT id,employee_id AS "employeeId",client_id AS "clientId",username,role,enabled
-      FROM calendar.users WHERE gym_id=$1 ORDER BY username`, [gym])).rows;
+    const [usersRes, gymRes] = await Promise.all([
+      this.pool.query(`SELECT id,employee_id AS "employeeId",client_id AS "clientId",username,role,enabled
+        FROM calendar.users WHERE gym_id=$1 ORDER BY username`, [gym]),
+      this.pool.query(`SELECT config FROM calendar.gyms WHERE id=$1`, [gym]),
+    ]);
+    const config = gymRes.rows[0]?.config || {};
+    const employees: any[] = config.employees || [];
+    const clients: any[] = config.clients || [];
+    return usersRes.rows.map((u: any) => {
+      let name = "";
+      if (u.role === "CLIENT") {
+        name = clients.find((c: any) => c.id === u.clientId)?.name || "";
+      } else {
+        name = employees.find((e: any) => e.id === u.employeeId)?.name || "";
+      }
+      return { ...u, name };
+    });
   }
   async save(gym: string, raw: unknown, id?: string) {
     const input = accountSchema.parse(raw);

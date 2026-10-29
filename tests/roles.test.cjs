@@ -279,15 +279,75 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e4", action: "OUT" })).status, 201);
 
     // ==========================================
-    // REQUISITO: Administrador accede a todo
+    // REQUISITO: Administrador accede a todo y ve nombres en lista de usuarios
     // ==========================================
     assert.equal((await req("state", adminToken)).status, 200);
-    assert.equal((await req("manage", adminToken)).status, 200);
+    const adminManageRes = await req("manage", adminToken);
+    assert.equal(adminManageRes.status, 200);
+    const adminManage = await adminManageRes.json();
+    assert.ok(adminManage.users.length >= 4);
+    const adminUser = adminManage.users.find(u => u.role === "ADMIN");
+    assert.equal(adminUser.name, "Admin Uno");
+    const trainerUser = adminManage.users.find(u => u.role === "TRAINER" && u.employeeId === "e2");
+    assert.equal(trainerUser.name, "Entrenador Dos");
+    const clientUser = adminManage.users.find(u => u.role === "CLIENT");
+    assert.equal(clientUser.name, "Cliente Cero");
+
     assert.equal((await req("clients", adminToken)).status, 200);
     assert.equal((await req("attendance", adminToken)).status, 200);
     // Administrador puede fichar por sí mismo o por otros (Decisión 7.B)
     assert.equal((await req("attendance/clock", adminToken, "POST", { employeeId: "e1", action: "IN" })).status, 201);
     assert.equal((await req("attendance/clock", adminToken, "POST", { employeeId: "e2", action: "OUT" })).status, 201);
+
+    // ==========================================
+    // REQUISITO: Interfaz Usuarios (estética idéntica a clientes y nombres de empleado)
+    // ==========================================
+    const { JSDOM } = require("jsdom");
+    const { readFile } = require("node:fs/promises");
+    const usersHtml = await readFile("public/users.html", "utf-8");
+    const usersJs = await readFile("public/users.js", "utf-8");
+
+    const dom = new JSDOM(usersHtml, {
+      url: "http://127.0.0.1:3000/usuarios",
+      runScripts: "dangerously",
+      beforeParse(w) {
+        w.sessionStorage.setItem("calendar-user-token", adminToken);
+        w.fetch = (p, o) => fetch(new URL(p, base), o);
+        w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+        w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+      },
+    });
+
+    dom.window.eval(usersJs);
+
+    const until = async (fn) => {
+      const end = Date.now() + 5000;
+      while (Date.now() < end) {
+        if (fn()) return;
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      throw Error("UI timeout en public/users.html");
+    };
+
+    const doc = dom.window.document;
+    await until(() => doc.querySelectorAll(".client-card-modern").length >= 4);
+
+    const cardNames = [...doc.querySelectorAll(".client-card-name")].map((el) => el.textContent.trim());
+    assert.ok(cardNames.includes("Admin Uno"), "Muestra el nombre del empleado Admin Uno");
+    assert.ok(cardNames.includes("Entrenador Dos"), "Muestra el nombre del empleado Entrenador Dos");
+    assert.ok(cardNames.includes("Cliente Cero"), "Muestra el nombre del cliente Cliente Cero");
+
+    // Filtro rápido por chips
+    const trainerChip = doc.querySelector('.filter-chip[data-filter="TRAINER"]');
+    trainerChip.click();
+    assert.equal(doc.querySelectorAll(".client-card-modern").length, 2, "Filtro entrenadores muestra los 2 entrenadores");
+
+    // Abrir diálogo de creación
+    doc.getElementById("open-create").click();
+    assert.equal(doc.getElementById("user-dialog").open, true);
+    assert.ok(doc.getElementById("user-employee").textContent.includes("Admin Uno"), "El selector de empleados contiene los nombres");
+
+    dom.window.close();
 
   } finally {
     await new Promise((r) => app.close(r));
