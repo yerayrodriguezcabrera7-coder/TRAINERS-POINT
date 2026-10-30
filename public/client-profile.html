@@ -33,6 +33,9 @@
 
           <section class="profile-overview-grid" aria-label="Resumen del cliente">
             <article class="profile-info-card"><span>CONTACTO</span><strong id="profile-email">—</strong><small id="profile-phone">—</small></article>
+            <article id="profile-debt-card" class="profile-info-card profile-debt-card">
+              <span>ESTADO DE PAGO</span><strong id="profile-debt-status">Comprobando…</strong><small id="profile-debt-amount">Deudas pendientes</small>
+            </article>
             <article class="profile-info-card profile-gym-card">
               <span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small>
               <form id="profile-gym-form" class="profile-gym-form" hidden>
@@ -45,8 +48,8 @@
           </section>
 
           <div class="profile-layout">
-            <section class="profile-card client-details-section" aria-labelledby="client-details-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">DATOS DE LA PERSONA</p><h2 id="client-details-title">Preferencias y salud</h2></div></div>
+            <details class="profile-card profile-accordion client-details-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">DATOS DE LA PERSONA</span><span class="profile-accordion-title">Preferencias y salud</span></span></summary>
               <form id="client-details-form" class="client-details-form">
                 <label class="details-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off"></label>
                 <label class="details-field details-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address"></label>
@@ -105,38 +108,38 @@
                   <button class="profile-secondary-button" type="submit">Guardar datos</button>
                 </div>
               </form>
-            </section>
+            </details>
 
-            <section class="profile-card objective-section" aria-labelledby="objective-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">OBJETIVO ACTUAL</p><h2 id="objective-title">Objetivo del cliente</h2></div><span class="section-mark">01</span></div>
+            <details class="profile-card profile-accordion objective-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">OBJETIVO ACTUAL</span><span class="profile-accordion-title">Objetivo del cliente</span></span></summary>
               <form id="objective-form"><textarea id="objective-input" maxlength="1000" rows="4" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea><button class="profile-secondary-button" type="submit">Guardar objetivo</button></form>
               <p id="objective-feedback" class="profile-feedback" role="status"></p>
-            </section>
+            </details>
 
-            <section class="profile-card chart-section" aria-labelledby="chart-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">CAMBIOS</p><h2 id="chart-title">Progreso en el tiempo</h2></div><span id="measurement-count" class="section-status">Sin registros</span></div>
+            <details class="profile-card profile-accordion chart-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">CAMBIOS</span><span class="profile-accordion-title">Progreso en el tiempo</span></span><span id="measurement-count" class="section-status">Sin registros</span></summary>
               <div id="chart-tabs" class="chart-tabs" role="tablist" aria-label="Elige qué medida mostrar"></div>
               <div id="progress-chart" class="progress-chart"><p>Aún no hay medidas. Registra la primera para empezar.</p></div>
-            </section>
+            </details>
 
-            <section class="profile-card measurements-section" aria-labelledby="measurements-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">MEDIDAS</p><h2 id="measurements-title">Medidas actuales</h2></div><span id="last-measurement" class="section-status">Sin medidas</span></div>
+            <details class="profile-card profile-accordion measurements-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">MEDIDAS</span><span class="profile-accordion-title">Medidas actuales</span></span><span id="last-measurement" class="section-status">Sin medidas</span></summary>
               <div id="measurement-summary" class="measurement-summary-profile"></div>
-            </section>
+            </details>
 
-            <section class="profile-card history-section-profile" aria-labelledby="history-title">
-              <div class="section-heading"><div><p class="profile-eyebrow">REGISTROS</p><h2 id="history-title">Historial de medidas</h2></div></div>
+            <details class="profile-card profile-accordion history-section-profile">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">REGISTROS</span><span class="profile-accordion-title">Historial de medidas</span></span></summary>
               <div id="measurement-history" class="measurement-history-profile"><p class="profile-empty">Aún no hay medidas. Añade la primera para empezar a comparar.</p></div>
-            </section>
+            </details>
           </div>
-          <section class="profile-card client-purchases-section" aria-labelledby="purchases-title">
-            <div class="section-heading"><div><p class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</p><h2 id="purchases-title">Historial de compras</h2></div></div>
+          <details class="profile-card profile-accordion client-purchases-section">
+            <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</span><span class="profile-accordion-title">Historial de compras</span></span></summary>
             <div id="purchase-history" class="client-history-list"><p class="profile-empty">Cargando compras…</p></div>
-          </section>
-          <section class="profile-card client-bookings-section" aria-labelledby="bookings-title">
-            <div class="section-heading"><div><p class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</p><h2 id="bookings-title">Historial de sesiones</h2></div></div>
+          </details>
+          <details class="profile-card profile-accordion client-bookings-section">
+            <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</span><span class="profile-accordion-title">Historial de sesiones</span></span></summary>
             <div id="client-booking-history" class="client-history-list"><p class="profile-empty">Cargando sesiones…</p></div>
-          </section>
+          </details>
         </div>
       </section>
     </main>

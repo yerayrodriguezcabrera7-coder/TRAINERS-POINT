@@ -92,6 +92,16 @@ function historyDate(value) {
 }
 
 function renderPurchaseHistory(data) {
+  const debtAmounts = data.debt;
+  const debtStatus = document.querySelector("#profile-debt-status");
+  const debtAmount = document.querySelector("#profile-debt-amount");
+  const debtCard = document.querySelector("#profile-debt-card");
+  debtCard.classList.toggle("has-debt", debtAmounts.length > 0);
+  debtStatus.textContent = debtAmounts.length ? "Tiene deuda" : "Al corriente";
+  debtAmount.textContent = debtAmounts.length
+    ? debtAmounts.map(({ currency, amount }) => currencyText(amount, currency)).join(" · ")
+    : "Sin pagos pendientes";
+
   purchaseHistory.replaceChildren();
   const purchases = [
     ...data.packages.map((item) => ({

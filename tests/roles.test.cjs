@@ -356,11 +356,13 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     trainerChip.click();
     assert.equal(doc.querySelectorAll(".client-card-modern").length, 2, "Filtro entrenadores muestra los 2 entrenadores");
 
-    // Abrir diálogo de creación
-    doc.getElementById("open-create").click();
+    // Los usuarios existentes se pueden editar, pero ya no hay acción de alta.
+    assert.equal(doc.getElementById("open-create"), null, "No muestra una opción para añadir usuarios");
+    doc.querySelector(".client-card-modern").click();
     assert.equal(doc.getElementById("user-dialog").open, true);
     assert.ok(doc.getElementById("user-name") !== null, "El campo de nombre de la persona existe");
     assert.ok(doc.getElementById("employee-suggestions").innerHTML.includes("Admin Uno"), "Las sugerencias contienen los nombres de los empleados");
+    assert.notEqual(doc.getElementById("dialog-title").textContent, "Nuevo usuario", "El diálogo solo edita usuarios existentes");
 
     dom.window.close();
 

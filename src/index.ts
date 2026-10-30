@@ -11,6 +11,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   Prisma,
+  SaleStatus,
   type ClientStatus,
 } from "@prisma/client";
 import { prisma } from "./lib/prisma";
@@ -825,7 +826,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       include: { service: { select: { id: true, name: true, durationMin: true } } },
       orderBy: { purchasedAt: "desc" },
     });
-    const [bookings, bookingCounts, sales] = await Promise.all([
+    const [bookings, bookingCounts, sales, debtSales] = await Promise.all([
       prisma.booking.findMany({
         where: { clientId },
         select: {
@@ -867,7 +868,38 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
         take: 100,
       }),
+      prisma.sale.findMany({
+        where: { clientId, status: SaleStatus.COMPLETADA },
+        select: {
+          currency: true,
+          totalAmount: true,
+          payments: {
+            where: { status: PaymentStatus.PAGADO },
+            select: { amount: true },
+          },
+        },
+      }),
     ]);
+
+    const debtByCurrency = new Map<string, number>();
+    for (const servicePackage of packages) {
+      if (
+        servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
+        servicePackage.paymentStatus === PaymentStatus.FALLIDO
+      ) {
+        debtByCurrency.set("EUR", (debtByCurrency.get("EUR") ?? 0) + Number(servicePackage.totalAmount));
+      }
+    }
+    for (const sale of debtSales) {
+      const paid = sale.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const outstanding = Math.max(0, Number(sale.totalAmount) - paid);
+      if (outstanding > 0) {
+        debtByCurrency.set(sale.currency, (debtByCurrency.get(sale.currency) ?? 0) + outstanding);
+      }
+    }
+    const debt = [...debtByCurrency]
+      .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
+      .filter(({ amount }) => amount > 0);
 
     sendJson(response, 200, {
       client,
@@ -891,6 +923,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       }),
       bookings,
       sales,
+      debt,
     });
     return;
   }

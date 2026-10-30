@@ -214,11 +214,12 @@
     }
   }
 
-  function openEditor(user = null) {
+  function openEditor(user) {
     if (!manageData || manageData.role !== 'ADMIN') {
       showToast('No se han cargado los datos de administración. Inicia sesión de nuevo.', true);
       return;
     }
+    if (!user) return;
     editingUser = user;
     const dialog = $('user-dialog');
     const form = $('user-form');
@@ -247,13 +248,6 @@
         $('user-name').value = pName === 'Entrenador de prueba' ? '' : pName;
         $('user-employee-id').value = user.employeeId || '';
       }
-    } else {
-      eyebrowEl.textContent = 'NUEVA CUENTA';
-      titleEl.textContent = 'Nuevo usuario';
-      $('user-role').value = manageData?.users?.length ? 'TRAINER' : 'ADMIN';
-      $('user-enabled').value = 'true';
-      $('user-name').value = '';
-      $('user-employee-id').value = '';
     }
 
     const event = new Event('change');
@@ -264,7 +258,6 @@
 
   async function loadData() {
     const listEl = $('user-rows');
-    $('open-create').disabled = true;
     manageData = null;
     listEl.innerHTML = '<p class="list-message">Cargando usuarios…</p>';
 
@@ -275,7 +268,6 @@
         showToast('Solo administración puede gestionar los usuarios.', true);
         return;
       }
-      $('open-create').disabled = false;
       updateStats();
       renderList();
     } catch (err) {
@@ -334,7 +326,6 @@
     });
 
     // Modal dialog
-    $('open-create').addEventListener('click', () => openEditor(null));
     $('close-dialog').addEventListener('click', () => $('user-dialog').close());
     $('cancel-dialog').addEventListener('click', () => $('user-dialog').close());
 
@@ -347,7 +338,7 @@
       errorEl.textContent = '';
 
       const form = e.target;
-      if (!manageData || manageData.role !== 'ADMIN') {
+      if (!editingUser || !manageData || manageData.role !== 'ADMIN') {
         errorEl.textContent = 'No se han cargado los datos de administración. Actualiza la página e inicia sesión de nuevo.';
         errorEl.hidden = false;
         return;
@@ -381,9 +372,8 @@
 
       submitBtn.disabled = true;
       try {
-        const path = 'manage/users' + (editingUser ? '/' + encodeURIComponent(editingUser.id) : '');
-        const method = editingUser ? 'PUT' : 'POST';
-        const res = await api(path, method, { record, revision: manageData.revision });
+        const path = 'manage/users/' + encodeURIComponent(editingUser.id);
+        const res = await api(path, 'PUT', { record, revision: manageData.revision });
         if (res.token) {
           sessionStorage.removeItem('calendar-admin-token');
           sessionStorage.setItem('calendar-user-token', res.token);
@@ -393,7 +383,7 @@
           }
         }
         $('user-dialog').close();
-        showToast(editingUser ? 'Usuario actualizado correctamente.' : 'Usuario creado. Comparte Trainerspoint como contraseña temporal.');
+        showToast('Usuario actualizado correctamente.');
         await loadData();
       } catch (err) {
         errorEl.textContent = err.message;

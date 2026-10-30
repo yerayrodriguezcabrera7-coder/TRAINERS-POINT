@@ -31,10 +31,6 @@
               <h1>Usuarios <span id="heading-count" class="heading-count"></span></h1>
               <p class="page-description">Gestiona los accesos del equipo y clientes, sus perfiles y vinculaciones.</p>
             </div>
-            <button class="button button-primary" id="open-create" type="button">
-              <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-              Nuevo usuario
-            </button>
           </header>
 
           <section class="stats-grid" aria-label="Filtros rápidos de usuarios">
@@ -99,13 +95,13 @@
       </main>
     </div>
 
-    <!-- Modal Dialog para Crear / Editar Usuario -->
+    <!-- Modal Dialog para editar usuarios existentes -->
     <dialog id="user-dialog" class="client-dialog" aria-labelledby="dialog-title">
       <form id="user-form" novalidate>
         <div class="intake-header">
           <div>
             <p class="eyebrow" id="dialog-eyebrow">CUENTA DE USUARIO</p>
-            <h2 id="dialog-title">Nuevo usuario</h2>
+            <h2 id="dialog-title">Editar usuario</h2>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
