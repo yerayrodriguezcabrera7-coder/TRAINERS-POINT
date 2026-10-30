@@ -25,7 +25,7 @@
     ['Mis reservas','calendar','/mis-reservas.html'], ['Inicio','home','/inicio.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/gestion.html?section=services'],
     ['Profesionales','staff','/gestion.html?section=employees'], ['Fichajes','clock','/fichajes.html'], ['Ausencias','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
-    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
+    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','gestion.html?section=roles'], ['Productos','bag','/productos.html'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
@@ -39,7 +39,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(href===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Tu centro',['Mis reservas','Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Ausencias','Recuperaciones','Turnos']],['Administración',['Usuarios','Permisos']]];
+  const groups=[['Tu centro',['Mis reservas','Inicio','Calendario','Clientes','Servicios','Productos']],['Equipo',['Profesionales','Fichajes','Ausencias','Recuperaciones','Turnos']],['Administración',['Usuarios','Permisos']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -94,7 +94,7 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+        RECEPTION: ['productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
         CLIENT: ['mis-reservas.html'],
       };

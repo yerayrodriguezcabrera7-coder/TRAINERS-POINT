@@ -1,4 +1,7 @@
 import "dotenv/config";
+import { Inventory, inventoryPermission } from "./inventory";
+import { ApiError } from "./calendar/model";
+import { ZodError } from "zod";
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
@@ -514,6 +517,29 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
     (request as any).identity = identity;
     (request as any).selectedGym = selectedGym;
+  }
+  if (url.pathname.startsWith("/api/inventory/")) {
+    try {
+      const actor=(request as any).identity as Identity | undefined;
+      const gym=(request as any).selectedGym as string;
+      const inventory=new Inventory(prisma);
+      const product=url.pathname.match(/^\/api\/inventory\/products(?:\/([0-9a-f-]+))?$/i);
+      const reversal=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
+      inventoryPermission(actor,request.method==='GET'?'read':url.pathname==='/api/inventory/sales'?'sell':'admin');
+      if(product && request.method==='GET'&&!product[1])sendJson(response,200,{products:await inventory.products(gym)});
+      else if(product&&request.method==='POST'&&!product[1])sendJson(response,201,await inventory.saveProduct(gym,await readJsonBody(request)));
+      else if(product&&request.method==='PUT'&&product[1])sendJson(response,200,await inventory.saveProduct(gym,await readJsonBody(request),product[1]));
+      else if(product&&request.method==='DELETE'&&product[1])sendJson(response,200,await inventory.removeProduct(gym,product[1]));
+      else if(url.pathname==='/api/inventory/sales'&&request.method==='GET')sendJson(response,200,{sales:await inventory.sales(gym,url.searchParams)});
+      else if(url.pathname==='/api/inventory/sales'&&request.method==='POST')sendJson(response,201,await inventory.sell(gym,actor!.id,await readJsonBody(request)));
+      else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel'));
+      else sendError(response,404,"Operación desconocida.");
+    } catch(error) {
+      if(error instanceof ApiError)sendError(response,error.status,error.message);
+      else if(error instanceof ZodError)sendError(response,400,"Revisa los campos, cantidades y precios de la operación.");
+      else throw error;
+    }
+    return;
   }
   if (request.method === "GET" && url.pathname === "/api/services") {
     const services = await prisma.service.findMany({
@@ -1498,6 +1524,9 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/recuperaciones.js": { file: "web/recuperaciones.js", contentType: "text/javascript; charset=utf-8" },
   "/mis-reservas.html": { file: "web/mis-reservas.html", contentType: "text/html; charset=utf-8" },
   "/mis-reservas.js": { file: "web/mis-reservas.js", contentType: "text/javascript; charset=utf-8" },
+  "/productos.html": { file: "web/productos.html", contentType: "text/html; charset=utf-8" },
+  "/productos.js": { file: "web/productos.js", contentType: "text/javascript; charset=utf-8" },
+  "/productos.css": { file: "web/productos.css", contentType: "text/css; charset=utf-8" },
   "/gestion.html": { file: "web/gestion.html", contentType: "text/html; charset=utf-8" },
   "/gestion.css": { file: "web/gestion.css", contentType: "text/css; charset=utf-8" },
   "/gestion.js": { file: "web/gestion.js", contentType: "text/javascript; charset=utf-8" },

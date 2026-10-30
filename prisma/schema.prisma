@@ -424,6 +424,9 @@ model TimeEntry {
 }
 
 model Product {
+  gymKey      String?
+  stock       Int             @default(0)
+  revision    Int             @default(1)
   id          String          @id @default(uuid()) @db.Uuid
   sku         String?         @unique
   name        String
@@ -436,6 +439,7 @@ model Product {
   saleLines   SaleLine[]
 
   @@index([isActive, name])
+  @@index([gymKey])
 }
 
 model StockMovement {
@@ -454,6 +458,10 @@ model StockMovement {
 }
 
 model Sale {
+  returnKeys       String[]   @default([])
+  gymKey           String?
+  requestKey       String?    @unique
+  sellerAccountId  String?
   id               String     @id @default(uuid()) @db.Uuid
   clientId         String?    @db.Uuid
   sellerEmployeeId String?    @db.Uuid
@@ -471,11 +479,13 @@ model Sale {
   payments         Payment[]
   invoice          Invoice?
 
+  @@index([gymKey, soldAt])
   @@index([status, soldAt])
   @@index([clientId, soldAt])
 }
 
 model SaleLine {
+  returnedQuantity Int          @default(0)
   id           String       @id @default(uuid()) @db.Uuid
   saleId       String       @db.Uuid
   type         SaleLineType
