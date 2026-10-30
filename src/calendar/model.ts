@@ -32,6 +32,7 @@ export const clientSchema = named.extend({
   notes: z.string().max(2000),
   status: z.enum(["ACTIVE", "INACTIVE", "BLOCKED"]).optional(),
   birthDate: date.or(z.literal("")).optional(),
+  assignedWorkerId: z.string().optional().nullable(),
 });
 const period = z.object({ open: time, close: time }).refine(p => p.open < p.close);
 export const employeeSchema = named.extend({
@@ -55,6 +56,9 @@ export const employeeSchema = named.extend({
 export const serviceSchema = named.extend({
   duration: z.number().int().min(5).max(720),
   capacity: z.number().int().min(1).max(100),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  schedule: week.optional(),
+  employeeIds: z.array(id).optional(),
   price: z.number().min(0).max(100000).optional(),
   description: z.string().max(2000).optional(),
   active: z.boolean().optional(),
@@ -89,6 +93,9 @@ export const configSchema = z
     leaveRequests: z.array(leaveRequestSchema).max(10000).default([]),
   })
   .superRefine((c, ctx) => {
+    const colors=c.services.map(s=>s.color?.toLowerCase()).filter(Boolean);
+    if(new Set(colors).size!==colors.length) ctx.addIssue({code:"custom",message:"Cada servicio debe tener un color diferente."});
+    if(c.services.some(s=>s.employeeIds?.some(id=>!c.employees.some(e=>e.id===id)))) ctx.addIssue({code:"custom",message:"El servicio contiene entrenadores desconocidos."});
     for (const key of ["employees", "services", "rooms", "clients"] as const)
       if (new Set(c[key].map((x) => x.id)).size !== c[key].length)
         ctx.addIssue({ code: "custom", message: `IDs duplicados: ${key}` });
@@ -115,6 +122,8 @@ export const bookingSchema = z.object({
   end: time.optional(),
   status: z.enum(statuses),
   notes: z.string().max(2000).default(""),
+  recoveryId: id.nullable().optional(),
+  chargeAmount: z.number().nonnegative().optional(),
   sessionId: id.nullable().optional(),
   version: z.number().int().positive().optional(),
 });
@@ -163,6 +172,10 @@ export function normalize(input: Input, c: Config): Booking {
 export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
+  const service = c.services.find(s => s.id === b.serviceId)!;
+  if (service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
+  const serviceHours = service.schedule?.[day];
+  if (serviceHours && (serviceHours.closed || b.start < serviceHours.open || b.end > serviceHours.close)) throw new ApiError(409, "Fuera del horario del servicio.");
   const worker = c.employees.find((x) => x.id === b.employeeId)!;
   if (c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
     throw new ApiError(409, "El empleado tiene una ausencia aprobada en esa fecha.");

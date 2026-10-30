@@ -63,7 +63,7 @@ function loadData() {
   return seedData();
 }
 const serverMode = window.CALENDAR_SERVER === true;
-let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
+let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '' : '';
 $('mode-title').textContent = serverMode ? 'Servidor conectado' : 'Demostración local';
 $('mode-description').textContent = serverMode
   ? 'Reservas y disponibilidad actualizadas para tu equipo.'
@@ -78,12 +78,37 @@ async function api(path,method='GET',body) {
   return result;
 }
 let data;
+let currentUser = null;
+let awsClients = [];
+let awsClientsLoaded = false;
+async function loadBookingClients() {
+  if (!serverMode) return;
+  try {
+    const result = await api('clients?all=true');
+    awsClientsLoaded = true;
+    awsClients = (result.clients || []).map(client => ({
+      id: client.id,
+      name: `${client.firstName} ${client.lastName}`.trim(),
+      email: client.email || '',
+      phone: client.phone || '',
+      notes: client.notes || '',
+      status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
+    }));
+  } catch (_) {
+    awsClientsLoaded = false;
+  }
+}
 if(serverMode) {
   if(!adminToken){location.href='login.html';return;}
-  const me=await api('me');
-  if(me.role==='TRAINER'){location.href='fichajes.html';return;}
-  if(me.role!=='ADMIN') $('schedule-button').hidden=true;
-  try {data=await api('state');data.bookings=data.bookings.map(fromServer);sessionStorage.setItem('calendar-admin-token',adminToken);}
+  currentUser = await api('me');
+  if (currentUser.role === 'TRAINER') {
+    state.employee = currentUser.employeeId;
+    $('new-booking').hidden = true;
+    $('schedule-button').hidden = true;
+  } else if (currentUser.role !== 'ADMIN') {
+    $('schedule-button').hidden = true;
+  }
+  try {data=await api('state');data.bookings=data.bookings.map(fromServer);await loadBookingClients();sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
 let polling=false;
@@ -94,6 +119,7 @@ async function refreshServer(force=false) {
     const next=await api('state');
     if(force||next.revision!==data.revision) {
       data={...next,bookings:next.bookings.map(fromServer)};
+      await loadBookingClients();
       // Do not change form values or the version captured when a dialog was opened.
       if(!document.querySelector('dialog[open]')) setupSelects();
       render();
@@ -102,12 +128,10 @@ async function refreshServer(force=false) {
   } finally {polling=false;}
 }
 function saveData() {
-  if (serverMode || !storageWritable) return false;
-  try { localStorage.setItem(KEY, JSON.stringify(data)); return true; }
-  catch { warn('El navegador no permite guardar los cambios. Se conservarán solo hasta cerrar o recargar esta página.'); return false; }
+  if (!storageWritable) return false;
+  try { localStorage.setItem(KEY, JSON.stringify(data)); return true; } catch { warn('No hay espacio disponible en el navegador para guardar los cambios.'); return false; }
 }
-if (!serverMode && storageWritable) saveData();
-const lookup = (type, id) => data[type].find(item => item.id === id);
+function lookup(collection, id) { return data[collection].find(item => item.id === id) || { name: 'Sin asignar' }; }
 function toast(message) {
   $('toast').textContent = message;
   $('toast').hidden = false;
@@ -134,6 +158,14 @@ function setupSelects() {
   fillSelect('booking-service', data.services);
   fillSelect('booking-room', data.rooms);
   for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
+  if (currentUser?.role === 'TRAINER') {
+    state.employee = currentUser.employeeId;
+    const empFilter = $('employee-filter');
+    if (empFilter) {
+      empFilter.value = currentUser.employeeId;
+      empFilter.disabled = true;
+    }
+  }
 }
 function titleForPeriod(dates) {
   if (state.view === 'day') return prettyDate(state.date, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -159,53 +191,67 @@ function renderTimeGrid(dates, bookings, employees) {
       const start = slot * 30;
       const duration = lookup('services',state.service)?.duration || 30;
       const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && date >= leave.startDate && date <= leave.endDate);
-      const open = !absent && C.employeeAvailable(employee,date,start,start+duration,data.schedule);
+      const selected = lookup('services',state.service);
+      const serviceOpen = !selected?.schedule || C.isOpen(date,start,start+duration,selected.schedule);
+      const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id);
+      const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee,date,start,start+duration,data.schedule);
       const label = `${prettyDate(date, { day: 'numeric', month: 'long' })}, ${C.timeLabel(start)}, ${employee.name}`;
       html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
     }
-    const events = bookings.filter(b => b.date === date && b.employeeId === employee.id);
-    C.layoutEvents(events).forEach(({event:b,lane,count}) => {
-      const duration = C.minutes(b.end) - C.minutes(b.start);
-      html += `<button class="event status-${b.status} ${duration <= 30 ? 'short' : ''}" data-booking="${escapeHTML(b.id)}" style="top:${C.minutes(b.start) * 1.4 + 2}px;height:${duration * 1.4 - 4}px;left:calc(${lane / count * 100}% + 3px);width:calc(${100 / count}% - 6px)" aria-label="${escapeHTML(eventLabel(b))}" title="${escapeHTML(eventLabel(b))}"><span class="event-time">${b.start} – ${b.end}</span><strong>${escapeHTML(lookup('clients',b.clientId).name)}</strong><span class="event-service">${escapeHTML(lookup('services',b.serviceId).name)}</span><span class="event-state">${STATUS[b.status]}</span></button>`;
+    const dayBookings = bookings.filter(b => b.date === date && b.employeeId === employee.id);
+    const placed = C.layoutEvents(dayBookings);
+    placed.forEach(({ event: b, lane, count }) => {
+      const startMin = C.minutes(b.start);
+      const endMin = C.minutes(b.end);
+      const top = startMin * 1.4;
+      const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
+      const width = 100 / count;
+      const left = lane * width;
+      const currentEmployee = lookup('employees', b.employeeId);
+      const color = currentEmployee.color || '#317b9b';
+      const soft = `${color}18`;
+      const clientName = lookup('clients', b.clientId).name;
+      const serviceName = lookup('services', b.serviceId).name;
+      const roomName = lookup('rooms', b.roomId).name;
+      html += `<button class="event ${b.status}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}"><div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}</div></button>`;
     });
-    if (date === todayKey()) { const now = new Date(); html += `<div class="now-line" style="top:${(now.getHours() * 60 + now.getMinutes()) * 1.4}px"></div>`; }
+    if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
     html += '</div>';
   }));
-  return html + '</div>';
+  return `${html}</div>`;
 }
-function renderMonth(dates, bookings) {
-  let html = '<div class="month-grid">' + DAYS.map(day => `<div class="month-weekday">${day.slice(0,3)}</div>`).join('');
+
+function renderMonth(bookings) {
+  const first = `${state.date.slice(0, 7)}-01`;
+  const start = C.monday(first);
+  const dates = Array.from({ length: 42 }, (_, i) => C.addDays(start, i));
+  let html = '<div class="month-grid"><div class="month-weekdays">' + DAYS.map(d => `<div>${d.slice(0, 3)}</div>`).join('') + '</div><div class="month-days">';
   dates.forEach(date => {
-    const hours = C.hoursFor(date, data.schedule);
-    const events = bookings.filter(b => b.date === date).sort((a,b) => a.start.localeCompare(b.start));
-    html += `<div class="month-cell ${date.slice(0,7) !== state.date.slice(0,7) ? 'outside' : ''} ${date === todayKey() ? 'today' : ''} ${hours.closed ? 'closed-day' : ''}" data-month-cell="${date}"><div class="month-top"><button class="month-date" data-day="${date}" aria-label="Ver día ${prettyDate(date,{day:'numeric',month:'long'})}">${C.parseDate(date).getDate()}</button>${hours.closed ? '' : `<button class="month-add" data-slot="${date}" data-minute="${C.minutes(hours.open)}" aria-label="Nueva reserva el ${prettyDate(date,{day:'numeric',month:'long'})}">＋</button>`}</div>`;
-    events.slice(0,3).forEach(b => { html += `<button class="month-event status-${b.status}" data-booking="${escapeHTML(b.id)}" title="${escapeHTML(eventLabel(b))}" aria-label="${escapeHTML(eventLabel(b))}"><b>${b.start}–${b.end} · ${escapeHTML(lookup('clients',b.clientId).name)}</b><span>${escapeHTML(lookup('services',b.serviceId).name)}</span><span>${STATUS[b.status]}</span></button>`; });
-    if (events.length > 3) html += `<button class="month-more" data-day="${date}">Ver ${events.length - 3} más →</button>`;
-    if (hours.closed && !events.length) html += '<p class="closed-caption">Cerrado</p>';
-    html += '</div>';
+    const isCurrentMonth = date.slice(0, 7) === state.date.slice(0, 7);
+    const isToday = date === todayKey();
+    const dayBookings = bookings.filter(b => b.date === date);
+    const active = dayBookings.filter(b => b.status !== 'cancelled');
+    html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
+      const color = lookup('employees', b.employeeId).color || '#317b9b';
+      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}</span></button>`;
+    }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
-  return html + '</div>';
+  return `${html}</div></div>`;
 }
-function render(resetScroll = false) {
+
+function render(updatePeriodTitle = false) {
   const dates = visibleDates();
   const bookings = visibleBookings();
-  const employees = data.employees.filter(e => state.employee === 'all' || e.id === state.employee);
-  const scrollTop = $('calendar').scrollTop, scrollLeft = $('calendar').scrollLeft;
+  const employees = state.employee === 'all' ? data.employees.filter(e => e.active !== false) : data.employees.filter(e => e.id === state.employee);
   $('period-label').textContent = titleForPeriod(dates);
   $('jump-date').value = state.date;
-  $('today-label').textContent = prettyDate(todayKey(), { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  document.querySelectorAll('[data-view]').forEach(button => { const selected = button.dataset.view === state.view; button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', selected); });
-  const periodBookings = state.view === 'month' ? bookings.filter(b => b.date.slice(0,7) === state.date.slice(0,7)) : bookings;
-  $('stat-total').textContent = periodBookings.length;
-  $('stat-confirmed').textContent = periodBookings.filter(b => b.status === 'confirmed').length;
-  $('stat-pending').textContent = periodBookings.filter(b => b.status === 'pending').length;
-  $('stat-team').textContent = employees.length;
-  $('stat-period').textContent = {day:'Día seleccionado',week:'Semana seleccionada',month:'Mes seleccionado'}[state.view];
-  $('result-count').textContent = periodBookings.length ? `${periodBookings.length} reserva${periodBookings.length === 1 ? '' : 's'} · según filtros` : 'Sin reservas para estos filtros';
-  $('clear-filters').hidden = [state.employee,state.service,state.room].every(value => value === 'all');
-  $('calendar').innerHTML = state.view === 'month' ? renderMonth(dates, bookings) : renderTimeGrid(dates, bookings, employees);
-  $('calendar').scrollTop = resetScroll ? (state.view === 'month' ? 0 : 8 * 84) : scrollTop;
-  $('calendar').scrollLeft = resetScroll ? 0 : scrollLeft;
+  $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
+  document.querySelectorAll('[data-view]').forEach(button => {
+    const active = button.dataset.view === state.view;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  if (updatePeriodTitle) $('calendar').scrollLeft = 0;
 }
 
 function updateClientFields() {
@@ -214,6 +260,24 @@ function updateClientFields() {
   $('client-name').required = isNew;
   ['client-name','client-email','client-phone'].forEach(id => { $(id).disabled = !isNew; });
   $('view-client').hidden = isNew;
+  $('add-client').textContent = isNew ? '← Elegir un cliente existente' : '＋ Añadir nuevo cliente';
+  if (isNew) { $('client-search').value = ''; $('client-results').hidden = true; }
+}
+function availableClients() {
+  return (serverMode && awsClientsLoaded ? awsClients : data.clients).filter(client => (client.status || 'ACTIVE') === 'ACTIVE');
+}
+function renderClientResults() {
+  const query = $('client-search').value.trim().toLocaleLowerCase('es');
+  const clients = availableClients().filter(client => `${client.name} ${client.email || ''} ${client.phone || ''}`.toLocaleLowerCase('es').includes(query));
+  $('client-results').innerHTML = clients.length ? clients.map(client => `<button type="button" class="client-result" role="option" data-client-id="${escapeHTML(client.id)}"><strong>${escapeHTML(client.name)}</strong><span>${escapeHTML(client.email || client.phone || 'Sin datos de contacto')}</span></button>`).join('') : '<p class="client-results-empty">No se han encontrado clientes.</p>';
+  $('client-results').hidden = false;
+}
+function syncClientPicker() {
+  const value = $('booking-client').value;
+  if (value === 'new') { updateClientFields(); return; }
+  const client = availableClients().find(item => item.id === value);
+  $('client-search').value = client?.name || '';
+  $('client-results').hidden = true;
 }
 function updateHoursHint() {
   const date = $('booking-date').value;
@@ -224,6 +288,7 @@ function updateHoursHint() {
   $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : !periods.length ? 'Este empleado no trabaja este día.' : `Apertura: ${hours.open} – ${hours.close}. Turno: ${periods.map(p=>p.open+'–'+p.close).join(' y ')}. La reserva completa debe caber en una franja.`;
 }
 function showBooking(id, date = state.date, minute, employeeId) {
+  if (currentUser?.role === 'TRAINER' && !id) return;
   if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
   $('booking-form').reset();
   $('booking-error').hidden = true;
@@ -231,26 +296,38 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const b = id ? data.bookings.find(item => item.id === id) : null;
   state.editingVersion=b?.version;
   state.editingSnapshot=b ? {...b} : null;
-  fillSelect('booking-client', data.clients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
+  const bookingClients = serverMode && awsClientsLoaded ? awsClients : data.clients;
+  fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
   fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId));
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const start = minute ?? C.minutes(hours.open);
-  const selectedService = lookup('services',state.service);
-  const service = selectedService?.active!==false && selectedService || data.services.find(s=>s.active!==false) || data.services[0];
+  const selectedService = data.services.find(s => s.id === state.service && s.active !== false);
+  const service = selectedService || data.services.find(s => s.active !== false) || data.services[0];
   const duration = service.duration || 60;
-  const values = b || {clientId:data.clients.find(c=>(c.status||'ACTIVE')==='ACTIVE')?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
+  const values = b || {clientId:availableClients()[0]?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  syncClientPicker();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
-  $('cancel-booking').hidden = !b || b.status === 'cancelled';
+
+  const isTrainer = currentUser?.role === 'TRAINER';
+  const saveBtn = $('booking-form').querySelector('button[type="submit"]');
+  if (saveBtn) saveBtn.hidden = isTrainer;
+  if ($('cancel-booking')) $('cancel-booking').hidden = isTrainer || !b || b.status === 'cancelled';
+  if ($('add-client')) $('add-client').hidden = isTrainer;
+  $('booking-dialog').querySelectorAll('input, select, textarea').forEach(el => {
+    if (el.id !== 'client-search') el.disabled = isTrainer;
+  });
+
   updateClientFields(); updateHoursHint();
   $('booking-dialog').showModal();
 }
 function formError(id,message) { $(id).textContent = message; $(id).hidden = false; }
 $('booking-form').addEventListener('submit', async event => {
   event.preventDefault();
+  if (currentUser?.role === 'TRAINER') return;
   const clientId = $('booking-client').value;
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
   const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
@@ -260,6 +337,14 @@ $('booking-form').addEventListener('submit', async event => {
     try {
       booking.version=state.editingVersion;
       booking.sessionId=state.editingSnapshot?.sessionId||null;
+      booking.recoveryId=state.editingSnapshot?.recoveryId||null;
+      if (!state.editing) {
+        const credits=(await api('recoveries')).filter(r=>r.clientId===booking.clientId && r.status==='PENDING');
+        const compatible=credits.find(r=>r.serviceId===booking.serviceId);
+        if(compatible && window.confirm(`Este cliente tiene ${credits.length} sesiones pendientes. ¿Quieres utilizar una compatible sin generar otro cobro?`)) {
+          booking.recoveryId=compatible.id;booking.status='confirmed';
+        } else if(credits.length && !compatible) toast('Tiene recuperaciones pendientes de otro servicio. Esta reserva será normal.');
+      }
       const duration=lookup('services',booking.serviceId).duration;
       booking.end=C.timeLabel(C.minutes(booking.start)+duration);
       const client=clientId==='new'?{id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''}:undefined;
@@ -278,28 +363,42 @@ $('booking-form').addEventListener('submit', async event => {
   const persisted = saveData();
   state.date = booking.date;
   $('booking-dialog').close();
-  render();
-  const matchesFilters = visibleBookings().some(b => b.id === booking.id);
-  toast(`${persisted ? 'Reserva guardada.' : 'Reserva guardada solo en esta sesión.'}${matchesFilters ? '' : ' No se muestra con los filtros actuales.'}`);
+  render(true);
+  toast(persisted ? 'Reserva guardada con éxito.' : 'Reserva guardada solo en esta sesión.');
 });
-$('booking-client').addEventListener('change',updateClientFields);
-$('booking-date').addEventListener('change',updateHoursHint);
-$('booking-employee').addEventListener('change',updateHoursHint);
-$('booking-service').addEventListener('change',() => {
-  if (state.editing) return;
-  const duration = lookup('services',$('booking-service').value).duration || 60;
-  const end = C.minutes($('booking-start').value) + duration;
-  if (end < 1440) $('booking-end').value = C.timeLabel(end);
+
+$('add-client').addEventListener('click', () => {
+  $('booking-client').value = $('booking-client').value === 'new' ? availableClients()[0]?.id || '' : 'new';
+  updateClientFields();
+  if ($('booking-client').value !== 'new') syncClientPicker();
 });
-function updateServerEnd() {
-  if(!serverMode)return;
-  const duration=lookup('services',$('booking-service').value)?.duration||60;
-  const end=C.minutes($('booking-start').value)+duration;
-  $('booking-end').value=end<1440?C.timeLabel(end):'';
-}
-$('booking-start').addEventListener('change',updateServerEnd);
-$('booking-service').addEventListener('change',updateServerEnd);
-$('view-client').addEventListener('click',() => {
+$('client-search').addEventListener('input', renderClientResults);
+$('client-search').addEventListener('focus', renderClientResults);
+$('client-results').addEventListener('click', event => {
+  const result = event.target.closest('[data-client-id]');
+  if (!result) return;
+  $('booking-client').value = result.dataset.clientId;
+  syncClientPicker();
+});
+document.addEventListener('click', event => {
+  if (!event.target.closest('.client-picker')) $('client-results').hidden = true;
+});
+$('booking-service').addEventListener('change', () => {
+  const service = lookup('services', $('booking-service').value);
+  if (service.duration && $('booking-start').value) {
+    const end = Math.min(C.minutes($('booking-start').value) + service.duration, 1439);
+    $('booking-end').value = C.timeLabel(end);
+  }
+});
+$('booking-date').addEventListener('change', updateHoursHint);
+$('booking-start').addEventListener('change', () => {
+  const service = lookup('services', $('booking-service').value);
+  if (service.duration && $('booking-start').value) {
+    const end = Math.min(C.minutes($('booking-start').value) + service.duration, 1439);
+    $('booking-end').value = C.timeLabel(end);
+  }
+});
+$('view-client').addEventListener('click', () => {
   const client = lookup('clients',$('booking-client').value);
   if (!client) return;
   $('client-title').textContent = client.name;
@@ -368,9 +467,9 @@ $('calendar').addEventListener('click',event => {
   const day=event.target.closest('[data-day]');
   if(day){state.date=day.dataset.day;state.view='day';render(true);return;}
   const slot=event.target.closest('[data-slot]');
-  if(slot&&!slot.disabled){showBooking(null,slot.dataset.slot,Number(slot.dataset.minute),slot.dataset.employee);return;}
+  if(slot&&!slot.disabled){if(currentUser?.role==='TRAINER')return;showBooking(null,slot.dataset.slot,Number(slot.dataset.minute),slot.dataset.employee);return;}
   const cell=event.target.closest('[data-month-cell]');
-  if(cell){const date=cell.dataset.monthCell;const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
+  if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
 });
 // Other tabs must not silently overwrite this tab's in-progress form.
 window.addEventListener('storage',event => {

@@ -1,31 +1,56 @@
-# TRAINERS-POINT
+# Trainers Point
 
-## Espacio de trabajo Cobosu
+Aplicacion unica con un solo servidor, un solo puerto y un solo comando de arranque.
 
-Abre [Inicio](http://127.0.0.1:3000/inicio.html) para consultar la agenda de hoy, pendientes y equipo en jornada. El resumen utiliza datos reales y se actualiza cada 20 segundos mientras la pestaña está visible. Las reservas del resumen abren su ficha en el calendario. El diseño comparte la identidad Cobosu y agrupa la navegación por tareas.
+## Requisitos
 
-[Propuesta de producto y prioridades de implantación](docs/propuesta-producto.md).
+- Node.js 22 o superior.
+- PostgreSQL local integrado para desarrollo.
 
-## Calendario con backend
+## Instalacion
 
 ```sh
 npm install
-npm run dev:calendar
+copy .env.example .env
+npm run prisma:generate
+npm run dev
 ```
 
-Abre http://127.0.0.1:3000 para el calendario o http://127.0.0.1:3000/fichajes.html para el control horario. El modo local conecta automáticamente hasta crear la primera cuenta de administración.
-Incluye PostgreSQL local independiente, reservas transaccionales, cálculo de disponibilidad, aforo grupal, fichajes parametrizados por empleado y actualización automática del panel.
+En PowerShell puede usarse npm.cmd. No imprimas ni compartas .env.
 
-Desde el menú puedes gestionar **Clientes** (datos, notas, estado e historial), **Servicios** (duración, aforo y precio), **Profesionales**, **Turnos**, **Usuarios** y **Permisos**. Las fichas se guardan en PostgreSQL; los clientes inactivos o bloqueados no pueden recibir nuevas reservas. Usa el estado inactivo para conservar el historial.
+`npm run dev` configura y arranca PostgreSQL local en `.calendar-dev` (puerto `55439`), aplica las migraciones del CRM y del calendario, y activa una cuenta local `admin/admin` cuando aún no hay usuarios. Tanto el CRM como el calendario usan esa base local; no se conecta a AWS. Los datos de AWS no se copian: el CRM local empieza vacío. La base y sus credenciales permanecen en `.calendar-dev/`, que no se versiona.
 
-Para crear accesos: añade los empleados en Profesionales y abre Usuarios. La primera cuenta debe ser Administración, con una contraseña de al menos 10 caracteres. Esa cuenta se inicia automáticamente; las siguientes entran desde `login.html`. Recepción gestiona clientes y reservas; Entrenador consulta sus turnos y registra sus propios fichajes. Solo Administración gestiona la plantilla y los accesos. No se han creado contraseñas predeterminadas.
+## Arranque
 
-En Turnos, cada empleado tiene un horario semanal y excepciones por fecha. Puedes añadir varias franjas para una jornada partida o marcar un día libre. Estos horarios se comprueban al reservar. Las modificaciones que invalidan reservas futuras pendientes o confirmadas se rechazan con un mensaje.
+npm run dev levanta Trainers Point con recarga en:
 
-[Guía de arranque, APIs, concurrencia y límites de integración](docs/calendario-backend.md).
+http://localhost:3000/
 
-```sh
-npm test
-```
+Ctrl+C detiene el servidor de la aplicación. PostgreSQL local permanece iniciado para conservar los datos entre ejecuciones.
 
-La carpeta `web` contiene las pantallas (inicio, calendario, clientes, servicios, equipo y acceso). También funciona como demostración independiente con Live Server, usando datos locales del navegador.
+## Rutas
+
+- / o /index.html: Calendario.
+- /inicio.html: Inicio.
+- /fichajes.html: Fichajes.
+- /gestion.html?section=services: Servicios.
+- /clientes: Clientes.
+- /gimnasios: Gimnasios.
+- /login.html: Acceso del equipo.
+- /change-password.html: Cambio obligatorio de la contraseña inicial.
+
+Al crear una cuenta, el usuario de acceso es el nombre de usuario elegido y la contraseña temporal es `Trainerspoint`. El primer inicio obliga a cambiarla. Las contraseñas se almacenan con scrypt (hash con salt aleatorio), no como texto ni cifrado reversible.
+
+Crear una ficha de cliente no genera una cuenta de acceso. Si un cliente necesita acceder al calendario, su cuenta se puede crear manualmente desde la gestión de usuarios.
+
+Todas las pantallas usan un unico menu.
+
+## Scripts
+
+- npm start: compilacion y arranque unico.
+- npm run dev: desarrollo con recarga.
+- npm test: pruebas del calendario.
+- npm run db:test: comprueba la conexión configurada en `DATABASE_URL`.
+- npm run prisma:generate: genera el cliente Prisma.
+
+El directorio `.calendar-dev/` contiene la base local persistente y sus credenciales; no lo borres si quieres conservar los datos locales.

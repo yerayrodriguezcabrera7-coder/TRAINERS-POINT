@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS calendar.recoveries(gym_id text NOT NULL REFERENCES calendar.gyms(id), id text NOT NULL, original_id text NOT NULL, data jsonb NOT NULL, PRIMARY KEY(gym_id,id), UNIQUE(gym_id,original_id));

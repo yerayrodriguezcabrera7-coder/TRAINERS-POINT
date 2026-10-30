@@ -1,4 +1,4 @@
-/* Cobosu: graphite, warm paper and the red of the original club badge. */
+/* Trainers Point: graphite, warm paper and the red accent. */
 :root {
   --ink: #22282c; --muted: #657078; --red: #cf3528; --red-dark: #b02b20;
   --line: #e5e5df; --green: #267359; --green-soft: #edf5ef;
@@ -83,3 +83,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:760px) { body>main:not(.login-card) { padding: 22px 16px; }.attendance-header { gap: 12px; }.page-heading,.attendance-header { padding-bottom: 20px; margin-bottom: 20px; }h1,.page-heading h1 { font-size: 29px; }.stat,.summary article { padding: 15px; }.stat:first-child { padding-top: 13px; }.stat strong,.summary strong { font-size: 25px; }.management-card { padding: 16px; }.section-links a { padding: 10px; font-size: 11px; }.calendar-toolbar { padding: 14px; }.date-controls { flex-wrap: wrap; }.calendar-scroll { height: 62vh; }.calendar-footer { flex-wrap: wrap; }.summary-icon { display: none; } }
 @media(max-width:480px) { body>main:not(.login-card) { padding: 18px 10px; }.stat,.summary article { padding: 12px 10px; }.stat>div { flex-wrap: wrap; gap: 5px; }.stat>span,.summary small { font-size: 8px; letter-spacing: 0; }.heading-actions { width: 100%; }.filters { width: 100%; }.filters label { flex: 1; }.filters select { min-width: 110px; width: 100%; }.attendance-header .link-button { font-size: 10px; padding: 0 10px; }.management-card .panel-toolbar .primary { flex: 1; }.form-grid { gap: 13px; }.login-card { padding: 25px; } }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior: auto!important; transition: none!important; animation: none!important; } }
+
+/* Marca Trainers Point en texto (sustituye al logo anterior; sin imagen). Naranja de marca de public/clients.css. */
+.tp-wordmark { display: inline-flex; align-items: center; gap: 8px; font-family: "Segoe UI", Arial, sans-serif; font-weight: 800; letter-spacing: -.8px; font-size: 20px; line-height: 1; color: inherit; }
+.tp-wordmark .tp-initial { color: #ff8a1f; font-size: 1.15em; }
+.tp-wordmark .tp-name span { color: #ff8a1f; }
+.app-menu-brand .tp-wordmark { color: #fff; }
+.menu-collapsed .tp-wordmark .tp-name { display: none; }
+.login-card .tp-wordmark { display: flex; font-size: 28px; margin-bottom: 18px; color: var(--ink); }

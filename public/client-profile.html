@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111111">
+    <title>Ficha de cliente | Trainers Point</title>
+    <link rel="stylesheet" href="/client-profile.css">
+    <link rel="stylesheet" href="/menu.css">
+    <script src="/runtime.js" defer></script>
+    <script src="/client-profile.js" defer></script>
+    <script src="/menu.js" defer></script>
+  </head>
+  <body>
+    <aside data-app-menu aria-label="Navegación principal"></aside>
+    <main class="profile-page" id="main">
+      <header class="profile-topbar">
+        <div class="profile-breadcrumb"><a href="/clientes">Clientes</a><span>/</span><strong>Ficha</strong></div>
+      </header>
+
+      <section class="profile-content" aria-live="polite">
+        <p class="profile-eyebrow">FICHA DEL CLIENTE</p>
+        <div id="profile-loading" class="profile-loading">Cargando ficha…</div>
+        <div id="profile-error" class="profile-error" hidden></div>
+        <div id="profile-view" hidden>
+          <div class="profile-heading">
+            <div class="profile-heading-main">
+              <a class="back-link" href="/clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg>Volver a clientes</a>
+              <div class="profile-title-row"><img class="profile-heading-logo" src="/assets/trainers-point-logo.png" alt=""><div id="profile-avatar" class="profile-avatar-large"></div><div><h1 id="profile-name">Cliente</h1><p id="profile-status">Activo</p></div></div>
+            </div>
+            <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar medidas</button>
+          </div>
+
+          <section class="profile-overview-grid" aria-label="Resumen del cliente">
+            <article class="profile-info-card"><span>CONTACTO</span><strong id="profile-email">—</strong><small id="profile-phone">—</small></article>
+            <article id="profile-debt-card" class="profile-info-card profile-debt-card">
+              <span>ESTADO DE PAGO</span><strong id="profile-debt-status">Comprobando…</strong><small id="profile-debt-amount">Deudas pendientes</small>
+            </article>
+            <article class="profile-info-card profile-gym-card">
+              <span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small>
+              <form id="profile-gym-form" class="profile-gym-form" hidden>
+                <label for="profile-gym-select">Cambiar centro</label>
+                <div><select id="profile-gym-select" name="gymId" required></select><button class="profile-secondary-button" type="submit">Guardar</button></div>
+                <small id="profile-gym-feedback" class="profile-feedback" role="status" aria-live="polite"></small>
+              </form>
+            </article>
+            <article class="profile-info-card profile-objective-card"><span>OBJETIVO ACTUAL</span><strong id="profile-objective-preview">Sin objetivo definido</strong></article>
+          </section>
+
+          <div class="profile-layout">
+            <details class="profile-card profile-accordion client-details-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">DATOS DE LA PERSONA</span><span class="profile-accordion-title">Preferencias y salud</span></span></summary>
+              <form id="client-details-form" class="client-details-form">
+                <label class="details-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off"></label>
+                <label class="details-field details-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address"></label>
+                <label class="details-field"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname"></label>
+                <label class="details-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
+                <label class="details-field"><span>Sexo</span><select name="sex"><option value="">Sin indicar</option><option value="MUJER">Mujer</option><option value="HOMBRE">Hombre</option><option value="NO_INDICA">Prefiere no indicarlo</option></select></label>
+                <label class="details-field"><span>Cómo nos conoció</span><select name="source"><option value="">Sin indicar</option><option value="INSTAGRAM">Instagram</option><option value="RECOMENDACION">Recomendación</option><option value="PASO_POR_LA_PUERTA">Pasó por el centro</option><option value="GOOGLE">Google</option><option value="OTRO">Otro</option></select></label>
+                <label class="details-field"><span>Detalle del origen</span><input name="sourceDetail" maxlength="200"></label>
+                <label class="details-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="details-field"><span>Mejor franja para contactar</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
+                <label class="details-field"><span>Sesiones por semana</span><select name="sessionsPerWeek"><option value="">Sin indicar</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 o más</option></select></label>
+                <label class="details-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"></label>
+                <fieldset class="details-choice-group">
+                  <legend>Zonas con molestias</legend>
+                  <div class="details-checks">
+                    <label><input type="checkbox" name="injuries" value="RODILLA">Rodilla</label>
+                    <label><input type="checkbox" name="injuries" value="ESPALDA">Espalda</label>
+                    <label><input type="checkbox" name="injuries" value="HOMBRO">Hombro</label>
+                    <label><input type="checkbox" name="injuries" value="CUELLO">Cuello</label>
+                    <label><input type="checkbox" name="injuries" value="CADERA">Cadera</label>
+                    <label><input type="checkbox" name="injuries" value="OTRA">Otra</label>
+                  </div>
+                </fieldset>
+                <label class="details-field details-field-wide"><span>Nota sobre molestias</span><textarea name="injuryNotes" rows="2" maxlength="3000"></textarea></label>
+                <fieldset class="details-choice-group">
+                  <legend>Días disponibles</legend>
+                  <div class="details-checks details-days">
+                    <label><input type="checkbox" name="availabilityDay" value="L">L</label>
+                    <label><input type="checkbox" name="availabilityDay" value="M">M</label>
+                    <label><input type="checkbox" name="availabilityDay" value="X">X</label>
+                    <label><input type="checkbox" name="availabilityDay" value="J">J</label>
+                    <label><input type="checkbox" name="availabilityDay" value="V">V</label>
+                    <label><input type="checkbox" name="availabilityDay" value="S">S</label>
+                    <label><input type="checkbox" name="availabilityDay" value="D">D</label>
+                  </div>
+                </fieldset>
+                <fieldset class="details-choice-group">
+                  <legend>Franjas disponibles</legend>
+                  <div class="details-checks">
+                    <label><input type="checkbox" name="availabilitySlot" value="MANANA">Mañana</label>
+                    <label><input type="checkbox" name="availabilitySlot" value="MEDIODIA">Mediodía</label>
+                    <label><input type="checkbox" name="availabilitySlot" value="TARDE">Tarde</label>
+                  </div>
+                </fieldset>
+                <fieldset class="details-choice-group details-consents">
+                  <legend>Consentimientos</legend>
+                  <label><input type="checkbox" name="consentData">Uso de datos</label>
+                  <small data-consent-date="consentData">Sin registro</small>
+                  <label><input type="checkbox" name="consentMarketing">Comunicaciones comerciales</label>
+                  <small data-consent-date="consentMarketing">Sin registro</small>
+                  <label><input type="checkbox" name="consentPhotos">Fotos de progreso</label>
+                  <small data-consent-date="consentPhotos">Sin registro</small>
+                </fieldset>
+                <div class="details-actions details-field-wide">
+                  <p id="client-details-feedback" class="profile-feedback" role="status" aria-live="polite"></p>
+                  <button class="profile-secondary-button" type="submit">Guardar datos</button>
+                </div>
+              </form>
+            </details>
+
+            <details class="profile-card profile-accordion objective-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">OBJETIVO ACTUAL</span><span class="profile-accordion-title">Objetivo del cliente</span></span></summary>
+              <form id="objective-form"><textarea id="objective-input" maxlength="1000" rows="4" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea><button class="profile-secondary-button" type="submit">Guardar objetivo</button></form>
+              <p id="objective-feedback" class="profile-feedback" role="status"></p>
+            </details>
+
+            <details class="profile-card profile-accordion chart-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">CAMBIOS</span><span class="profile-accordion-title">Progreso en el tiempo</span></span><span id="measurement-count" class="section-status">Sin registros</span></summary>
+              <div id="chart-tabs" class="chart-tabs" role="tablist" aria-label="Elige qué medida mostrar"></div>
+              <div id="progress-chart" class="progress-chart"><p>Aún no hay medidas. Registra la primera para empezar.</p></div>
+            </details>
+
+            <details class="profile-card profile-accordion measurements-section">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">MEDIDAS</span><span class="profile-accordion-title">Medidas actuales</span></span><span id="last-measurement" class="section-status">Sin medidas</span></summary>
+              <div id="measurement-summary" class="measurement-summary-profile"></div>
+            </details>
+
+            <details class="profile-card profile-accordion history-section-profile">
+              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">REGISTROS</span><span class="profile-accordion-title">Historial de medidas</span></span></summary>
+              <div id="measurement-history" class="measurement-history-profile"><p class="profile-empty">Aún no hay medidas. Añade la primera para empezar a comparar.</p></div>
+            </details>
+          </div>
+          <details class="profile-card profile-accordion client-purchases-section">
+            <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</span><span class="profile-accordion-title">Historial de compras</span></span></summary>
+            <div id="purchase-history" class="client-history-list"><p class="profile-empty">Cargando compras…</p></div>
+          </details>
+          <details class="profile-card profile-accordion client-bookings-section">
+            <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</span><span class="profile-accordion-title">Historial de sesiones</span></span></summary>
+            <div id="client-booking-history" class="client-history-list"><p class="profile-empty">Cargando sesiones…</p></div>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="measurement-dialog" class="measurement-dialog">
+      <form id="measurement-form">
+        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Registrar medidas</h2><p>Anota las medidas para compararlas más adelante.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+        <div class="measurement-date-row"><label>Fecha<input id="measurement-date" name="measuredAt" type="date" required></label></div>
+        <div class="measurement-fields-profile">
+          <div class="measurement-field"><label for="measurement-weight">Peso (kg)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="weight" aria-label="Restar 0,1 kg al peso">−</button><input id="measurement-weight" name="weight" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="weight" aria-label="Sumar 0,1 kg al peso">+</button></div><small class="measurement-delta" data-delta-for="weight"></small></div>
+          <div class="measurement-field"><label for="measurement-hip">Cadera (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="hip" aria-label="Restar 0,1 cm a la cadera">−</button><input id="measurement-hip" name="hip" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="hip" aria-label="Sumar 0,1 cm a la cadera">+</button></div><small class="measurement-delta" data-delta-for="hip"></small></div>
+          <div class="measurement-field"><label for="measurement-waist">Cintura (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="waist" aria-label="Restar 0,1 cm a la cintura">−</button><input id="measurement-waist" name="waist" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="waist" aria-label="Sumar 0,1 cm a la cintura">+</button></div><small class="measurement-delta" data-delta-for="waist"></small></div>
+          <div class="measurement-field"><label for="measurement-leg">Pierna (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="leg" aria-label="Restar 0,1 cm a la pierna">−</button><input id="measurement-leg" name="leg" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="leg" aria-label="Sumar 0,1 cm a la pierna">+</button></div><small class="measurement-delta" data-delta-for="leg"></small></div>
+          <div class="measurement-field"><label for="measurement-chest">Pecho (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="chest" aria-label="Restar 0,1 cm al pecho">−</button><input id="measurement-chest" name="chest" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="chest" aria-label="Sumar 0,1 cm al pecho">+</button></div><small class="measurement-delta" data-delta-for="chest"></small></div>
+          <div class="measurement-field"><label for="measurement-arm">Brazo (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="arm" aria-label="Restar 0,1 cm al brazo">−</button><input id="measurement-arm" name="arm" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="arm" aria-label="Sumar 0,1 cm al brazo">+</button></div><small class="measurement-delta" data-delta-for="arm"></small></div>
+        </div>
+        <p id="measurement-warning" class="measurement-warning" role="status" hidden></p>
+        <label class="measurement-notes">Notas<textarea name="notes" rows="3" maxlength="1000" placeholder="Opcional"></textarea></label>
+        <p id="measurement-error" class="profile-error" role="alert" hidden></p>
+        <div class="dialog-actions-profile"><button class="profile-secondary-button" id="cancel-measurement" type="button">Cancelar</button><button id="save-measurement" class="profile-primary-button" type="submit">Guardar medidas</button></div>
+      </form>
+    </dialog>
+    <div id="toast" class="profile-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

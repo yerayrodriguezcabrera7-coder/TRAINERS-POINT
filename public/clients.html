@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111111">
+    <title>Clientes | Trainers Point</title>
+    <link rel="stylesheet" href="/clients.css">
+    <link rel="stylesheet" href="/menu.css">
+    <script src="/runtime.js" defer></script>
+    <script src="/clients.js" defer></script>
+    <script src="/menu.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside data-app-menu aria-label="Navegación principal"></aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Clientes</strong></div>
+          <div class="topbar-right">
+            <div class="profile-avatar" aria-hidden="true">TP</div>
+          </div>
+        </header>
+
+        <section class="page-content">
+          <header class="page-heading">
+            <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
+            <div class="page-heading-copy">
+              <p class="eyebrow">CENTRO · CLIENTES</p>
+              <h1>Clientes <span id="heading-count" class="heading-count"></span></h1>
+              <p class="page-description">Busca una ficha, revisa su situación y prepara la próxima sesión.</p>
+            </div>
+            <button class="button button-primary" id="open-create" type="button">
+              <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Nuevo cliente
+            </button>
+          </header>
+
+          <section class="stats-grid" aria-label="Filtros rápidos de clientes">
+            <button class="stat-card stat-card-primary" type="button" data-filter="attention" aria-pressed="false">
+              <span class="stat-label">Necesitan atención</span>
+              <strong class="stat-value" id="count-attention">—</strong>
+              <span class="stat-foot">Pagos o sesiones</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="today" aria-pressed="false">
+              <span class="stat-label">Hoy</span>
+              <strong class="stat-value" id="count-today">—</strong>
+              <span class="stat-foot">Reservas de hoy</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="low-sessions" aria-pressed="false">
+              <span class="stat-label">Sesiones por acabarse</span>
+              <strong class="stat-value" id="count-low-sessions">—</strong>
+              <span class="stat-foot">Dos o menos disponibles</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="inactive" aria-pressed="false">
+              <span class="stat-label">Pueden volver</span>
+              <strong class="stat-value" id="count-inactive">—</strong>
+              <span class="stat-foot">Clientes inactivos</span>
+            </button>
+          </section>
+
+          <section class="client-panel" aria-labelledby="client-list-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="client-list-title">Clientes</h2>
+                <p>Consulta las sesiones de hoy o busca una ficha.</p>
+              </div>
+              <span class="results-count" id="results-count"></span>
+            </div>
+
+            <div class="client-filter-chips" role="group" aria-label="Filtrar clientes">
+              <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">Todos</button>
+              <button class="filter-chip" type="button" data-filter="today" aria-pressed="false">Hoy</button>
+              <button class="filter-chip" type="button" data-filter="pending-payment" aria-pressed="false">Pago pendiente</button>
+              <button class="filter-chip" type="button" data-filter="no-sessions" aria-pressed="false">Sin sesiones</button>
+              <button class="filter-chip" type="button" data-filter="leads" aria-pressed="false">Nuevos interesados</button>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                <label class="sr-only" for="search-input">Buscar por nombre, teléfono o correo</label>
+                <input id="search-input" type="search" placeholder="Nombre, teléfono o correo" autocomplete="off">
+                <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+              </div>
+                <label class="filter-select gym-filter-select" id="gym-filter-wrapper" hidden>
+                  <span class="sr-only">Filtrar por centro</span>
+                  <select id="gym-filter">
+                      <option value="">Todos los centros</option>
+                  </select>
+                </label>
+                <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar lista" title="Actualizar lista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"/></svg></button>
+            </div>
+
+            <div id="today-view" class="today-view" aria-live="polite" hidden>
+              <p class="list-message">Cargando las sesiones de hoy…</p>
+            </div>
+
+            <div class="client-list" id="client-rows" aria-live="polite" hidden>
+                <p class="list-message">Cargando clientes…</p>
+            </div>
+            <div class="table-footer">
+              <span id="table-summary">—</span>
+              <span id="limit-note" class="limit-note" hidden>Máximo 100 clientes</span>
+            </div>
+          </section>
+          <section class="gym-panel" id="gyms" aria-labelledby="gym-list-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="gym-list-title">Centros</h2>
+                <p>Consulta quién entrena en cada centro.</p>
+              </div>
+              <button class="button button-outline" id="manage-gyms" type="button">
+                <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Añadir centro
+              </button>
+            </div>
+            <div class="gym-cards" id="gym-cards">
+              <p class="gym-loading">Cargando centros…</p>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="client-detail-dialog" class="client-detail-dialog" aria-labelledby="client-detail-title">
+      <div class="client-detail-shell">
+        <button class="icon-button detail-close" id="close-client-detail" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        <div class="detail-hero"><div class="detail-avatar" id="detail-avatar"></div><div><p class="eyebrow">FICHA DE CLIENTE</p><h2 id="client-detail-title">Cliente</h2><p id="client-detail-status">Activo</p></div></div>
+        <div class="detail-grid">
+          <section class="detail-section"><span class="detail-label">CONTACTO</span><strong id="detail-email">—</strong><span id="detail-phone">—</span></section>
+          <section class="detail-section"><span class="detail-label">CENTRO</span><strong id="detail-gym">—</strong><span id="detail-session">Sin próxima sesión</span></section>
+          <section class="detail-section"><span class="detail-label">NOTAS DEL EQUIPO</span><p id="detail-notes">No hay notas.</p></section>
+          <section class="detail-section"><span class="detail-label">ENTRENAMIENTO ACTUAL</span><p id="detail-routine">Consulta sus sesiones disponibles.</p></section>
+        </div>
+        <section class="progress-panel" aria-labelledby="progress-title">
+          <div class="progress-panel-heading"><div><p class="detail-label">EVOLUCIÓN DEL CLIENTE</p><h3 id="progress-title">Objetivo y medidas</h3></div><span id="progress-status" class="progress-status">Cargando…</span></div>
+          <form id="objective-form" class="objective-form"><label><span>Objetivo del cliente</span><textarea id="objective-input" maxlength="1000" rows="2" placeholder="Ej. Ganar fuerza y mejorar composición corporal…"></textarea></label><button class="button button-outline" type="submit">Guardar objetivo</button></form>
+          <div id="measurement-summary" class="measurement-summary"></div>
+          <div id="measurement-history" class="measurement-history"></div>
+          <form id="measurement-form" class="measurement-form"><div class="measurement-form-heading"><div><strong>Añadir medición</strong><small>Registra siempre en las mismas condiciones.</small></div><input id="measurement-date" name="measuredAt" type="date" required></div><div class="measurement-fields"><label>Peso <input name="weight" type="number" min="0.1" max="1000" step="0.01" placeholder="kg"></label><label>Cadera <input name="hip" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Cintura <input name="waist" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pierna <input name="leg" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Pecho <input name="chest" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label><label>Brazo <input name="arm" type="number" min="0.1" max="1000" step="0.01" placeholder="cm"></label></div><textarea name="notes" rows="2" maxlength="1000" placeholder="Notas de esta medición (opcional)"></textarea><button class="button button-primary" type="submit">Guardar medición</button><p id="measurement-error" class="form-error" role="alert" hidden></p></form>
+        </section>
+        <div class="detail-actions"><button class="button button-outline" id="open-detail-history" type="button">Ver sesiones y pagos</button><button class="button button-primary" id="detail-checkin" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Ha llegado</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="create-dialog" class="client-dialog" aria-labelledby="dialog-title">
+      <form id="create-form" novalidate>
+        <div class="intake-header">
+          <div>
+            <p class="eyebrow">NUEVA FICHA</p>
+            <h2 id="dialog-title">Añadir cliente</h2>
+          </div>
+          <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="intake-progress" aria-live="polite">
+          <span id="intake-step-label">Paso 1 de 4</span>
+          <div class="intake-progress-track"><span id="intake-progress-value"></span></div>
+        </div>
+        <div class="intake-layout">
+          <nav class="intake-step-list" aria-label="Pasos del alta">
+            <button type="button" data-intake-nav="0" aria-current="step"><span>01</span>Quién es</button>
+            <button type="button" data-intake-nav="1"><span>02</span>Cómo es</button>
+            <button type="button" data-intake-nav="2"><span>03</span>Salud y horario</button>
+            <button type="button" data-intake-nav="3"><span>04</span>Propuesta inicial</button>
+          </nav>
+          <div class="intake-content">
+            <section class="intake-step" data-intake-step="0" aria-labelledby="intake-title-1">
+              <p class="eyebrow">PASO 1</p><h3 id="intake-title-1">Quién es</h3><p class="intake-help">Los datos para encontrar su ficha y contactar.</p>
+              <div class="form-grid intake-fields">
+                <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden></span></label>
+                <label class="form-field"><span>Apellidos <b>*</b></span><input name="lastName" required maxlength="100" autocomplete="family-name" placeholder="Ej. García López" aria-describedby="intake-error-lastName"><span class="intake-field-error" id="intake-error-lastName" data-field-error="lastName" aria-live="polite" hidden></span></label>
+                <label class="form-field form-field-wide"><span>Teléfono <b>*</b></span><input name="phone" type="tel" required maxlength="40" autocomplete="tel" placeholder="+34 600 000 000" aria-describedby="intake-error-phone"><span class="intake-field-error" id="intake-error-phone" data-field-error="phone" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="phone" aria-live="polite"></span></label>
+                <label class="form-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off" placeholder="Opcional"></label>
+                <label class="form-field form-field-wide"><span>Correo electrónico <b>*</b></span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="laura@email.com" aria-describedby="intake-error-email"><span class="intake-field-error" id="intake-error-email" data-field-error="email" aria-live="polite" hidden></span><span class="duplicate-message" data-duplicate-for="email" aria-live="polite"></span></label>
+                <label class="form-field form-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address" placeholder="Opcional"></label>
+                <label class="form-field form-field-wide"><span>Centro <b>*</b></span><select name="gymId" id="create-gym-select" required aria-describedby="intake-error-gymId"><option value="">Selecciona un centro</option></select><span class="intake-field-error" id="intake-error-gymId" data-field-error="gymId" aria-live="polite" hidden></span></label>
+                <label class="form-field form-field-wide"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname" placeholder="Opcional"></label>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="1" aria-labelledby="intake-title-2" hidden>
+              <p class="eyebrow">PASO 2</p><h3 id="intake-title-2">Cómo es</h3><p class="intake-help">Preferencias para preparar su propuesta.</p>
+              <fieldset class="intake-choice-group">
+                <legend>Sexo</legend>
+                <div class="intake-segments">
+                  <label><input type="radio" name="sex" value="MUJER"><span>Mujer</span></label>
+                  <label><input type="radio" name="sex" value="HOMBRE"><span>Hombre</span></label>
+                  <label><input type="radio" name="sex" value="NO_INDICA"><span>Prefiero no indicarlo</span></label>
+                </div>
+                <small>Lo usamos para adaptar las medidas y las propuestas. Puedes dejarlo vacío.</small>
+              </fieldset>
+              <div class="form-grid intake-fields">
+                <label class="form-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Objetivo</legend>
+                  <div class="intake-chips">
+                    <label><input type="checkbox" name="objectiveChoice" value="Perder grasa"><span>Perder grasa</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Ganar fuerza"><span>Ganar fuerza</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Ganar masa muscular"><span>Ganar masa muscular</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Salud y movilidad"><span>Salud y movilidad</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Preparar una prueba"><span>Preparar una prueba</span></label>
+                    <label><input type="checkbox" name="objectiveChoice" value="Otro" id="objective-other-toggle"><span>Otro</span></label>
+                  </div>
+                  <label class="form-field intake-conditional" id="objective-other-field" hidden><span>¿Cuál es su objetivo?</span><input name="objectiveOther" maxlength="160"></label>
+                </fieldset>
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Cómo nos conoció</legend>
+                  <div class="intake-chips">
+                    <label><input type="radio" name="source" value="INSTAGRAM"><span>Instagram</span></label>
+                    <label><input type="radio" name="source" value="RECOMENDACION"><span>Recomendación</span></label>
+                    <label><input type="radio" name="source" value="PASO_POR_LA_PUERTA"><span>Pasó por el centro</span></label>
+                    <label><input type="radio" name="source" value="GOOGLE"><span>Google</span></label>
+                    <label><input type="radio" name="source" value="OTRO"><span>Otro</span></label>
+                  </div>
+                  <label class="form-field intake-conditional" id="source-detail-field" hidden><span>¿Quién le recomendó?</span><input name="sourceDetail" maxlength="200"></label>
+                </fieldset>
+                <label class="form-field"><span>Forma de contacto</span><select name="contactPreference"><option value="">Sin indicar</option><option value="WHATSAPP">WhatsApp</option><option value="SMS">SMS</option><option value="LLAMADA">Llamada</option><option value="EMAIL">Correo electrónico</option></select></label>
+                <label class="form-field"><span>Franja de contacto</span><select name="contactSlot"><option value="">Sin indicar</option><option value="MANANA">Mañana</option><option value="MEDIODIA">Mediodía</option><option value="TARDE">Tarde</option></select></label>
+                <label class="form-field form-field-wide"><span>Notas para el equipo</span><textarea name="notes" rows="3" maxlength="5000" placeholder="Información relevante para el seguimiento"></textarea></label>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="2" aria-labelledby="intake-title-3" hidden>
+              <p class="eyebrow">PASO 3</p><h3 id="intake-title-3">Salud y horario</h3><p class="intake-help">Solo para que la entrenadora prepare bien la primera sesión.</p>
+              <div class="form-grid intake-fields">
+                <fieldset class="intake-choice-group form-field-wide">
+                  <legend>Lesiones o molestias</legend>
+                  <div class="intake-chips">
+                    <label><input type="checkbox" name="injuries" value="RODILLA"><span>Rodilla</span></label>
+                    <label><input type="checkbox" name="injuries" value="ESPALDA"><span>Espalda</span></label>
+                    <label><input type="checkbox" name="injuries" value="HOMBRO"><span>Hombro</span></label>
+                    <label><input type="checkbox" name="injuries" value="CUELLO"><span>Cuello</span></label>
+                    <label><input type="checkbox" name="injuries" value="CADERA"><span>Cadera</span></label>
+                    <label><input type="checkbox" name="injuries" value="OTRA"><span>Otra</span></label>
+                  </div>
+                  <label class="form-field intake-conditional"><span>Nota</span><textarea name="injuryNotes" rows="2" maxlength="3000"></textarea></label>
+                </fieldset>
+                <fieldset class="intake-choice-group form-field-wide"><legend>Días disponibles</legend><div class="intake-chips intake-day-chips">
+                  <label><input type="checkbox" name="availabilityDay" value="L"><span>L</span></label><label><input type="checkbox" name="availabilityDay" value="M"><span>M</span></label><label><input type="checkbox" name="availabilityDay" value="X"><span>X</span></label><label><input type="checkbox" name="availabilityDay" value="J"><span>J</span></label><label><input type="checkbox" name="availabilityDay" value="V"><span>V</span></label><label><input type="checkbox" name="availabilityDay" value="S"><span>S</span></label><label><input type="checkbox" name="availabilityDay" value="D"><span>D</span></label>
+                </div></fieldset>
+                <fieldset class="intake-choice-group form-field-wide"><legend>Franjas disponibles</legend><div class="intake-chips">
+                  <label><input type="checkbox" name="availabilitySlot" value="MANANA"><span>Mañana</span></label><label><input type="checkbox" name="availabilitySlot" value="MEDIODIA"><span>Mediodía</span></label><label><input type="checkbox" name="availabilitySlot" value="TARDE"><span>Tarde</span></label>
+                </div></fieldset>
+                <label class="form-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"><small>Se guarda como preferencia; no crea una reserva en el calendario.</small></label>
+                <fieldset class="intake-choice-group form-field-wide intake-consents">
+                  <legend>Consentimientos</legend>
+                  <label><input name="consentData" type="checkbox" required aria-describedby="intake-error-consentData"><span>Uso de datos personales <b>*</b></span></label>
+                  <label><input name="consentMarketing" type="checkbox"><span>Comunicaciones comerciales</span></label>
+                  <label><input name="consentPhotos" type="checkbox"><span>Fotos de progreso</span></label>
+                  <span class="intake-field-error" id="intake-error-consentData" data-field-error="consentData" aria-live="polite" hidden></span>
+                </fieldset>
+              </div>
+            </section>
+
+            <section class="intake-step" data-intake-step="3" aria-labelledby="intake-title-4" hidden>
+              <p class="eyebrow">PASO 4</p><h3 id="intake-title-4">Propuesta inicial</h3><p class="intake-help">Precios y duración calculados con el catálogo actual.</p>
+              <p id="proposal-reason" class="proposal-reason"></p>
+              <p id="proposal-error" class="proposal-error" role="alert" hidden></p>
+              <div id="proposal-empty" class="proposal-empty" hidden><p>Aún no hay servicios creados.</p><button id="open-intake-service-create" class="button button-outline" type="button">Crear servicio</button></div>
+              <div id="proposal-table" class="proposal-table" aria-live="polite"></div>
+            </section>
+          </div>
+        </div>
+        <p class="form-error" id="form-error" role="alert" aria-live="assertive" hidden></p>
+        <div class="intake-footer">
+          <div class="intake-footer-start">
+            <button class="button button-outline" id="intake-back" type="button" hidden>Atrás</button>
+            <span class="intake-save-note">Se guarda al final del paso 4</span>
+          </div>
+          <div class="intake-footer-actions">
+            <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>
+            <button class="button button-primary" id="intake-next" type="button">Siguiente</button>
+            <button class="button button-outline" id="create-client-only" type="submit" value="createOnly" hidden>Crear solo el cliente</button>
+            <button class="button button-primary" id="submit-create" type="submit" value="addProposal" hidden>Crear cliente y añadir esta propuesta</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="gym-dialog" class="client-dialog" aria-labelledby="gym-dialog-title">
+      <form id="gym-form" novalidate>
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">CENTROS TRAINERS POINT</p>
+            <h2 id="gym-dialog-title">Añadir centro</h2>
+            <p>Después podrás asignarlo a cada cliente.</p>
+          </div>
+          <button class="icon-button" id="close-gym-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="form-grid">
+          <label class="form-field form-field-wide">
+            <span>Nombre del centro <b>*</b></span>
+            <input name="name" required maxlength="120" placeholder="Ej. Bizkaia Sant Marti">
+          </label>
+          <label class="form-field">
+            <span>Municipio</span>
+            <input name="city" maxlength="100" placeholder="Ej. Sant Martí">
+          </label>
+          <label class="form-field">
+            <span>Provincia</span>
+            <input name="province" maxlength="100" placeholder="Ej. Bizkaia">
+          </label>
+          <label class="form-field form-field-wide">
+            <span>Dirección</span>
+            <input name="address" maxlength="200" autocomplete="street-address" placeholder="Opcional">
+          </label>
+        </div>
+        <p class="form-error" id="gym-form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-outline" id="cancel-gym" type="button">Cancelar</button>
+          <button class="button button-primary" id="submit-gym" type="submit">Guardar centro</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="service-history-dialog" class="client-dialog history-dialog" aria-labelledby="history-dialog-title">
+      <div class="history-dialog-content">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">SERVICIOS Y SESIONES</p>
+            <h2 id="history-dialog-title">Historial del cliente</h2>
+            <p id="history-client-subtitle">Sesiones, pagos y asistencias.</p>
+          </div>
+          <button class="icon-button" id="close-history-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+
+        <section class="history-section" aria-labelledby="packages-title">
+          <div class="history-section-heading">
+            <div>
+              <h3 id="packages-title">Servicios contratados</h3>
+              <p>Las sesiones disponibles bajan al marcar una asistencia.</p>
+            </div>
+            <button class="button button-outline" id="open-service-create" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Crear servicio</button>
+          </div>
+          <div id="service-package-list" class="service-package-list">
+            <p class="history-empty">Cargando historial…</p>
+          </div>
+          <form id="purchase-form" class="purchase-form">
+            <h3>Añadir sesiones</h3>
+            <div class="form-grid">
+              <label class="form-field form-field-wide">
+                <span>Servicio <b>*</b></span>
+                <select name="serviceId" id="purchase-service" required>
+                  <option value="">Selecciona un servicio</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span>Sesiones incluidas <b>*</b></span>
+                <input name="sessionsBought" type="number" min="1" max="500" step="1" required value="1">
+              </label>
+              <label class="form-field">
+                <span>Importe total (€) <b>*</b></span>
+                <input name="totalAmount" type="number" min="0" max="9999999999.99" step="0.01" required placeholder="0,00">
+              </label>
+              <label class="form-field">
+                <span>Forma de pago <b>*</b></span>
+                <select name="paymentMethod" required>
+                  <option value="TARJETA">Tarjeta</option>
+                  <option value="EFECTIVO">Efectivo</option>
+                  <option value="TRANSFERENCIA">Transferencia</option>
+                  <option value="OTRO">Otro</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span>Estado del pago <b>*</b></span>
+                <select name="paymentStatus" required>
+                  <option value="PAGADO">Pagado</option>
+                  <option value="PENDIENTE">Pendiente</option>
+                  <option value="FALLIDO">Fallido</option>
+                  <option value="REEMBOLSADO">Reembolsado</option>
+                </select>
+              </label>
+              <label class="form-field form-field-wide">
+                <span>Notas</span>
+                <input name="notes" maxlength="1000" placeholder="Opcional">
+              </label>
+            </div>
+            <p class="form-error" id="purchase-error" role="alert" hidden></p>
+            <div class="dialog-actions">
+              <button class="button button-primary" id="submit-purchase" type="submit">Guardar servicio</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="history-section booking-history-section" aria-labelledby="booking-history-title">
+          <div class="history-section-heading">
+            <div>
+              <h3 id="booking-history-title">Historial de sesiones</h3>
+              <p>Indica si asistió, faltó o canceló.</p>
+            </div>
+          </div>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <thead><tr><th>FECHA</th><th>SERVICIO</th><th>ASISTENCIA</th></tr></thead>
+              <tbody id="booking-history-rows"><tr><td colspan="3" class="history-empty">No hay sesiones registradas. Programa una desde «Servicios contratados».</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="service-create-dialog" class="client-dialog service-create-dialog" aria-labelledby="service-create-title">
+      <form id="service-create-form" novalidate>
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">CATÁLOGO DE SERVICIOS</p>
+            <h2 id="service-create-title">Crear servicio</h2>
+            <p>Este servicio estará disponible para asignarlo a clientes.</p>
+          </div>
+          <button class="icon-button" id="close-service-create" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <div class="form-grid">
+          <label class="form-field form-field-wide">
+            <span>Nombre <b>*</b></span>
+            <input name="name" required maxlength="120" placeholder="Ej. Entrenamiento personal">
+          </label>
+          <label class="form-field">
+            <span>Duración (minutos) <b>*</b></span>
+            <input name="durationMin" type="number" min="1" max="1440" step="1" required value="60">
+          </label>
+          <label class="form-field">
+            <span>Precio por sesión (€) <b>*</b></span>
+            <input name="price" type="number" min="0" max="99999999.99" step="0.01" required placeholder="0,00">
+          </label>
+          <label class="form-field form-field-wide">
+            <span>Descripción</span>
+            <textarea name="description" rows="3" maxlength="1000" placeholder="Opcional"></textarea>
+          </label>
+        </div>
+        <p class="form-error" id="service-create-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-outline" id="cancel-service-create" type="button">Cancelar</button>
+          <button class="button button-primary" id="submit-service-create" type="submit">Crear servicio</button>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
