@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS calendar.attendance(
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_one_open_shift ON calendar.attendance(gym_id,employee_id) WHERE clock_out IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_by_gym_and_time ON calendar.attendance(gym_id,clock_in DESC);`;
 export class Store {
-  constructor(public pool: Pool, private clientsDb?: PrismaClient) {}
+  constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
 
   private async externalConfig(gym: string, raw: unknown) {
     const config = configSchema.parse(raw);
@@ -167,7 +167,7 @@ export class Store {
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
     return {
-      ...configSchema.parse(rows[0].config),
+      ...await this.externalConfig(gym, rows[0].config),
       bookings: rows[0].bookings,
       revision: Number(rows[0].revision),
       version: 1,

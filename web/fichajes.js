@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const serverMode = window.CALENDAR_SERVER === true;
-  let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
+  let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '' : '';
   let data = { timezone: 'Europe/Madrid', employees: [], records: [], serverNow: new Date().toISOString() };
   let me = null;
   let activePanel = 'clocking';

@@ -7,6 +7,7 @@ const { randomUUID } = require("node:crypto");
 const { Pool } = require("pg");
 const { Store } = require("../dist/calendar/store");
 const { server } = require("../dist/calendar/http");
+const { Access } = require("../dist/calendar/access");
 const { normalize } = require("../dist/calendar/model");
 let pg, pool, pool2, store, other;
 const hours = Array.from({ length: 7 }, () => ({
@@ -480,6 +481,50 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
     assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer',role:'TRAINER',enabled:false}})).status,200);
     assert.equal((await request('me',trainer)).status,401);
     await request('logout',receptionist,'POST');assert.equal((await request('me',receptionist)).status,401);
+  }finally{await new Promise(r=>app.close(r));}
+});
+
+test('La cuenta de un cliente puede crearse explícitamente con usuario y contraseña temporal',async()=>{
+  const g=await gym(),access=new Access(pool);
+  const first=await access.createClientAccount(g,'Centro de pruebas',{id:'client-lucia',name:'Lucía García',email:'lucia@example.com',phone:'600000000'});
+  assert.equal(first.username,'lucia.garcia');
+  const account=(await pool.query('SELECT client_id,role,password_hash,must_change_password FROM calendar.users WHERE gym_id=$1 AND username=$2',[g,first.username])).rows[0];
+  assert.equal(account.client_id,'client-lucia');
+  assert.equal(account.role,'CLIENT');
+  assert.match(account.password_hash,/^scrypt\$131072\$8\$1\$/);
+  assert.equal(account.must_change_password,true);
+  const session=await access.login(g,{username:first.username,password:'Trainerspoint'});
+  assert.equal(session.mustChangePassword,true);
+  assert.equal((await access.identify(g,session.token)).clientId,'client-lucia');
+  const second=await access.createClientAccount(g,'Centro de pruebas',{id:'client-lucia-2',name:'Lucía García'});
+  assert.equal(second.username,'lucia.garcia.2');
+  await assert.rejects(access.save(g,{name:'Sin ficha',username:'sin.ficha',role:'CLIENT',enabled:true}),/Selecciona el cliente/);
+});
+
+test('Credenciales provisionales solo se crean en gimnasio local vacío',async()=>{
+  const g=await gym(),access=new Access(pool);
+  assert.equal(await access.seedLocalDevelopmentAdmin(g),true);
+  const session=await access.login(g,{username:'admin',password:'admin'});
+  assert.equal(session.role,'ADMIN');
+  assert.equal(session.mustChangePassword,false);
+  assert.equal(await access.seedLocalDevelopmentAdmin(g),false);
+});
+
+test('Login y cambio de contraseña usan el gimnasio seleccionado',async()=>{
+  const defaultGym=await gym(),selectedGym=await gym();
+  await new Access(pool).createClientAccount(selectedGym,'Centro seleccionado',{id:'client-selected',name:'Cliente Seleccionado'});
+  const app=server(store,defaultGym,'multi-gym-bootstrap-token-long-enough');
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+app.address().port;
+  const headers={'Content-Type':'application/json','X-Calendar-Gym':selectedGym};
+  try{
+    const login=await fetch(base+'/api/login',{method:'POST',headers,body:JSON.stringify({username:'cliente.seleccionado',password:'Trainerspoint'})});
+    assert.equal(login.status,200,await login.clone().text());
+    const {token,mustChangePassword}=await login.json();assert.equal(mustChangePassword,true);
+    const change=await fetch(base+'/api/password/change',{method:'POST',headers:{...headers,Authorization:'Bearer '+token},body:JSON.stringify({currentPassword:'Trainerspoint',newPassword:'Selected-client-password-123',confirmPassword:'Selected-client-password-123'})});
+    assert.equal(change.status,200,await change.clone().text());
+    const me=await fetch(base+'/api/me',{headers:{...headers,Authorization:'Bearer '+token}});
+    assert.equal((await me.json()).mustChangePassword,false);
   }finally{await new Promise(r=>app.close(r));}
 });
 

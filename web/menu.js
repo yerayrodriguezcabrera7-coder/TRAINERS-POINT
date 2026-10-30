@@ -58,7 +58,8 @@
     try {
       const response = await fetch('/api/gyms'); if (!response.ok) return;
       const data = await response.json();
-      const selected = localStorage.getItem('calendar-selected-gym') || data.selected || data.gyms[0]?.id;
+      const saved = localStorage.getItem('calendar-selected-gym');
+      const selected = data.gyms.some(g => g.id === saved) ? saved : data.selected || data.gyms[0]?.id;
       gymSwitcher.innerHTML = data.gyms.map(g => '<option value="'+g.id+'">'+g.name+'</option>').join('');
       gymSwitcher.value = selected;
       if (selected) localStorage.setItem('calendar-selected-gym', selected);
@@ -81,7 +82,7 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.matchMedia?.('(max-width: 600px)').matches)collapse(true);});
   document.addEventListener('DOMContentLoaded', async () => {
     if (!window.CALENDAR_SERVER) return;
-    const token = sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
+    const token = sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '';
     try {
       const response = await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
       if(!response.ok)return;

@@ -19,7 +19,7 @@
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
-  const token = () => sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
+  const token = () => sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '';
   async function api(path,method='GET',body) {
     const r=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:body?JSON.stringify(body):undefined});
     const result=await r.json();

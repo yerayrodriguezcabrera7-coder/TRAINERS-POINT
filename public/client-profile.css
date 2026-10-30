@@ -112,6 +112,20 @@ body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
 .profile-info-card span { color: var(--tp-muted); }
 .profile-info-card strong { color: var(--tp-ink); }
 .profile-info-card small { color: var(--tp-muted); }
+.profile-gym-card { display: flex; flex-direction: column; align-items: flex-start; }
+.profile-gym-form { width: 100%; margin-top: 12px; }
+.profile-gym-form > label { display: block; margin-bottom: 6px; color: var(--tp-muted); font-size: 11px; }
+.profile-gym-form > div { display: flex; gap: 8px; }
+.profile-gym-form select { min-width: 0; flex: 1; border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm); padding: 8px; background: var(--tp-surface); color: var(--tp-ink); font: inherit; font-size: 12px; }
+.profile-gym-form .profile-secondary-button { padding: 8px 10px; }
+.profile-gym-form .profile-feedback { margin: 6px 0 0; }
+.client-purchases-section, .client-bookings-section { margin-top: 14px; }
+.client-history-list { display: grid; gap: 8px; }
+.client-history-item { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border: 1px solid var(--tp-line); border-radius: var(--tp-radius-sm); background: var(--tp-surface-muted); }
+.client-history-item strong, .client-history-item small { display: block; }
+.client-history-item strong { color: var(--tp-ink); font-size: 13px; }
+.client-history-item small { margin-top: 5px; color: var(--tp-muted); font-size: 11px; }
+.client-history-summary { flex: 0 0 auto; text-align: right; }
 .profile-objective-card { border-left: 2px solid var(--tp-accent); }
 .profile-objective-card strong { color: var(--tp-ink); }
 .profile-layout { gap: 14px; }

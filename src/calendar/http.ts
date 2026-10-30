@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
+﻿import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { timingSafeEqual, randomUUID } from "node:crypto";
@@ -37,13 +37,13 @@ export function server(
 ) {
   if (token.length < 24)
     throw new Error("CALENDAR_ADMIN_TOKEN debe tener al menos 24 caracteres.");
-  const access = new Access(store.pool);
+  const access = new Access(store.pool,store.clientsDb);
   const attempts = new Map<string, { count: number; until: number }>();
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
-      const gym = defaultGym;
+      const gym = (req.headers["x-calendar-gym"] as string) || defaultGym;
       if (path === "/api/health") {
         send(res, 200, { mode: "server" });
         return;
@@ -115,7 +115,7 @@ export function server(
               bookings,
               staffNames,
               employees: (admin || reception) ? s.employees : employees,
-              users: admin ? await access.list(gym) : [],
+              users: admin ? await access.list(gym,s.clients) : [],
             }); return;
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
@@ -127,7 +127,7 @@ export function server(
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
-              ? await access.save(gym,raw.record,id)
+              ? await access.save(gym,raw.record,id,identity.id !== "bootstrap" ? bearer : undefined)
               : await store.manage(gym,management[1],raw.record,raw.revision,id);
             if (management[1] === "users" && identity.id === "bootstrap") {
               const session = await access.login(gym,{ username: raw.record.username, password: initialPassword });
@@ -303,7 +303,7 @@ export function server(
           "Cache-Control": "no-store",
         });
         res.end(
-          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||window.CALENDAR_DEV_TOKEN||sessionStorage.getItem('calendar-admin-token')||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();${
+          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();${
             exposeBootstrapToken
               ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
               : ""

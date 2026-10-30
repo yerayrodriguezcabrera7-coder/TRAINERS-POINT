@@ -63,7 +63,7 @@ function loadData() {
   return seedData();
 }
 const serverMode = window.CALENDAR_SERVER === true;
-let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '' : '';
+let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '' : '';
 $('mode-title').textContent = serverMode ? 'Servidor conectado' : 'Demostración local';
 $('mode-description').textContent = serverMode
   ? 'Reservas y disponibilidad actualizadas para tu equipo.'

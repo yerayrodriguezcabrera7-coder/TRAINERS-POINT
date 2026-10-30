@@ -448,12 +448,20 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   const isPublic = url.pathname === "/api/health" || url.pathname === "/api/login" || url.pathname.startsWith("/api/public/");
   if (!isPublic && calendarAccess) {
     const bearer = (request.headers.authorization || "").replace(/^Bearer /, "");
-    const selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;
+    let selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;
     let identity: Identity | null = null;
     if (bearer && bearer === calendarBootstrapToken && (await calendarAccess.needsSetup(selectedGym))) {
       identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
     } else if (bearer) {
       try {
+        identity = await calendarAccess.identify(selectedGym, bearer);
+      } catch {
+        identity = null;
+      }
+    }
+    if (!identity && bearer && url.pathname === "/api/gyms" && selectedGym !== currentConfiguredGym) {
+      try {
+        selectedGym = currentConfiguredGym;
         identity = await calendarAccess.identify(selectedGym, bearer);
       } catch {
         identity = null;
@@ -484,7 +492,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       }
     }
     if (url.pathname.startsWith("/api/gyms")) {
-      if (identity.role !== "ADMIN") {
+      if (identity.role !== "ADMIN" && !(identity.role === "RECEPTION" && request.method === "GET")) {
         sendError(response, 403, "Solo administración puede gestionar sedes.");
         return;
       }
@@ -817,7 +825,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       include: { service: { select: { id: true, name: true, durationMin: true } } },
       orderBy: { purchasedAt: "desc" },
     });
-    const [bookings, bookingCounts] = await Promise.all([
+    const [bookings, bookingCounts, sales] = await Promise.all([
       prisma.booking.findMany({
         where: { clientId },
         select: {
@@ -842,6 +850,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         },
         _count: { _all: true },
       }),
+      prisma.sale.findMany({
+        where: { clientId },
+        select: {
+          id: true,
+          status: true,
+          currency: true,
+          subtotal: true,
+          taxAmount: true,
+          totalAmount: true,
+          soldAt: true,
+          createdAt: true,
+          lines: { select: { description: true, quantity: true, unitPrice: true, lineTotal: true, type: true } },
+          payments: { select: { method: true, status: true, amount: true, paidAt: true } },
+        },
+        orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      }),
     ]);
 
     sendJson(response, 200, {
@@ -865,6 +890,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         };
       }),
       bookings,
+      sales,
     });
     return;
   }
@@ -1328,7 +1354,6 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           createdAt: true,
         },
       });
-
       sendJson(response, 201, { client });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -1403,7 +1428,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       const client = await prisma.client.update({
         where: { id: gymMatch[1] },
         data: { gym: { connect: { id: gymId } } },
-        select: { id: true, gym: { select: { id: true, name: true } } },
+        select: { id: true, gym: { select: { id: true, name: true, city: true, province: true } } },
       });
       sendJson(response, 200, { client });
     } catch (error) {
@@ -1517,7 +1542,7 @@ const server = createServer(async (request, response) => {
     });
 
     if (url.pathname === "/runtime.js") {
-      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||window.CALENDAR_DEV_TOKEN||sessionStorage.getItem('calendar-admin-token')||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
+      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
       return;
     }
 
@@ -1545,18 +1570,24 @@ const server = createServer(async (request, response) => {
 });
 
 async function start(): Promise<void> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const calendarDatabaseUrl = process.env.CALENDAR_DATABASE_URL || process.env.DATABASE_URL;
+  const pool = new Pool({ connectionString: calendarDatabaseUrl });
+  const crmPool = calendarDatabaseUrl === process.env.DATABASE_URL
+    ? pool
+    : new Pool({ connectionString: process.env.DATABASE_URL });
   calendarPool = pool;
-  const store = new Store(pool);
-  calendarAccess = new Access(pool);
+  const store = new Store(pool,prisma);
+  calendarAccess = new Access(pool,prisma);
   await pool.query(calendarMigration);
   await pool.query(accessMigration);
-  await pool.query(progressMigration);
-  const configuredGym = (await prisma.gym.findFirst({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true } }))?.id || "trainers-point-bizkaia";
+  await crmPool.query(progressMigration);
+  const activeGyms = await prisma.gym.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const configuredGym = activeGyms[0]?.id || "trainers-point-bizkaia";
+  const developmentGyms = activeGyms.length ? activeGyms : [{ id: configuredGym, name: "Trainers Point" }];
   let gym = configuredGym;
   currentConfiguredGym = gym;
   const schedule = Array.from({ length: 7 }, (_, i) => ({ open: "09:00", close: i === 5 ? "14:00" : "21:00", closed: i === 6 }));
-  await store.seed(gym, {
+  const initialCalendarConfig = {
     timezone: "Europe/Madrid",
     schedule,
     employees: [{ id: "e1", name: "Entrenador de prueba", color: "#8498bc", schedule }],
@@ -1567,7 +1598,27 @@ async function start(): Promise<void> {
     ],
     rooms: [{ id: "r1", name: "Sala principal" }],
     clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
-  });
+  };
+  await store.seed(gym, initialCalendarConfig);
+  if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {
+    if (process.env.NODE_ENV === "production")
+      throw new Error("No se permite activar la cuenta provisional admin/admin en producción.");
+    let databaseHost: string;
+    try {
+      databaseHost = new URL(calendarDatabaseUrl || "").hostname.toLowerCase();
+    } catch {
+      throw new Error("La cuenta provisional requiere una CALENDAR_DATABASE_URL local válida.");
+    }
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(databaseHost))
+      throw new Error("La cuenta provisional admin/admin solo se permite con PostgreSQL local; no se ha creado ninguna cuenta.");
+    let createdAdmin = false;
+    for (const activeGym of developmentGyms) {
+      if (activeGym.id !== gym) await store.seed(activeGym.id, initialCalendarConfig);
+      createdAdmin = await calendarAccess.seedLocalDevelopmentAdmin(activeGym.id) || createdAdmin;
+    }
+    if (createdAdmin)
+      console.warn("Cuenta provisional local creada para centros sin cuentas previas. Usuario: admin · Contraseña: admin. No usar fuera de desarrollo.");
+  }
   const token = process.env.CALENDAR_ADMIN_TOKEN || randomBytes(24).toString("hex");
   calendarBootstrapToken = token;
   const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: true });
@@ -1577,6 +1628,7 @@ async function start(): Promise<void> {
     void server.close(async () => {
       calendar.close();
       await pool.end();
+      if (crmPool !== pool) await crmPool.end();
       await prisma.$disconnect();
     });
   };

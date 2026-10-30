@@ -41,8 +41,8 @@
 
   const token = () =>
     sessionStorage.getItem('calendar-user-token') ||
-    window.CALENDAR_DEV_TOKEN ||
     sessionStorage.getItem('calendar-admin-token') ||
+    window.CALENDAR_DEV_TOKEN ||
     '';
 
   async function api(path, method = 'GET', body) {
@@ -56,6 +56,8 @@
     });
     const result = await res.json().catch(() => ({}));
     if (res.status === 401) {
+      sessionStorage.removeItem('calendar-user-token');
+      sessionStorage.removeItem('calendar-admin-token');
       location.href = '/login.html';
       throw new Error('Inicia sesión para continuar.');
     }
@@ -213,6 +215,10 @@
   }
 
   function openEditor(user = null) {
+    if (!manageData || manageData.role !== 'ADMIN') {
+      showToast('No se han cargado los datos de administración. Inicia sesión de nuevo.', true);
+      return;
+    }
     editingUser = user;
     const dialog = $('user-dialog');
     const form = $('user-form');
@@ -258,6 +264,8 @@
 
   async function loadData() {
     const listEl = $('user-rows');
+    $('open-create').disabled = true;
+    manageData = null;
     listEl.innerHTML = '<p class="list-message">Cargando usuarios…</p>';
 
     try {
@@ -267,6 +275,7 @@
         showToast('Solo administración puede gestionar los usuarios.', true);
         return;
       }
+      $('open-create').disabled = false;
       updateStats();
       renderList();
     } catch (err) {
@@ -338,6 +347,11 @@
       errorEl.textContent = '';
 
       const form = e.target;
+      if (!manageData || manageData.role !== 'ADMIN') {
+        errorEl.textContent = 'No se han cargado los datos de administración. Actualiza la página e inicia sesión de nuevo.';
+        errorEl.hidden = false;
+        return;
+      }
       const role = form.role.value;
       const username = form.username.value.trim();
       const enabled = form.enabled.value === 'true';

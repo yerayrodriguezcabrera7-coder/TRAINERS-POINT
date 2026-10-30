@@ -7,6 +7,7 @@
     <title>Ficha de cliente | Trainers Point</title>
     <link rel="stylesheet" href="/client-profile.css">
     <link rel="stylesheet" href="/menu.css">
+    <script src="/runtime.js" defer></script>
     <script src="/client-profile.js" defer></script>
     <script src="/menu.js" defer></script>
   </head>
@@ -32,7 +33,14 @@
 
           <section class="profile-overview-grid" aria-label="Resumen del cliente">
             <article class="profile-info-card"><span>CONTACTO</span><strong id="profile-email">—</strong><small id="profile-phone">—</small></article>
-            <article class="profile-info-card"><span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small></article>
+            <article class="profile-info-card profile-gym-card">
+              <span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small>
+              <form id="profile-gym-form" class="profile-gym-form" hidden>
+                <label for="profile-gym-select">Cambiar centro</label>
+                <div><select id="profile-gym-select" name="gymId" required></select><button class="profile-secondary-button" type="submit">Guardar</button></div>
+                <small id="profile-gym-feedback" class="profile-feedback" role="status" aria-live="polite"></small>
+              </form>
+            </article>
             <article class="profile-info-card profile-objective-card"><span>OBJETIVO ACTUAL</span><strong id="profile-objective-preview">Sin objetivo definido</strong></article>
           </section>
 
@@ -121,6 +129,14 @@
               <div id="measurement-history" class="measurement-history-profile"><p class="profile-empty">Aún no hay medidas. Añade la primera para empezar a comparar.</p></div>
             </section>
           </div>
+          <section class="profile-card client-purchases-section" aria-labelledby="purchases-title">
+            <div class="section-heading"><div><p class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</p><h2 id="purchases-title">Historial de compras</h2></div></div>
+            <div id="purchase-history" class="client-history-list"><p class="profile-empty">Cargando compras…</p></div>
+          </section>
+          <section class="profile-card client-bookings-section" aria-labelledby="bookings-title">
+            <div class="section-heading"><div><p class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</p><h2 id="bookings-title">Historial de sesiones</h2></div></div>
+            <div id="client-booking-history" class="client-history-list"><p class="profile-empty">Cargando sesiones…</p></div>
+          </section>
         </div>
       </section>
     </main>

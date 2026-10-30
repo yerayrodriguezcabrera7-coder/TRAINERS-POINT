@@ -23,6 +23,11 @@ const objectiveInput = document.querySelector("#objective-input");
 const objectiveFeedback = document.querySelector("#objective-feedback");
 const clientDetailsForm = document.querySelector("#client-details-form");
 const clientDetailsFeedback = document.querySelector("#client-details-feedback");
+const gymForm = document.querySelector("#profile-gym-form");
+const gymSelect = document.querySelector("#profile-gym-select");
+const gymFeedback = document.querySelector("#profile-gym-feedback");
+const purchaseHistory = document.querySelector("#purchase-history");
+const bookingHistory = document.querySelector("#client-booking-history");
 const measurementDialog = document.querySelector("#measurement-dialog");
 const measurementForm = document.querySelector("#measurement-form");
 const measurementDate = document.querySelector("#measurement-date");
@@ -74,6 +79,128 @@ function renderHeader(client) {
   document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
+  gymSelect.value = client.gym?.id || "";
+}
+
+function currencyText(value, currency = "EUR") {
+  return new Intl.NumberFormat("es-ES", { style: "currency", currency }).format(Number(value));
+}
+
+function historyDate(value) {
+  if (!value) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function renderPurchaseHistory(data) {
+  purchaseHistory.replaceChildren();
+  const purchases = [
+    ...data.packages.map((item) => ({
+      date: item.purchasedAt,
+      title: item.service.name,
+      detail: `${item.sessionsBought} sesiones · ${item.sessionsRemaining} disponibles · ${item.paymentMethod}`,
+      amount: item.totalAmount,
+      status: item.paymentStatus,
+      currency: "EUR",
+    })),
+    ...data.sales.map((sale) => ({
+      date: sale.soldAt || sale.createdAt,
+      title: sale.lines.map((line) => line.description).join(", ") || "Venta",
+      detail: sale.payments.map((payment) => `${payment.method} · ${payment.status}`).join(" · ") || "Sin pagos registrados",
+      amount: sale.totalAmount,
+      status: sale.status,
+      currency: sale.currency,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  if (!purchases.length) {
+    const empty = document.createElement("p");
+    empty.className = "profile-empty";
+    empty.textContent = "Este cliente todavía no tiene compras registradas.";
+    purchaseHistory.append(empty);
+    return;
+  }
+
+  for (const purchase of purchases) {
+    const item = document.createElement("article");
+    item.className = "client-history-item";
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = purchase.title;
+    const metadata = document.createElement("small");
+    metadata.textContent = `${historyDate(purchase.date)} · ${purchase.detail}`;
+    details.append(title, metadata);
+    const summary = document.createElement("div");
+    summary.className = "client-history-summary";
+    const amount = document.createElement("strong");
+    amount.textContent = currencyText(purchase.amount, purchase.currency);
+    const status = document.createElement("small");
+    status.textContent = purchase.status;
+    summary.append(amount, status);
+    item.append(details, summary);
+    purchaseHistory.append(item);
+  }
+}
+
+function renderBookingHistory(bookings) {
+  bookingHistory.replaceChildren();
+  if (!bookings.length) {
+    const empty = document.createElement("p");
+    empty.className = "profile-empty";
+    empty.textContent = "Este cliente todavía no tiene sesiones registradas.";
+    bookingHistory.append(empty);
+    return;
+  }
+  for (const booking of bookings) {
+    const item = document.createElement("article");
+    item.className = "client-history-item";
+    const details = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = booking.service.name;
+    const metadata = document.createElement("small");
+    metadata.textContent = historyDate(booking.startTime);
+    details.append(title, metadata);
+    const status = document.createElement("small");
+    status.className = "client-history-summary";
+    status.textContent = `${booking.status} · ${booking.attendance}`;
+    item.append(details, status);
+    bookingHistory.append(item);
+  }
+}
+
+async function loadPurchaseHistory() {
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-history`, { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
+    renderPurchaseHistory(data);
+    renderBookingHistory(data.bookings);
+  } catch (error) {
+    for (const container of [purchaseHistory, bookingHistory]) {
+      const message = document.createElement("p");
+      message.className = "profile-empty";
+      message.textContent = error instanceof Error ? error.message : "No se pudo cargar el historial.";
+      container.replaceChildren(message);
+    }
+  }
+}
+
+async function loadAvailableGyms() {
+  try {
+    const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) return;
+    gymSelect.replaceChildren();
+    for (const gym of data.gyms) {
+      const option = document.createElement("option");
+      option.value = gym.id;
+      option.textContent = gym.name;
+      gymSelect.append(option);
+    }
+    gymSelect.value = progress.client.gym?.id || "";
+    gymForm.hidden = data.gyms.length < 2;
+  } catch {
+    gymForm.hidden = true;
+  }
 }
 
 function renderClientDetails(client) {
@@ -263,10 +390,47 @@ async function loadProfile() {
   if (!clientId) { showError("No encontramos esta ficha. Vuelve a clientes y elige una persona."); return; }
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/progress`, { headers: { Accept: "application/json" } });
-    const data = await response.json(); if (!response.ok) throw new Error("No se pudo cargar esta ficha.");
+    if (response.status === 401) {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/login.html?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo cargar esta ficha.");
     renderProgress(data); loading.hidden = true; view.hidden = false;
-  } catch (error) { showError("No se pudo cargar esta ficha. Inténtalo de nuevo."); }
+    void loadAvailableGyms();
+    void loadPurchaseHistory();
+  } catch (error) {
+    showError(error instanceof Error && error.message
+      ? error.message
+      : "No se pudo cargar esta ficha. Inténtalo de nuevo.");
+  }
 }
+
+gymForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  gymFeedback.textContent = "Guardando…";
+  const submit = gymForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/gym`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ gymId: gymSelect.value }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo cambiar el centro.");
+    progress.client.gym = { ...progress.client.gym, ...data.client.gym };
+    document.querySelector("#profile-gym").textContent = data.client.gym.name;
+    document.querySelector("#profile-location").textContent = [data.client.gym.city, data.client.gym.province].filter(Boolean).join(", ") || "Sin ubicación";
+    gymSelect.value = data.client.gym.id;
+    gymFeedback.textContent = "Centro actualizado.";
+  } catch (error) {
+    gymFeedback.textContent = error instanceof Error ? error.message : "No se pudo cambiar el centro.";
+  } finally {
+    submit.disabled = false;
+  }
+});
 
 clientDetailsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
