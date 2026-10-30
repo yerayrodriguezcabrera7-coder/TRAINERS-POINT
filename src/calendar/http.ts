@@ -5,7 +5,7 @@ import { timingSafeEqual, randomUUID } from "node:crypto";
 import { ZodError, z } from "zod";
 import { Store } from "./store";
 import { ApiError } from "./model";
-import { Access, Identity } from "./access";
+import { Access, Identity, initialPassword } from "./access";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -62,7 +62,7 @@ export function server(
           return;
         }
         const publicRoute = path.startsWith("/api/public/");
-        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null };
+        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -79,8 +79,18 @@ export function server(
           const client = identity.role === "CLIENT";
           const office = admin || reception;
 
+          if (identity.mustChangePassword &&
+            !(req.method === "GET" && path === "/api/me") &&
+            !(req.method === "POST" && path === "/api/password/change") &&
+            !(req.method === "POST" && path === "/api/logout"))
+            throw new ApiError(403, "Debes cambiar la contraseña antes de continuar.");
+
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
+          if (req.method === "POST" && path === "/api/password/change") {
+            send(res,200,await access.changePassword(gym,bearer,await body(req)));
+            return;
+          }
 
           if (client) {
             throw new ApiError(403, "Tu perfil no tiene acceso a las funciones de gestión.");
@@ -120,8 +130,8 @@ export function server(
               ? await access.save(gym,raw.record,id)
               : await store.manage(gym,management[1],raw.record,raw.revision,id);
             if (management[1] === "users" && identity.id === "bootstrap") {
-              const session = await access.login(gym,raw.record);
-              send(res,201,{...result,token:session.token});
+              const session = await access.login(gym,{ username: raw.record.username, password: initialPassword });
+              send(res,201,{...result,...session});
             } else send(res,id ? 200 : 201,result);
             return;
           }
@@ -324,6 +334,8 @@ export function server(
         "gimnasios.css": "text/css",
         "login.html": "text/html",
         "login.js": "text/javascript",
+        "change-password.html": "text/html",
+        "change-password.js": "text/javascript",
       };
       if (!allowed[name]) throw new ApiError(404, "Archivo desconocido.");
       res.writeHead(200, {

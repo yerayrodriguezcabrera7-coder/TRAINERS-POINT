@@ -84,11 +84,10 @@
       const isClient = x.role === 'CLIENT';
       html = `<div id="employee-picker" ${isClient ? 'hidden' : ''}>${employeeSelect}</div>` +
         `<div id="client-picker" ${isClient ? '' : 'hidden'}>${clientSelect}</div>` +
-        field('Correo de acceso','username',x.username,'email','required maxlength="254"') +
+        field('Usuario de acceso','username',x.username,'text','required maxlength="254"') +
         select('Categoría de seguridad','role',Object.entries(roleNames),x.role||(data.id==='bootstrap'?'ADMIN':'TRAINER')) +
         select('Acceso','enabled',[['true','Habilitado'],['false','Deshabilitado']],x.enabled!==false) +
-        field(editing?'Nueva contraseña (vacío = conservar)':'Contraseña','password','','password',`${editing?'':'required'} minlength="10" maxlength="128" autocomplete="new-password"`) +
-        `<p class="hint full">${data.id==='bootstrap'?'Crea primero tu cuenta de administración. A partir de ese momento se pedirá iniciar sesión.':'Una cuenta por empleado o cliente. Al guardar se cierran sus sesiones anteriores.'}</p>`;
+        `<p class="hint full">${data.id==='bootstrap'?'Crea primero tu cuenta de administración. La contraseña temporal será Trainerspoint y tendrás que cambiarla al entrar.':'Una cuenta por empleado o cliente. La contraseña inicial será Trainerspoint y deberá cambiarse en el primer acceso.'}</p>`;
     } else {
       html=field('Nombre y apellidos','name',x.name,'text','required maxlength="200"')+field('Puesto laboral','jobTitle',x.jobTitle,'text','maxlength="100"')+field('Correo','email',x.email,'email','maxlength="254"')+field('Color en calendario','color',x.color||'#317b9b','color')+activeSelect(x);
     }
@@ -147,12 +146,12 @@
     else if(section==='services')record={name:value('name').trim(),duration:Number(value('duration')),capacity:Number(value('capacity')),price:Number(value('price')),active:value('active')==='true',description:value('description')};
     else if(section==='users'){
       const role=value('role');
-      record={username:value('username').trim(),role,enabled:value('enabled')==='true',...(role==='CLIENT'?{clientId:value('clientId')}:{employeeId:value('employeeId')}),...(value('password')?{password:value('password')}:{})};
+      record={username:value('username').trim(),role,enabled:value('enabled')==='true',...(role==='CLIENT'?{clientId:value('clientId')}:{employeeId:value('employeeId')})};
     }
     else record={name:value('name').trim(),email:value('email').trim(),jobTitle:value('jobTitle').trim(),color:value('color'),active:value('active')==='true',schedule:days.map((_,i)=>({open:value('open'+i),close:value('close'+i),closed:form.has('closed'+i)})),shifts};
     const kind=section==='shifts'?'employees':section;
     $('save').disabled=true;
-    try{const result=await api('manage/'+kind+(editing?'/'+encodeURIComponent(editing.id):''),editing?'PUT':'POST',{record,revision});if(result.token){sessionStorage.removeItem('calendar-admin-token');sessionStorage.setItem('calendar-user-token',result.token);}$('editor').close();await load();notice('Cambios guardados.');}
+    try{const result=await api('manage/'+kind+(editing?'/'+encodeURIComponent(editing.id):''),editing?'PUT':'POST',{record,revision});if(result.token){sessionStorage.removeItem('calendar-admin-token');sessionStorage.setItem('calendar-user-token',result.token);if(result.mustChangePassword){location.href='change-password.html';return;}}$('editor').close();await load();notice(editing?'Cambios guardados.':'Usuario creado. Comparte Trainerspoint como contraseña temporal.');}
     catch(error){formError(error.message);}finally{$('save').disabled=false;}
   });
   $('rows').addEventListener('click',e=>{const button=e.target.closest('[data-edit]');if(button)edit(button.dataset.edit);});

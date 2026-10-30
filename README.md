@@ -35,6 +35,9 @@ El calendario ya no usa PostgreSQL local ni la carpeta .calendar-dev/. Ctrl+C de
 - /clientes: Clientes AWS.
 - /gimnasios: Gimnasios AWS.
 - /login.html: Acceso del equipo.
+- /change-password.html: Cambio obligatorio de la contraseña inicial.
+
+Al crear una cuenta, el usuario de acceso es el nombre de usuario elegido y la contraseña temporal es `Trainerspoint`. El primer inicio obliga a cambiarla. Las contraseñas se almacenan con scrypt (hash con salt aleatorio), no como texto ni cifrado reversible.
 
 Todas las pantallas usan un unico menu. Clientes y Gimnasios conservan sus hojas de estilo y su logica de AWS.
 

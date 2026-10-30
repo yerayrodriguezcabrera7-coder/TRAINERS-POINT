@@ -86,6 +86,10 @@
       const response = await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
       if(!response.ok)return;
       const me=await response.json();
+      if(me.mustChangePassword && location.pathname !== '/change-password.html'){
+        location.replace('/change-password.html');
+        return;
+      }
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,

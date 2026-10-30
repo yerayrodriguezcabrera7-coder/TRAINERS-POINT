@@ -451,7 +451,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;
     let identity: Identity | null = null;
     if (bearer && bearer === calendarBootstrapToken && (await calendarAccess.needsSetup(selectedGym))) {
-      identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null };
+      identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
     } else if (bearer) {
       try {
         identity = await calendarAccess.identify(selectedGym, bearer);
@@ -460,7 +460,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       }
     }
     if (!identity) {
-      const calendarOnlyRoutes = ["/api/me", "/api/logout", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
+      const calendarOnlyRoutes = ["/api/me", "/api/logout", "/api/password/change", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
       const isCalendarOnly = calendarOnlyRoutes.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
       if (isCalendarOnly && calendarHandler) {
         await calendarHandler(request, response);
@@ -469,8 +469,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendError(response, 401, "Inicia sesión para continuar.");
       return;
     }
+    if (identity.mustChangePassword &&
+      url.pathname !== "/api/me" &&
+      url.pathname !== "/api/logout" &&
+      url.pathname !== "/api/password/change") {
+      sendError(response, 403, "Debes cambiar la contraseña antes de continuar.");
+      return;
+    }
     if (identity.role === "CLIENT") {
-      const isMeOrLogout = url.pathname === "/api/me" || url.pathname === "/api/logout";
+      const isMeOrLogout = url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
       if (!isMeOrLogout) {
         sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
         return;
@@ -1431,6 +1438,8 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/gestion.js": { file: "web/gestion.js", contentType: "text/javascript; charset=utf-8" },
   "/login.html": { file: "web/login.html", contentType: "text/html; charset=utf-8" },
   "/login.js": { file: "web/login.js", contentType: "text/javascript; charset=utf-8" },
+  "/change-password.html": { file: "web/change-password.html", contentType: "text/html; charset=utf-8" },
+  "/change-password.js": { file: "web/change-password.js", contentType: "text/javascript; charset=utf-8" },
   "/app.js": { file: "web/app.js", contentType: "text/javascript; charset=utf-8" },
   "/calendar-core.js": { file: "web/calendar-core.js", contentType: "text/javascript; charset=utf-8" },
   "/runtime.js": { file: "web/runtime.js", contentType: "text/javascript; charset=utf-8" },

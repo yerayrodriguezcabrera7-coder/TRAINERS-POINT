@@ -126,46 +126,60 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     // 1. Crear cuentas para los 4 roles
     // ADMIN (primera cuenta por bootstrap)
     const adminRes = await req("manage/users", bootstrapToken, "POST", {
-      record: { employeeId: "e1", username: "admin@tp.test", password: "Password-1234", role: "ADMIN", enabled: true },
+      record: { employeeId: "e1", username: "admin", role: "ADMIN", enabled: true },
     });
     assert.equal(adminRes.status, 201);
-    const { token: adminToken } = await adminRes.json();
+    const { token: adminToken, mustChangePassword } = await adminRes.json();
+    assert.equal(mustChangePassword, true);
+    assert.equal((await req("state", adminToken)).status, 403);
+    async function changePassword(token, newPassword) {
+      return req("password/change", token, "POST", {
+        currentPassword: "Trainerspoint",
+        newPassword,
+        confirmPassword: newPassword,
+      });
+    }
+    assert.equal((await changePassword(adminToken, "Admin-personal-password-123")).status, 200);
 
     // TRAINER 1 (e2)
     const t1Res = await req("manage/users", adminToken, "POST", {
-      record: { employeeId: "e2", username: "trainer1@tp.test", password: "Password-1234", role: "TRAINER", enabled: true },
+      record: { employeeId: "e2", username: "trainer1", role: "TRAINER", enabled: true },
     });
     assert.equal(t1Res.status, 201);
 
     // TRAINER 2 (e3)
     const t2Res = await req("manage/users", adminToken, "POST", {
-      record: { employeeId: "e3", username: "trainer2@tp.test", password: "Password-1234", role: "TRAINER", enabled: true },
+      record: { employeeId: "e3", username: "trainer2", role: "TRAINER", enabled: true },
     });
     assert.equal(t2Res.status, 201);
 
     // RECEPTION (e4)
     const recRes = await req("manage/users", adminToken, "POST", {
-      record: { employeeId: "e4", username: "reception@tp.test", password: "Password-1234", role: "RECEPTION", enabled: true },
+      record: { employeeId: "e4", username: "reception", role: "RECEPTION", enabled: true },
     });
     assert.equal(recRes.status, 201);
 
     // CLIENT (c0)
     const cliRes = await req("manage/users", adminToken, "POST", {
-      record: { clientId: "c0", username: "client@tp.test", password: "Password-1234", role: "CLIENT", enabled: true },
+      record: { clientId: "c0", username: "client", role: "CLIENT", enabled: true },
     });
     assert.equal(cliRes.status, 201);
 
     // Logins
-    async function login(username) {
-      const res = await req("login", "", "POST", { username, password: "Password-1234" });
+    async function login(username, newPassword) {
+      const res = await req("login", "", "POST", { username, password: "Trainerspoint" });
       assert.equal(res.status, 200, await res.clone().text());
-      return (await res.json()).token;
+      const session = await res.json();
+      assert.equal(session.mustChangePassword, true);
+      assert.equal((await req("state", session.token)).status, 403);
+      assert.equal((await changePassword(session.token, newPassword)).status, 200);
+      return session.token;
     }
 
-    const t1 = await login("trainer1@tp.test");
-    const t2 = await login("trainer2@tp.test");
-    const rec = await login("reception@tp.test");
-    const cli = await login("client@tp.test");
+    const t1 = await login("trainer1", "Trainer-one-personal-password-123");
+    const t2 = await login("trainer2", "Trainer-two-personal-password-123");
+    const rec = await login("reception", "Reception-personal-password-123");
+    const cli = await login("client", "Client-personal-password-123");
 
     // ==========================================
     // REQUISITO: El cliente no accede a nada de gestión
@@ -352,11 +366,11 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
 
     // Crear usuario directamente con 'name' (crea el empleado automáticamente)
     const newStaffRes = await req("manage/users", adminToken, "POST", {
-      record: { name: "Nuevo Fichaje", username: "nuevo@tp.test", password: "Password-1234", role: "RECEPTION", enabled: true },
+      record: { name: "Nuevo Fichaje", username: "nuevo", role: "RECEPTION", enabled: true },
     });
     assert.equal(newStaffRes.status, 201);
     const newStaffManage = await (await req("manage", adminToken)).json();
-    const newStaff = newStaffManage.users.find((u) => u.username === "nuevo@tp.test");
+    const newStaff = newStaffManage.users.find((u) => u.username === "nuevo");
     assert.equal(newStaff.name, "Nuevo Fichaje");
     assert.equal(newStaff.role, "RECEPTION");
     const newEmp = newStaffManage.employees.find((e) => e.name === "Nuevo Fichaje");
@@ -366,4 +380,3 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     await new Promise((r) => app.close(r));
   }
 });
-

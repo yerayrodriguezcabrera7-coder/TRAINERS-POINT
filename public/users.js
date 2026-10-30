@@ -226,10 +226,6 @@
 
     const titleEl = $('dialog-title');
     const eyebrowEl = $('dialog-eyebrow');
-    const passLabel = $('password-label');
-    const passHelp = $('password-help');
-    const passInput = $('user-password');
-
     if (user) {
       eyebrowEl.textContent = 'EDITAR CUENTA';
       titleEl.textContent = resolvePersonName(user) || user.username;
@@ -245,9 +241,6 @@
         $('user-name').value = pName === 'Entrenador de prueba' ? '' : pName;
         $('user-employee-id').value = user.employeeId || '';
       }
-      passInput.required = false;
-      passLabel.innerHTML = 'Nueva contraseña <span style="font-weight: normal; color: var(--tp-muted);">(opcional)</span>';
-      passHelp.hidden = false;
     } else {
       eyebrowEl.textContent = 'NUEVA CUENTA';
       titleEl.textContent = 'Nuevo usuario';
@@ -255,9 +248,6 @@
       $('user-enabled').value = 'true';
       $('user-name').value = '';
       $('user-employee-id').value = '';
-      passInput.required = true;
-      passLabel.innerHTML = 'Contraseña <b>*</b>';
-      passHelp.hidden = true;
     }
 
     const event = new Event('change');
@@ -351,13 +341,12 @@
       const role = form.role.value;
       const username = form.username.value.trim();
       const enabled = form.enabled.value === 'true';
-      const password = form.password.value;
       const name = role !== 'CLIENT' ? (form.name ? form.name.value.trim() : '') : '';
       const employeeId = role !== 'CLIENT' ? (form.employeeId ? form.employeeId.value : null) : null;
       const clientId = role === 'CLIENT' ? form.clientId.value : null;
 
       if (!username) {
-        errorEl.textContent = 'Indica el correo electrónico de acceso.';
+        errorEl.textContent = 'Indica el usuario de acceso.';
         errorEl.hidden = false;
         return;
       }
@@ -368,25 +357,12 @@
         return;
       }
 
-      if (!editingUser && (!password || password.length < 10)) {
-        errorEl.textContent = 'La contraseña debe tener al menos 10 caracteres.';
-        errorEl.hidden = false;
-        return;
-      }
-
-      if (password && password.length < 10) {
-        errorEl.textContent = 'La contraseña debe tener al menos 10 caracteres.';
-        errorEl.hidden = false;
-        return;
-      }
-
       const record = {
         role,
         username,
         enabled,
         ...(name ? { name } : {}),
         ...(role === 'CLIENT' ? { clientId } : (employeeId ? { employeeId } : {})),
-        ...(password ? { password } : {}),
       };
 
       submitBtn.disabled = true;
@@ -397,9 +373,13 @@
         if (res.token) {
           sessionStorage.removeItem('calendar-admin-token');
           sessionStorage.setItem('calendar-user-token', res.token);
+          if (res.mustChangePassword) {
+            location.href = '/change-password.html';
+            return;
+          }
         }
         $('user-dialog').close();
-        showToast(editingUser ? 'Usuario actualizado correctamente.' : 'Usuario creado correctamente.');
+        showToast(editingUser ? 'Usuario actualizado correctamente.' : 'Usuario creado. Comparte Trainerspoint como contraseña temporal.');
         await loadData();
       } catch (err) {
         errorEl.textContent = err.message;
@@ -412,4 +392,3 @@
     loadData();
   });
 })();
-

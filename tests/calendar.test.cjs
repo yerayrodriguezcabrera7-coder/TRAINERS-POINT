@@ -437,18 +437,32 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
   const base='http://127.0.0.1:'+app.address().port;
   async function request(path,token=bootstrap,method='GET',body){return fetch(base+'/api/'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
   try{
-    const adminBody={record:{employeeId:'e1',username:'admin@example.com',password:'Admin-test-123',role:'ADMIN',enabled:true}};
+    const adminBody={record:{employeeId:'e1',username:'admin',role:'ADMIN',enabled:true}};
     const first=await request('manage/users',bootstrap,'POST',adminBody);assert.equal(first.status,201,await first.clone().text());
-    const {token:admin,id:adminId}=await first.json();assert.ok(admin);
+    const {token:admin,id:adminId,mustChangePassword}=await first.json();assert.ok(admin);assert.equal(mustChangePassword,true);
+    const stored=await pool.query('SELECT password_hash,must_change_password FROM calendar.users WHERE id=$1',[adminId]);
+    assert.match(stored.rows[0].password_hash,/^scrypt\$131072\$8\$1\$/);
+    assert.ok(!stored.rows[0].password_hash.includes('Trainerspoint'));
+    assert.equal(stored.rows[0].must_change_password,true);
     assert.equal((await request('state')).status,401,'Bootstrap key stops working after first account');
     assert.doesNotMatch(await (await fetch(base+'/runtime.js')).text(),new RegExp(bootstrap));
-    const trainee=await request('manage/users',admin,'POST',{record:{employeeId:'e2',username:'trainer@example.com',password:'Trainer-test-123',role:'TRAINER',enabled:true}});
+    assert.equal((await request('state',admin)).status,403,'New accounts cannot use protected routes before changing password');
+    const change=async(token,currentPassword,newPassword)=>request('password/change',token,'POST',{currentPassword,newPassword,confirmPassword:newPassword});
+    assert.equal((await change(admin,'wrong','Admin-personal-password-123')).status,400);
+    assert.equal((await change(admin,'Trainerspoint','Admin-personal-password-123')).status,200);
+    const adminMe=await request('me',admin);assert.equal((await adminMe.json()).mustChangePassword,false);
+    const trainee=await request('manage/users',admin,'POST',{record:{employeeId:'e2',username:'trainer',role:'TRAINER',enabled:true}});
     assert.equal(trainee.status,201);const trainerId=(await trainee.json()).id;
-    assert.equal((await request('manage/users',admin,'POST',{record:{employeeId:'e3',username:'desk@example.com',password:'Reception-test-123',role:'RECEPTION',enabled:true}})).status,201);
-    async function login(username,password){const r=await request('login','', 'POST',{username,password});assert.equal(r.status,200,await r.clone().text());return (await r.json()).token;}
-    const trainer=await login('trainer@example.com','Trainer-test-123');
-    const receptionist=await login('desk@example.com','Reception-test-123');
-    assert.equal((await request('login','', 'POST',{username:'trainer@example.com',password:'wrong'})).status,401);
+    assert.equal((await request('manage/users',admin,'POST',{record:{employeeId:'e3',username:'desk',role:'RECEPTION',enabled:true}})).status,201);
+    async function login(username,password='Trainerspoint'){const r=await request('login','', 'POST',{username,password});assert.equal(r.status,200,await r.clone().text());return r.json();}
+    const trainerLogin=await login('trainer');assert.equal(trainerLogin.mustChangePassword,true);
+    assert.equal((await request('state',trainerLogin.token)).status,403);
+    assert.equal((await change(trainerLogin.token,'Trainerspoint','Trainer-personal-password-123')).status,200);
+    const trainer=trainerLogin.token;
+    const receptionistLogin=await login('desk');assert.equal(receptionistLogin.mustChangePassword,true);
+    assert.equal((await change(receptionistLogin.token,'Trainerspoint','Reception-personal-password-123')).status,200);
+    const receptionist=receptionistLogin.token;
+    assert.equal((await request('login','', 'POST',{username:'trainer',password:'Trainerspoint'})).status,401);
     const trainerState=await (await request('state',trainer)).json();assert.equal(trainerState.employees.length,1);assert.equal(trainerState.employees[0].id,'e2');assert.equal((await request('bookings',trainer,'POST',{booking:{}})).status,403);
     const view=await (await request('manage',trainer)).json();assert.equal(view.employees.length,1);assert.equal(view.employees[0].id,'e2');assert.deepEqual(view.clients,[]);assert.deepEqual(view.users,[]);
     assert.equal((await request('config',trainer,'PUT',{config:c,revision:0})).status,403);
@@ -462,7 +476,8 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
     assert.equal((await request('manage/clients',receptionist,'POST',{record:{name:'Desde recepción',email:'',phone:'',notes:''},revision:rev})).status,201);
     assert.equal((await request('manage/users/'+adminId,admin,'PUT',{record:{...adminBody.record,enabled:false}})).status,409);
     const members=await (await request('manage',admin)).json();assert.ok(members.users.every(u=>!u.password_hash&&!u.password));
-    assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer@example.com',role:'TRAINER',enabled:false}})).status,200);
+    assert.ok(members.users.every(u=>typeof u.mustChangePassword==='boolean'));
+    assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer',role:'TRAINER',enabled:false}})).status,200);
     assert.equal((await request('me',trainer)).status,401);
     await request('logout',receptionist,'POST');assert.equal((await request('me',receptionist)).status,401);
   }finally{await new Promise(r=>app.close(r));}
