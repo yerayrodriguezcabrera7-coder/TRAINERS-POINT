@@ -99,3 +99,20 @@ npm test
 ```
 
 Pruebas contra un PostgreSQL temporal real, sin usar DATABASE_URL ni datos del usuario: solicitudes simultáneas desde dos pools independientes, aforo, estados, cancelación/reactivación, franjas, edición concurrente, rollback, aislamiento entre gimnasios y API pública visible desde dos instancias HTTP. Además se conservan las pruebas del calendario local.
+
+
+## Horarios de empleados y calendario
+
+En Profesionales o Turnos, abre la ficha de un empleado. Configura la primera franja de cada día y usa «Franja de lunes», etc., para añadir una jornada partida. «Libre» deja ese día sin horario. Los turnos por fecha sustituyen por completo el horario semanal y permiten registrar vacaciones o cambios puntuales.
+
+Las franjas semanales se guardan como `employees[].weeklyPeriods` (siete listas de intervalos, de lunes a domingo) en PostgreSQL, dentro de la configuración del centro. Los registros anteriores, sin ese campo, siguen usando `schedule`. No se inventan ni modifican los horarios de empleados existentes al actualizar el programa.
+
+El calendario sombrea los huecos fuera del turno; al filtrar por servicio comprueba que su duración cabe completa. El servidor vuelve a validar toda reserva, también las públicas, y rechaza cambiar un turno si deja una cita pendiente o confirmada futura fuera de horario. Las excepciones por fecha prevalecen sobre las franjas semanales.
+
+La rama `rama/clientes-db` del compañero contiene modelos Prisma de clientes, notas, servicios y reservas, pero todavía no tiene un modelo de empleados. Estos horarios utilizan la base actual de la aplicación; no representan una integración de tablas de empleados inexistentes en esa rama.
+
+## Solicitudes de ausencia
+
+Cada persona puede registrar una solicitud de vacaciones, baja, permiso u otra ausencia desde `Ausencias`. La solicitud incluye solo fechas, tipo y una observación administrativa opcional: no se deben guardar diagnósticos ni detalles médicos.
+
+La solicitud empieza como `PENDING`. Administración puede aprobarla o rechazarla; el empleado puede retirarla mientras siga pendiente. Al aprobar una ausencia, sus fechas quedan bloqueadas para nuevas reservas. Si hay una reserva pendiente o confirmada en ese período, la aprobación se rechaza hasta que administración la reasigne o cancele. Las rutas son `GET /api/leaves`, `POST /api/leaves`, `PUT /api/leaves/:id/review` y `PUT /api/leaves/:id/cancel`.

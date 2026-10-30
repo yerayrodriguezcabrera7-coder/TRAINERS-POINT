@@ -40,13 +40,14 @@ export const employeeSchema = named.extend({
   email: z.union([z.literal(""), z.email()]).optional(),
   jobTitle: z.string().trim().max(100).optional(),
   active: z.boolean().optional(),
+  weeklyPeriods: z.array(z.array(period).max(8)).length(7).optional(),
   shifts: z.array(z.object({ date, periods: z.array(period).max(8) })).max(366).optional(),
 }).superRefine((e, ctx) => {
   const shifts = e.shifts || [];
   if (new Set(shifts.map(s => s.date)).size !== shifts.length)
     ctx.addIssue({ code: "custom", message: "Hay fechas de turno duplicadas." });
-  for (const shift of shifts) {
-    const sorted = [...shift.periods].sort((a,b) => a.open.localeCompare(b.open));
+  for (const periods of [...shifts.map(s => s.periods), ...(e.weeklyPeriods || [])]) {
+    const sorted = [...periods].sort((a,b) => a.open.localeCompare(b.open));
     if (sorted.some((p,i) => i > 0 && p.open < sorted[i-1].close))
       ctx.addIssue({ code: "custom", message: "Los turnos del mismo día se solapan." });
   }
@@ -58,6 +59,25 @@ export const serviceSchema = named.extend({
   description: z.string().max(2000).optional(),
   active: z.boolean().optional(),
 });
+export const leaveTypes = ["VACATION", "SICK_LEAVE", "PERMISSION", "OTHER"] as const;
+export const leaveStatuses = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"] as const;
+const leaveRequestFields = z.object({
+  id,
+  employeeId: id,
+  type: z.enum(leaveTypes),
+  startDate: date,
+  endDate: date,
+  // Deliberately limited to administrative information. Medical details do not belong here.
+  note: z.string().trim().max(500).default(""),
+  status: z.enum(leaveStatuses),
+  createdAt: z.string().datetime(),
+  reviewedAt: z.string().datetime().nullable().optional(),
+  reviewerId: id.nullable().optional(),
+});
+export const leaveRequestSchema = leaveRequestFields.refine((leave) => leave.startDate <= leave.endDate, {
+  message: "La fecha final debe ser igual o posterior a la inicial.",
+  path: ["endDate"],
+});
 export const configSchema = z
   .object({
     timezone: z.string().refine((v) => DateTime.now().setZone(v).isValid),
@@ -66,6 +86,7 @@ export const configSchema = z
     rooms: z.array(named).min(1),
     clients: z.array(clientSchema),
     schedule: week,
+    leaveRequests: z.array(leaveRequestSchema).max(10000).default([]),
   })
   .superRefine((c, ctx) => {
     for (const key of ["employees", "services", "rooms", "clients"] as const)
@@ -73,6 +94,16 @@ export const configSchema = z
         ctx.addIssue({ code: "custom", message: `IDs duplicados: ${key}` });
   });
 export type Config = z.infer<typeof configSchema>;
+export type LeaveRequest = z.infer<typeof leaveRequestSchema>;
+export const leaveRequestInputSchema = leaveRequestFields.pick({
+  type: true,
+  startDate: true,
+  endDate: true,
+  note: true,
+}).refine((leave) => leave.startDate <= leave.endDate, {
+  message: "La fecha final debe ser igual o posterior a la inicial.",
+  path: ["endDate"],
+});
 export const bookingSchema = z.object({
   id: id.optional(),
   clientId: id,
@@ -133,6 +164,8 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
   const worker = c.employees.find((x) => x.id === b.employeeId)!;
+  if (c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
+    throw new ApiError(409, "El empleado tiene una ausencia aprobada en esa fecha.");
   for (const h of [c.schedule[day]])
     if (h.closed || b.start < h.open || b.end > h.close)
       throw new ApiError(
@@ -140,7 +173,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
         "Fuera del horario de apertura o del entrenador.",
       );
   const override = worker.shifts?.find(s => s.date === b.date);
-  const periods = override ? override.periods : worker.schedule[day].closed ? [] : [worker.schedule[day]];
+  const periods = override ? override.periods : worker.weeklyPeriods ? worker.weeklyPeriods[day] : worker.schedule[day].closed ? [] : [worker.schedule[day]];
   if (!periods.some(p => b.start >= p.open && b.end <= p.close))
     throw new ApiError(409, "Fuera del horario del entrenador.");
   const clashes = all.filter(

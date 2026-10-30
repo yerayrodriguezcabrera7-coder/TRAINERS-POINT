@@ -51,7 +51,7 @@
       if(section==='clients')cells=[esc(x.name),`${esc(x.email||'Sin correo')}<small>${esc(x.phone||'Sin teléfono')}</small>`,badge,data.bookings.filter(b=>b.clientId===x.id).length];
       else if(section==='services')cells=[`${esc(x.name)}<small>${esc(x.description||'')}</small>`,`${x.duration} min · ${x.capacity} plaza(s)`,new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(x.price||0),badge];
       else if(section==='users')cells=[esc(x.username),esc(nameFor('employees',x.employeeId)),roleNames[x.role],badge];
-      else cells=[`${esc(x.name)}<small>${esc(x.email||'')}</small>`,esc(x.jobTitle||'Sin asignar'),`${x.schedule.filter(h=>!h.closed).length} días · ${(x.shifts||[]).length} excepciones`,badge];
+      else cells=[`${esc(x.name)}<small>${esc(x.email||'')}</small>`,esc(x.jobTitle||'Sin asignar'),`${(x.weeklyPeriods || x.schedule.map(h=>h.closed?[]:[h])).filter(p=>p.length).length} días · ${(x.shifts||[]).length} excepciones`,badge];
       return `<tr>${cells.map(v=>`<td>${v}</td>`).join('')}<td><button data-edit="${esc(x.id)}">${section==='shifts'?'Ver turnos':'Abrir ficha'}</button></td></tr>`;
     }).join('');
   }
@@ -76,8 +76,9 @@
     $('fields').innerHTML='<div class="form-grid">'+html+'</div>';
     if(['employees','shifts'].includes(section)){
       shifts=structuredClone(x.shifts||[]);
-      const schedule=x.schedule||data.schedule;
-      $('fields').insertAdjacentHTML('beforeend',`<section class="schedule-editor"><h3>Horario semanal</h3><p class="hint">Las reservas deben estar dentro del horario del centro y del empleado.</p>${schedule.map((h,i)=>`<div class="day"><strong>${days[i]}</strong><input type="time" name="open${i}" value="${h.open}" aria-label="Inicio ${days[i]}" required><input type="time" name="close${i}" value="${h.close}" aria-label="Fin ${days[i]}" required><label><input type="checkbox" name="closed${i}" ${h.closed?'checked':''}> Libre</label></div>`).join('')}</section><section><h3>Turnos por fecha</h3><p class="hint">Sustituyen el horario semanal ese día. Añade varias franjas para una jornada partida, o marca el día libre.</p><div id="overrides"></div><div class="shift-add"><label>Fecha<input id="shift-date" type="date"></label><label>Desde<input id="shift-open" type="time" value="09:00"></label><label>Hasta<input id="shift-close" type="time" value="14:00"></label><button type="button" id="add-shift" class="outline-button">Añadir franja</button><button type="button" id="day-off" class="outline-button">Día libre</button></div></section>`);
+      const weekly=x.weeklyPeriods || (x.schedule||data.schedule).map(h=>h.closed?[]:[h]);
+      const schedule=weekly.map(p=>p.length?{...p[0],closed:false}:{open:'09:00',close:'14:00',closed:true});
+      $('fields').insertAdjacentHTML('beforeend',`<section class="schedule-editor"><h3>Horario semanal</h3><p class="hint">Añade una o varias franjas cada día. Los descansos entre franjas no admiten reservas. El horario del centro también se respeta.</p>${schedule.map((h,i)=>`<div class="day"><strong>${days[i]}</strong><input type="time" name="open${i}" value="${h.open}" aria-label="Inicio ${days[i]}" required><input type="time" name="close${i}" value="${h.close}" aria-label="Fin ${days[i]}" required><label><input type="checkbox" name="closed${i}" ${h.closed?'checked':''}> Libre</label></div><div class="weekly-extras" data-weekly="${i}">${weekly[i].slice(1).map(p=>extraPeriod(p)).join('')}</div><button type="button" class="outline-button" data-add-weekly="${i}">＋ Franja de ${days[i]}</button>`).join('')}</section><section><h3>Turnos por fecha</h3><p class="hint">Sustituyen el horario semanal ese día. Añade varias franjas para una jornada partida, o marca el día libre.</p><div id="overrides"></div><div class="shift-add"><label>Fecha<input id="shift-date" type="date"></label><label>Desde<input id="shift-open" type="time" value="09:00"></label><label>Hasta<input id="shift-close" type="time" value="14:00"></label><button type="button" id="add-shift" class="outline-button">Añadir franja</button><button type="button" id="day-off" class="outline-button">Día libre</button></div></section>`);
       renderShifts();$('add-shift').onclick=()=>addShift(false);$('day-off').onclick=()=>addShift(true);
     }
     if(section==='clients' && editing){
@@ -86,6 +87,9 @@
     }
     if(!canEdit()) $('fields').querySelectorAll('input,select,textarea,button').forEach(e=>e.disabled=true);
     $('editor').showModal();
+  }
+  function extraPeriod(p={open:'16:00',close:'20:00'}) {
+    return `<div class="weekly-extra"><input type="time" data-open value="${esc(p.open)}" aria-label="Inicio de franja adicional" required><input type="time" data-close value="${esc(p.close)}" aria-label="Fin de franja adicional" required><button type="button" data-remove-weekly aria-label="Eliminar franja adicional">Eliminar franja</button></div>`;
   }
   function renderShifts(){
     $('overrides').innerHTML=shifts.sort((a,b)=>a.date.localeCompare(b.date)).map(s=>`<div class="override"><strong>${esc(s.date)}</strong><span>${s.periods.length?s.periods.map(p=>`${p.open}–${p.close}`).join(' · '):'Día libre'}</span><button type="button" data-remove-shift="${s.date}" aria-label="Quitar excepción ${s.date}">Eliminar excepción</button></div>`).join('');
@@ -108,13 +112,19 @@
     else if(section==='services')record={name:value('name').trim(),duration:Number(value('duration')),capacity:Number(value('capacity')),price:Number(value('price')),active:value('active')==='true',description:value('description')};
     else if(section==='users')record={username:value('username').trim(),employeeId:value('employeeId'),role:value('role'),enabled:value('enabled')==='true',...(value('password')?{password:value('password')}:{})};
     else record={name:value('name').trim(),email:value('email').trim(),jobTitle:value('jobTitle').trim(),color:value('color'),active:value('active')==='true',schedule:days.map((_,i)=>({open:value('open'+i),close:value('close'+i),closed:form.has('closed'+i)})),shifts};
+    if (['employees','shifts'].includes(section)) record.weeklyPeriods=days.map((_,i)=>form.has('closed'+i)?[]:[{open:value('open'+i),close:value('close'+i)},...Array.from(document.querySelectorAll(`[data-weekly="${i}"] .weekly-extra`),row=>({open:row.querySelector('[data-open]').value,close:row.querySelector('[data-close]').value}))]);
     const kind=section==='shifts'?'employees':section;
     $('save').disabled=true;
     try{const result=await api('manage/'+kind+(editing?'/'+encodeURIComponent(editing.id):''),editing?'PUT':'POST',{record,revision});if(result.token){sessionStorage.removeItem('calendar-admin-token');sessionStorage.setItem('calendar-user-token',result.token);}$('editor').close();await load();notice('Cambios guardados.');}
     catch(error){formError(error.message);}finally{$('save').disabled=false;}
   });
   $('rows').addEventListener('click',e=>{const button=e.target.closest('[data-edit]');if(button)edit(button.dataset.edit);});
-  $('fields').addEventListener('click',e=>{const button=e.target.closest('[data-remove-shift]');if(button){shifts=shifts.filter(s=>s.date!==button.dataset.removeShift);renderShifts();}});
+  $('fields').addEventListener('click',e=>{
+    const add=e.target.closest('[data-add-weekly]');
+    if(add && canEdit()){document.querySelector(`[data-weekly="${add.dataset.addWeekly}"]`).insertAdjacentHTML('beforeend',extraPeriod());return;}
+    const remove=e.target.closest('[data-remove-weekly]');
+    if(remove && canEdit()){remove.closest('.weekly-extra').remove();return;}
+    const button=e.target.closest('[data-remove-shift]');if(button){shifts=shifts.filter(s=>s.date!==button.dataset.removeShift);renderShifts();}});
   $('close').onclick=$('cancel').onclick=()=>$('editor').close();$('add').onclick=()=>edit();
   $('search').oninput=$('status-filter').onchange=render;
   $('refresh').onclick=()=>load().catch(e=>notice(e.message,true));

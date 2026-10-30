@@ -481,9 +481,19 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
     d=await open('services');d.getElementById('add').click();d.querySelector('[name=name]').value='Pilates';d.querySelector('[name=capacity]').value='8';d.querySelector('[name=price]').value='25';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>d.getElementById('rows').textContent.includes('Pilates'));
     assert.equal((await store.state(g)).services.find(s=>s.name==='Pilates').capacity,8);
-    d=await open('shifts');d.querySelector('[data-edit=e1]').click();d.getElementById('shift-date').value='2030-10-23';d.getElementById('day-off').click();d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    d=await open('shifts');d.querySelector('[data-edit=e1]').click();d.querySelector('[name=close1]').value='12:00';d.querySelector('[data-add-weekly="1"]').click();d.querySelector('[data-weekly="1"] [data-close]').value='18:00';d.getElementById('shift-date').value='2030-10-23';d.getElementById('day-off').click();d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>!d.getElementById('editor').open);
     assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
+    assert.deepEqual((await other.state(g)).employees[0].weeklyPeriods[1],[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+    dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
+    await until(()=>d.querySelector('[data-slot="2030-10-22"]'));
+    d.getElementById('service-filter').value='s2';d.getElementById('service-filter').dispatchEvent(new dom.window.Event('change'));
+    const slot=n=>d.querySelector(`[data-slot="2030-10-22"][data-employee="e1"][data-minute="${n}"]`);
+    assert.equal(slot(690).disabled,true); // 11:30 + 45 min crosses lunch.
+    assert.equal(slot(720).disabled,true);
+    assert.equal(slot(960).disabled,false);
+    assert.equal(slot(1050).disabled,true); // 17:30 + 45 min exceeds shift.
+
   }finally{dom?.window.close();await new Promise(r=>app.close(r));}
 });
 
@@ -511,4 +521,42 @@ test('Inicio: muestra actividad real, filtra pendientes y abre la reserva correc
     await until(()=>d.getElementById('booking-dialog').open);
     assert.equal(d.getElementById('booking-client').value,'c0');assert.equal(d.getElementById('booking-status').value,'pending');assert.equal(d.getElementById('booking-date').value,today);
   }finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+
+
+test('Turnos semanales partidos: persistencia, descansos, excepciones y protección de citas',async()=>{
+  const c=config();c.employees[0].weeklyPeriods=Array.from({length:7},()=>[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+  c.employees[0].shifts=[{date:'2030-10-23',periods:[]},{date:'2030-10-24',periods:[{open:'10:00',close:'11:00'}]}];
+  const g=await gym(c), query={date:'2030-10-22',employeeId:'e1',serviceId:'s2',roomId:'r1'};
+  const slots=await other.slots(g,query);
+  assert.ok(slots.some(s=>s.start==='11:15'&&s.end==='12:00'));
+  assert.ok(slots.some(s=>s.start==='16:00'));
+  assert.ok(!slots.some(s=>s.start==='11:30'||s.start==='13:00'||s.start==='17:30'));
+  assert.deepEqual(await store.slots(g,{...query,date:'2030-10-23'}),[]);
+  assert.deepEqual((await store.slots(g,{...query,date:'2030-10-24'})).map(s=>s.start),['10:00','10:15']);
+  await assert.rejects(store.save(g,booking({serviceId:'s2',start:'11:30'})),/horario del entrenador/);
+  await store.save(g,booking({start:'16:00'}));
+  const state=await store.state(g), worker=state.employees[0];
+  worker.weeklyPeriods[1]=[{open:'09:00',close:'12:00'}];
+  await assert.rejects(store.manage(g,'employees',worker,state.revision,worker.id),/horario del entrenador/);
+  assert.equal((await other.state(g)).employees[0].weeklyPeriods[1].length,2);
+  worker.weeklyPeriods[1]=[{open:'09:00',close:'12:00'},{open:'11:00',close:'17:00'}];
+  await assert.rejects(store.manage(g,'employees',worker,state.revision,worker.id),/solapan/);
+});
+
+test('Ausencias: solicitud, aprobación, bloqueo del calendario y protección de reservas',async()=>{
+  const g=await gym();
+  const leave=await store.requestLeave(g,'e1',{type:'VACATION',startDate:'2030-10-22',endDate:'2030-10-23',note:'Vacaciones anuales'});
+  assert.equal(leave.status,'PENDING');
+  assert.equal((await store.slots(g,{date:'2030-10-22',employeeId:'e1',serviceId:'s1',roomId:'r1'})).length>0,true);
+  const approved=await other.reviewLeave(g,leave.id,'APPROVED','admin-1');
+  assert.equal(approved.status,'APPROVED');
+  assert.deepEqual(await store.slots(g,{date:'2030-10-22',employeeId:'e1',serviceId:'s1',roomId:'r1'}),[]);
+  await assert.rejects(store.save(g,booking()),/ausencia aprobada/);
+  const conflictLeave=await store.requestLeave(g,'e2',{type:'PERMISSION',startDate:'2030-10-24',endDate:'2030-10-24',note:''});
+  await store.save(g,booking({employeeId:'e2',roomId:'r2',date:'2030-10-24'}));
+  await assert.rejects(store.reviewLeave(g,conflictLeave.id,'APPROVED','admin-1'),/reservas activas/);
+  const cancelled=await store.cancelLeave(g,conflictLeave.id,'e2');
+  assert.equal(cancelled.status,'CANCELLED');
+  await assert.rejects(store.cancelLeave(g,leave.id,'e2'),/desconocida/);
 });

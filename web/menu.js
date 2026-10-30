@@ -22,14 +22,14 @@
   const items = [
     ['Inicio','home','inicio.html'],
     ['Calendario','calendar','index.html'], ['Clientes','people','gestion.html?section=clients'], ['Servicios','list','gestion.html?section=services'],
-    ['Profesionales','staff','gestion.html?section=employees'], ['Fichajes','clock','fichajes.html'],
+    ['Profesionales','staff','gestion.html?section=employees'], ['Fichajes','clock','fichajes.html'], ['Ausencias','history','ausencias.html'],
     ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','gestion.html?section=users'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = location.pathname.endsWith('gestion.html') ? 'gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? 'inicio.html' : location.pathname.endsWith('fichajes.html') ? 'fichajes.html' : 'index.html';
+  const current = location.pathname.endsWith('gestion.html') ? 'gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? 'inicio.html' : location.pathname.endsWith('fichajes.html') ? 'fichajes.html' : location.pathname.endsWith('ausencias.html') ? 'ausencias.html' : 'index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
@@ -37,7 +37,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(href===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
+  const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos','Ausencias']],['Administración',['Usuarios','Permisos']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><img class="app-menu-logo" src="logo-cobosu.png" alt="Cobosu Gym Station" width="440" height="222"></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation">⇆</button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Cobosu · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><span aria-hidden="true">＋</span></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const main=document.querySelector('main');
   if(main){main.id ||= 'main';const skip=document.createElement('a');skip.href='#'+main.id;skip.className='skip-content';skip.textContent='Ir al contenido';document.body.prepend(skip);}
@@ -61,7 +61,7 @@
       const me=await response.json();
       if(me.role!=='ADMIN')host.querySelectorAll('a.app-menu-item').forEach(a=>{
         const href=a.getAttribute('href');
-        const allowed=['fichajes.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','gestion.html?section=clients','gestion.html?section=services']:[])];
+        const allowed=['fichajes.html','ausencias.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','gestion.html?section=clients','gestion.html?section=services']:[])];
         if(!allowed.includes(href)) a.hidden=true;
       });
       host.querySelectorAll('.menu-group').forEach(group=>{group.hidden=![...group.querySelectorAll('a')].some(a=>!a.hidden);});

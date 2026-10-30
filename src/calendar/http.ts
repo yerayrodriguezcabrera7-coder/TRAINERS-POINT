@@ -99,6 +99,30 @@ export function server(
             } else send(res,id ? 200 : 201,result);
             return;
           }
+          if (req.method === "GET" && path === "/api/leaves") {
+            const leaves = await store.leaves(gym, identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned");
+            const employees = (await store.state(gym)).employees as Array<{ id: string; name: string }>;
+            send(res, 200, leaves.map((leave: any) => ({ ...leave, employeeName: employees.find((employee) => employee.id === leave.employeeId)?.name || "Empleado" })));
+            return;
+          }
+          if (req.method === "POST" && path === "/api/leaves") {
+            if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
+            send(res, 201, await store.requestLeave(gym, identity.employeeId, await body(req)));
+            return;
+          }
+          const leaveAction = path.match(/^\/api\/leaves\/([^/]+)\/(review|cancel)$/);
+          if (leaveAction && req.method === "PUT") {
+            const id = decodeURIComponent(leaveAction[1]);
+            if (leaveAction[2] === "review") {
+              if (!admin) throw new ApiError(403, "Solo administración puede revisar solicitudes.");
+              const raw = z.object({ status: z.enum(["APPROVED", "REJECTED"]) }).parse(await body(req));
+              send(res, 200, await store.reviewLeave(gym, id, raw.status, identity.id));
+            } else {
+              if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
+              send(res, 200, await store.cancelLeave(gym, id, identity.employeeId));
+            }
+            return;
+          }
           if (path === "/api/config" && !admin) throw new ApiError(403,"Solo administración puede cambiar horarios y configuración.");
           if (!office && !["/api/attendance","/api/attendance/clock"].includes(path)) throw new ApiError(403,"Tu perfil permite consultar tus turnos y fichajes.");
         }
@@ -247,6 +271,9 @@ export function server(
         "fichajes.html": "text/html",
         "fichajes.js": "text/javascript",
         "fichajes.css": "text/css",
+        "ausencias.html": "text/html",
+        "ausencias.js": "text/javascript",
+        "ausencias.css": "text/css",
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",

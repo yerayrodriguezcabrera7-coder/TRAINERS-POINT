@@ -19,6 +19,18 @@
     const hours = hoursFor(date, schedule);
     return !hours.closed && start >= minutes(hours.open) && end <= minutes(hours.close) && start < end;
   }
+  function employeePeriods(employee, date, schedule) {
+    if (employee.active === false) return [];
+    const override = employee.shifts?.find(s => s.date === date);
+    if (override) return override.periods;
+    if (employee.weeklyPeriods) return employee.weeklyPeriods[(parseDate(date).getDay() + 6) % 7];
+    const hours = hoursFor(date, employee.schedule || schedule);
+    return hours.closed ? [] : [hours];
+  }
+  function employeeAvailable(employee, date, start, end, schedule) {
+    return isOpen(date, start, end, schedule) && employeePeriods(employee, date, schedule)
+      .some(p => start >= minutes(p.open) && end <= minutes(p.close));
+  }
   function validateBooking(booking, bookings, schedule) {
     if (!validDate(booking.date) || !validTime(booking.start) || !validTime(booking.end)) return 'Introduce una fecha y unas horas válidas.';
     if (minutes(booking.start) >= minutes(booking.end)) return 'La hora de fin debe ser posterior al inicio.';
@@ -50,5 +62,5 @@
     if (group.length) flush();
     return result;
   }
-  return { dateKey, parseDate, addDays, monday, minutes, timeLabel, hoursFor, isOpen, validateBooking, layoutEvents, validDate };
+  return { dateKey, parseDate, addDays, monday, minutes, timeLabel, hoursFor, isOpen, validateBooking, layoutEvents, validDate, employeePeriods, employeeAvailable };
 });

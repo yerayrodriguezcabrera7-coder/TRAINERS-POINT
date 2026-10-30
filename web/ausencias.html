@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ausencias · Cobosu</title>
+  <link rel="stylesheet" href="fichajes.css">
+  <link rel="stylesheet" href="menu.css">
+  <link rel="stylesheet" href="design.css">
+  <link rel="stylesheet" href="ausencias.css">
+  <script src="menu.js" defer></script>
+  <script src="runtime.js" defer></script>
+  <script src="ausencias.js" defer></script>
+</head>
+<body>
+  <aside data-app-menu aria-label="Navegación del centro"></aside>
+  <main class="attendance-shell leave-shell">
+    <header class="attendance-header">
+      <div><p class="eyebrow">EQUIPO · PLANIFICACIÓN</p><h1>Ausencias y permisos<span style="color:var(--red)">.</span></h1><p id="leave-subtitle" class="header-date">Carga de solicitudes…</p></div>
+      <button id="new-leave" class="primary">＋ Solicitar ausencia</button>
+    </header>
+    <p id="leave-warning" class="warning" role="alert" hidden></p>
+    <section class="summary leave-summary" aria-label="Resumen de ausencias">
+      <article><div><small>PENDIENTES</small><strong id="pending-count">0</strong></div></article>
+      <article><div><small>APROBADAS</small><strong id="approved-count">0</strong></div></article>
+      <article><div><small>MIS SOLICITUDES</small><strong id="mine-count">0</strong></div></article>
+    </section>
+    <section class="attendance-card leave-card">
+      <header><div><p class="eyebrow">SOLICITUDES</p><h2 id="list-title">Mis ausencias</h2></div><button id="refresh-leaves" class="outline-button">Actualizar</button></header>
+      <div id="leave-list" class="leave-list"></div>
+      <p id="leave-empty" class="empty-state" hidden>No hay solicitudes para mostrar.</p>
+    </section>
+  </main>
+  <dialog id="leave-dialog" aria-labelledby="leave-dialog-title">
+    <form id="leave-form"><header class="dialog-heading"><div><p class="eyebrow">NUEVA SOLICITUD</p><h2 id="leave-dialog-title">Solicitar ausencia</h2></div><button type="button" id="close-leave" aria-label="Cerrar">×</button></header>
+      <div class="leave-form-grid">
+        <label>Tipo<select id="leave-type"><option value="VACATION">Vacaciones</option><option value="SICK_LEAVE">Baja</option><option value="PERMISSION">Permiso</option><option value="OTHER">Otro</option></select></label>
+        <label>Desde<input id="leave-start" type="date" required></label>
+        <label>Hasta<input id="leave-end" type="date" required></label>
+        <label class="full">Observación administrativa (opcional)<textarea id="leave-note" maxlength="500" rows="4" placeholder="Ejemplo: permiso personal. No escribas datos médicos ni diagnósticos."></textarea></label>
+      </div>
+      <p class="hint">La solicitud no bloquea el calendario hasta que administración la aprueba.</p><p id="leave-form-error" class="warning" role="alert" hidden></p>
+      <footer class="dialog-actions"><button type="button" id="cancel-leave" class="outline-button">Cancelar</button><button class="primary">Enviar solicitud</button></footer>
+    </form>
+  </dialog>
+</body>
+</html>

@@ -18,6 +18,8 @@ import {
   attendanceActionSchema,
   employeeSchema,
   serviceSchema,
+  leaveRequestInputSchema,
+  LeaveRequest,
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
 CREATE TABLE IF NOT EXISTS calendar.gyms(id text PRIMARY KEY, config jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0);
@@ -201,6 +203,54 @@ export class Store {
       await this.validateConfig(db,gym,c,bookings);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym,c]);
       return record;
+    });
+  }
+  async leaves(gym: string, employeeId?: string) {
+    const state = await this.state(gym);
+    return state.leaveRequests
+      .filter((leave: LeaveRequest) => !employeeId || leave.employeeId === employeeId)
+      .sort((a: LeaveRequest, b: LeaveRequest) => b.createdAt.localeCompare(a.createdAt));
+  }
+  async requestLeave(gym: string, employeeId: string, raw: unknown) {
+    const input = leaveRequestInputSchema.parse(raw);
+    return this.transaction(gym, async (db, c) => {
+      const employee = c.employees.find((item) => item.id === employeeId);
+      if (!employee || employee.active === false) throw new ApiError(404, "Empleado desconocido o inactivo.");
+      const leave: LeaveRequest = {
+        id: randomUUID(), employeeId, ...input, status: "PENDING",
+        createdAt: new Date().toISOString(), reviewedAt: null, reviewerId: null,
+      };
+      c.leaveRequests.push(leave);
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return leave;
+    });
+  }
+  async reviewLeave(gym: string, id: string, status: "APPROVED" | "REJECTED", reviewerId: string) {
+    return this.transaction(gym, async (db, c, bookings) => {
+      const leave = c.leaveRequests.find((item) => item.id === id);
+      if (!leave) throw new ApiError(404, "Solicitud desconocida.");
+      if (leave.status !== "PENDING") throw new ApiError(409, "Esta solicitud ya fue revisada.");
+      if (status === "APPROVED") {
+        const conflict = bookings.find((booking) => booking.employeeId === leave.employeeId &&
+          ["PENDING", "CONFIRMED"].includes(booking.status) &&
+          booking.date >= leave.startDate && booking.date <= leave.endDate);
+        if (conflict) throw new ApiError(409, "Hay reservas activas en esas fechas. Reasígnalas o cancélalas antes de aprobar la ausencia.");
+      }
+      leave.status = status;
+      leave.reviewedAt = new Date().toISOString();
+      leave.reviewerId = reviewerId;
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return leave;
+    });
+  }
+  async cancelLeave(gym: string, id: string, employeeId: string) {
+    return this.transaction(gym, async (db, c) => {
+      const leave = c.leaveRequests.find((item) => item.id === id);
+      if (!leave || leave.employeeId !== employeeId) throw new ApiError(404, "Solicitud desconocida.");
+      if (leave.status !== "PENDING") throw new ApiError(409, "Solo puedes retirar solicitudes pendientes.");
+      leave.status = "CANCELLED";
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return leave;
     });
   }
   async slots(gym: string, query: Record<string, string>) {

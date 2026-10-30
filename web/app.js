@@ -157,11 +157,11 @@ function renderTimeGrid(dates, bookings, employees) {
     html += `<div class="time-column ${date === todayKey() ? 'is-today' : ''}" style="grid-column:${2 + i * employees.length + j};grid-row:3">`;
     for (let slot = 0; slot < 48; slot++) {
       const start = slot * 30;
-      const override = employee.shifts?.find(s=>s.date===date);
-      const working = override ? override.periods.some(p=>start>=C.minutes(p.open) && start+30<=C.minutes(p.close)) : !employee.schedule || C.isOpen(date,start,start+30,employee.schedule);
-      const open = employee.active!==false && working && C.isOpen(date, start, start + 30, data.schedule);
+      const duration = lookup('services',state.service)?.duration || 30;
+      const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && date >= leave.startDate && date <= leave.endDate);
+      const open = !absent && C.employeeAvailable(employee,date,start,start+duration,data.schedule);
       const label = `${prettyDate(date, { day: 'numeric', month: 'long' })}, ${C.timeLabel(start)}, ${employee.name}`;
-      html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de apertura: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera de apertura'}"></button>`;
+      html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
     }
     const events = bookings.filter(b => b.date === date && b.employeeId === employee.id);
     C.layoutEvents(events).forEach(({event:b,lane,count}) => {
@@ -219,7 +219,9 @@ function updateHoursHint() {
   const date = $('booking-date').value;
   if (!C.validDate(date)) { $('booking-hours').textContent = ''; return; }
   const hours = C.hoursFor(date, data.schedule);
-  $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : `Apertura: ${hours.open} – ${hours.close}. Se comprueba la disponibilidad de entrenador y sala al guardar.`;
+  const employee=lookup('employees',$('booking-employee').value);
+  const periods=employee?C.employeePeriods(employee,date,data.schedule):[];
+  $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : !periods.length ? 'Este empleado no trabaja este día.' : `Apertura: ${hours.open} – ${hours.close}. Turno: ${periods.map(p=>p.open+'–'+p.close).join(' y ')}. La reserva completa debe caber en una franja.`;
 }
 function showBooking(id, date = state.date, minute, employeeId) {
   if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
@@ -267,6 +269,7 @@ $('booking-form').addEventListener('submit', async event => {
     } catch(e){formError('booking-error',e.message);} finally{state.saving=false;}
     return;
   }
+  if(booking.status!=='cancelled' && !C.employeeAvailable(lookup('employees',booking.employeeId),booking.date,C.minutes(booking.start),C.minutes(booking.end),data.schedule)){formError('booking-error','La reserva debe quedar dentro del turno del empleado.');return;}
   const error = C.validateBooking(booking,data.bookings,data.schedule);
   if (error) { formError('booking-error',error); return; }
   if (clientId === 'new') data.clients.push({id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''});
@@ -281,6 +284,7 @@ $('booking-form').addEventListener('submit', async event => {
 });
 $('booking-client').addEventListener('change',updateClientFields);
 $('booking-date').addEventListener('change',updateHoursHint);
+$('booking-employee').addEventListener('change',updateHoursHint);
 $('booking-service').addEventListener('change',() => {
   if (state.editing) return;
   const duration = lookup('services',$('booking-service').value).duration || 60;
@@ -336,7 +340,7 @@ $('schedule-form').addEventListener('submit',async event => {
   const outside = data.bookings.filter(b => b.date >= todayKey() && !['cancelled','completed'].includes(b.status) && !C.isOpen(b.date,C.minutes(b.start),C.minutes(b.end),schedule));
   if (outside.length) { formError('schedule-error',`Este horario dejaría ${outside.length} reserva(s) activa(s) fuera de apertura. Modifica esas reservas antes de cambiar el horario.`); return; }
   if(serverMode){
-    try{await api('config','PUT',{config:{...state.configSnapshot,schedule},revision:state.configRevision});$('schedule-dialog').close();await refreshServer(true);toast('Apertura actualizada. Los horarios laborales se configuran por entrenador en la API.');}
+    try{await api('config','PUT',{config:{...state.configSnapshot,schedule},revision:state.configRevision});$('schedule-dialog').close();await refreshServer(true);toast('Apertura actualizada. Los horarios laborales se configuran en Profesionales o Turnos.');}
     catch(e){formError('schedule-error',e.message);}return;
   }
   data.schedule = schedule;
