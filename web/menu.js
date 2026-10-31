@@ -31,12 +31,22 @@
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : (location.pathname === '/usuarios' || location.pathname === '/usuarios.html') ? '/usuarios' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
+  function menuKey(href) {
+    const url = new URL(href, location.href);
+    const path = url.pathname;
+    if (path === '/') return '/index.html';
+    if (path === '/clientes' || path.startsWith('/clientes/') || path === '/client-profile.html') return '/clientes';
+    if (path === '/usuarios.html') return '/usuarios';
+    if (path === '/gyms.html') return '/gimnasios';
+    if (path === '/gestion.html') return path + '?section=' + (url.searchParams.get('section') || 'services');
+    return path;
+  }
+  const current = menuKey(location.href);
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
       return href
-        ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(href===current?' aria-current="page"':'')+'>'+content+'</a>'
+        ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
   const groups=[['Tu centro',['Mis reservas','Inicio','Calendario','Clientes','Servicios','Productos']],['Equipo',['Profesionales','Fichajes','Ausencias','Recuperaciones','Turnos']],['Administración',['Usuarios','Permisos']]];
