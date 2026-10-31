@@ -25,14 +25,14 @@
     ['Mis reservas','calendar','/mis-reservas.html'], ['Inicio','home','/inicio.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/gestion.html?section=services'],
     ['Profesionales','staff','/gestion.html?section=employees'], ['Fichajes','clock','/fichajes.html'], ['Ausencias','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
-    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','gestion.html?section=roles'], ['Productos','bag','/productos.html'],
+    ['Turnos','calendar','/gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','/gestion.html?section=roles'], ['Productos','bag','/productos.html'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
   function menuKey(href) {
-    const url = new URL(href, location.href);
+    const url = new URL(href, location.origin + "/");
     const path = url.pathname;
     if (path === '/') return '/index.html';
     if (path === '/clientes' || path.startsWith('/clientes/') || path === '/client-profile.html') return '/clientes';
