@@ -4,7 +4,7 @@ import { DateTime } from 'luxon';
 import { ApiError } from './calendar/model';
 import type { Identity } from './calendar/access';
 const productInput=z.object({name:z.string().trim().min(1).max(200),description:z.string().trim().max(2000).default(''),price:z.number().min(0).max(1000000).refine(v=>Math.abs(v*100-Math.round(v*100))<1e-6),stock:z.number().int().min(0).max(1000000),revision:z.number().int().positive().optional()});
-const saleInput=z.object({requestKey:z.string().uuid(),clientId:z.string().uuid().nullable(),lines:z.array(z.object({productId:z.string().uuid(),quantity:z.number().int().min(1).max(10000)})).min(1).max(100)});
+const saleInput=z.object({requestKey:z.string().uuid(),clientId:z.string().uuid().nullable(),lines:z.array(z.object({productId:z.string().uuid(),quantity:z.number().int().min(1).max(10000),expectedUnitPrice:z.number().nonnegative().max(1000000).optional()})).min(1).max(100)});
 const returnInput=z.object({requestKey:z.string().uuid(),lines:z.array(z.object({lineId:z.string().uuid(),quantity:z.number().int().min(1).max(10000)})).min(1).max(100)});
 export class Inventory {
  constructor(private db:PrismaClient){}
@@ -25,7 +25,7 @@ export class Inventory {
   const existing=await tx.sale.findUnique({where:{requestKey:v.requestKey},include:{lines:true}});if(existing){if(existing.gymKey!==gym || existing.clientId!==v.clientId || existing.lines.length!==v.lines.length || v.lines.some(l=>!existing.lines.some(e=>e.productId===l.productId&&Number(e.quantity)===l.quantity)))throw new ApiError(409,'Identificador de venta ya utilizado.');return existing;}
   if(v.clientId&&!(await tx.client.findFirst({where:{id:v.clientId,gymId:gym}})))throw new ApiError(400,'Selecciona un cliente de este gimnasio.');
   const lines=[];let total=0;
-  for(const l of v.lines){const p=await tx.product.findFirst({where:{id:l.productId,gymKey:gym,isActive:true}});if(!p||p.stock<l.quantity)throw new ApiError(409,'Producto no disponible o stock insuficiente.');const cents=Math.round(Number(p.unitPrice)*100),amount=cents*l.quantity;total+=amount;
+  for(const l of v.lines){const p=await tx.product.findFirst({where:{id:l.productId,gymKey:gym,isActive:true}});if(!p||p.stock<l.quantity)throw new ApiError(409,'Producto no disponible o stock insuficiente.');if(l.expectedUnitPrice!==undefined&&Math.round(l.expectedUnitPrice*100)!==Math.round(Number(p.unitPrice)*100))throw new ApiError(409,'El precio de '+p.name+' ha cambiado. Actualiza los productos y revisa el total antes de confirmar.');const cents=Math.round(Number(p.unitPrice)*100),amount=cents*l.quantity;total+=amount;
    lines.push({type:'PRODUCTO' as const,productId:p.id,description:p.name,quantity:l.quantity,unitPrice:p.unitPrice,taxRate:0,lineSubtotal:amount/100,taxAmount:0,lineTotal:amount/100});
   }
   if(total>999999999999)throw new ApiError(400,'El importe de la venta supera el máximo permitido.');
@@ -44,7 +44,23 @@ export class Inventory {
   }
   const lines=await tx.saleLine.findMany({where:{saleId:id}});return tx.sale.update({where:{id},data:{...(!cancel?{returnKeys:{push:requested!.requestKey}}:{}),status:cancel?'CANCELADA':lines.every(l=>l.returnedQuantity===Number(l.quantity))?'REEMBOLSADA':'COMPLETADA'},include:{lines:true}});
  });}
- async sales(gym:string,q:URLSearchParams){const from=q.get('from'),to=q.get('to');const valid=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&DateTime.fromISO(v).isValid;if((from&&!valid(from))||(to&&!valid(to))||(from&&to&&from>to))throw new ApiError(400,'Fechas inválidas.');
- const client=q.get('client');const rows=await this.db.sale.findMany({where:{gymKey:gym,...(client?{clientId:client==='walkin'?null:client}:{}),...(q.get('product')?{lines:{some:{productId:q.get('product')!}}}:{}),...(from||to?{soldAt:{...(from?{gte:DateTime.fromISO(from,{zone:'Europe/Madrid'}).startOf('day').toJSDate()}:{}),...(to?{lt:DateTime.fromISO(to,{zone:'Europe/Madrid'}).plus({days:1}).startOf('day').toJSDate()}:{})}}:{})},include:{client:{select:{firstName:true,lastName:true}},lines:true},orderBy:{soldAt:'desc'},take:500});return rows;}
+ private salesFilters(q:URLSearchParams) {
+  const validDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>DateTime.fromISO(v).isValid);
+  const filters=z.object({from:validDate.optional(),to:validDate.optional(),client:z.union([z.literal('walkin'),z.string().uuid()]).optional(),product:z.string().uuid().optional(),status:z.enum(['COMPLETADA','CANCELADA','REEMBOLSADA']).optional(),page:z.coerce.number().int().min(1).max(100000).default(1)}).parse(Object.fromEntries(q));
+  if(filters.from&&filters.to&&filters.from>filters.to)throw new ApiError(400,'La fecha inicial no puede ser posterior a la final.');
+  const {from,to,client,product,status}=filters;
+  const where:Prisma.SaleWhereInput={...(client?{clientId:client==='walkin'?null:client}:{}),...(product?{lines:{some:{productId:product}}}:{}),...(status?{status}:{}),...(from||to?{soldAt:{...(from?{gte:DateTime.fromISO(from,{zone:'Europe/Madrid'}).startOf('day').toJSDate()}:{}),...(to?{lt:DateTime.fromISO(to,{zone:'Europe/Madrid'}).plus({days:1}).startOf('day').toJSDate()}:{})}}:{})};
+  return {where,page:filters.page};
+ }
+ async sales(gym:string,q:URLSearchParams){
+  const {where}=this.salesFilters(q);
+  return this.db.sale.findMany({where:{...where,gymKey:gym},include:{client:{select:{firstName:true,lastName:true}},lines:true},orderBy:[{soldAt:'desc'},{id:'desc'}],take:500});
+ }
+ async salesPage(gym:string,q:URLSearchParams){
+  const {where,page}=this.salesFilters(q),pageSize=50;
+  const rows=await this.db.sale.findMany({where:{...where,gymKey:gym},include:{client:{select:{firstName:true,lastName:true}},lines:true},orderBy:[{soldAt:'desc'},{id:'desc'}],skip:(page-1)*pageSize,take:pageSize+1});
+  return {sales:rows.slice(0,pageSize),pagination:{page,pageSize,hasPrevious:page>1,hasNext:rows.length>pageSize}};
+ }
+
 }
 export function inventoryPermission(actor:Identity|undefined,action:string){if(!actor)throw new ApiError(401,'Inicia sesión.');if(actor.role!=='ADMIN'&&!(actor.role==='RECEPTION'&&['read','sell'].includes(action)))throw new ApiError(403,'No tienes permiso para esta operación.');}

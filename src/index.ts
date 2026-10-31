@@ -530,7 +530,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       else if(product&&request.method==='POST'&&!product[1])sendJson(response,201,await inventory.saveProduct(gym,await readJsonBody(request)));
       else if(product&&request.method==='PUT'&&product[1])sendJson(response,200,await inventory.saveProduct(gym,await readJsonBody(request),product[1]));
       else if(product&&request.method==='DELETE'&&product[1])sendJson(response,200,await inventory.removeProduct(gym,product[1]));
-      else if(url.pathname==='/api/inventory/sales'&&request.method==='GET')sendJson(response,200,{sales:await inventory.sales(gym,url.searchParams)});
+      else if(url.pathname==='/api/inventory/sales'&&request.method==='GET')sendJson(response,200,await inventory.salesPage(gym,url.searchParams));
       else if(url.pathname==='/api/inventory/sales'&&request.method==='POST')sendJson(response,201,await inventory.sell(gym,actor!.id,await readJsonBody(request)));
       else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel'));
       else sendError(response,404,"Operación desconocida.");

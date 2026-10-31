@@ -10,6 +10,8 @@ Persona de paso guarda clientId=null; cliente registrado guarda una referencia a
 
 Las devoluciones son por línea, con unidades acumuladas que no pueden superar las vendidas; reintentar la misma devolución no repone dos veces. Anular después de una devolución parcial repone solo lo pendiente. Los importes originales se conservan y la pantalla muestra el importe devuelto y neto. Estas operaciones registran la venta o devolución; no realizan cargos ni reembolsos bancarios.
 
-Historial: filtros por fechas del centro (Europe/Madrid), producto y comprador, incluyendo Persona de paso. Hasta 500 ventas por consulta; reducir el rango para consultar períodos anteriores. El stock actual se consulta en Productos y las unidades vendidas/devueltas en el detalle de cada venta.
+Historial: filtros por fechas del centro (Europe/Madrid), producto y comprador, incluyendo Persona de paso. Historial paginado de 50 ventas, ordenado por fecha y referencia para evitar duplicados cuando las fechas coinciden. Se puede avanzar y retroceder y filtrar también por estado. Los filtros inválidos se rechazan antes de consultar la base de datos. El stock actual se consulta en Productos y las unidades vendidas/devueltas en el detalle de cada venta.
 
 Pruebas en tests/inventory.test.cjs: PostgreSQL temporal aislado, migraciones completas, concurrencia, precios, repetición de peticiones, compradores, aislamiento entre centros, revisiones de stock, permisos, retirada lógica, devoluciones y flujo de carrito en DOM.
+
+Antes de confirmar, la web envía el precio que ha mostrado. Si ha cambiado, el servidor rechaza la venta sin descontar stock. El botón «Actualizar precios y stock» conserva el carrito y permite revisar el total antes de volver a confirmar. Los reintentos de una venta ya registrada conservan el precio original.
