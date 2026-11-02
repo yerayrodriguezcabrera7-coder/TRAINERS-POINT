@@ -11,7 +11,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "db:test": "ts-node src/test-db.ts"
+    "db:test": "ts-node src/test-db.ts",
+    "demo": "npm run build && node scripts/demo.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
