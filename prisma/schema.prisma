@@ -219,6 +219,9 @@ model Gym {
   province  String?
   address   String?
   photoData String?  @db.Text
+  latitude  Float?
+  longitude Float?
+  radiusMeters Int?    @default(200)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)

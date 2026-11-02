@@ -89,6 +89,9 @@ type GymInput = {
   province?: string;
   address?: string;
   photoData?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  radiusMeters?: number | null;
 };
 
 type ServiceInput = {
@@ -333,15 +336,28 @@ function parseGymInput(value: unknown): GymInput | string {
   const address = typeof value.address === "string" ? value.address.trim() : "";
   const photoData = typeof value.photoData === "string" ? value.photoData.trim() : "";
 
+  const rawLat = value.latitude;
+  const latitude = typeof rawLat === "number" && !isNaN(rawLat) ? rawLat : (typeof rawLat === "string" && rawLat.trim() && !isNaN(Number(rawLat)) ? Number(rawLat) : null);
+  const rawLon = value.longitude;
+  const longitude = typeof rawLon === "number" && !isNaN(rawLon) ? rawLon : (typeof rawLon === "string" && rawLon.trim() && !isNaN(Number(rawLon)) ? Number(rawLon) : null);
+  const rawRadius = value.radiusMeters;
+  const radiusMeters = typeof rawRadius === "number" && !isNaN(rawRadius) ? Math.round(rawRadius) : (typeof rawRadius === "string" && rawRadius.trim() && !isNaN(Number(rawRadius)) ? Math.round(Number(rawRadius)) : 200);
+
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
   }
   if (city.length > 100 || province.length > 100 || address.length > 200) {
     return "La ubicación supera la longitud permitida.";
   }
+  if (latitude !== null && (latitude < -90 || latitude > 90)) {
+    return "La latitud debe estar comprendida entre -90 y 90.";
+  }
+  if (longitude !== null && (longitude < -180 || longitude > 180)) {
+    return "La longitud debe estar comprendida entre -180 y 180.";
+  }
 
   if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
-    return "La imagen no es vÃ¡lida o supera el tamaÃ±o permitido.";
+    return "La imagen no es válida o supera el tamaño permitido.";
   }
 
   return {
@@ -350,6 +366,9 @@ function parseGymInput(value: unknown): GymInput | string {
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
     ...(photoData ? { photoData } : {}),
+    latitude: latitude ?? null,
+    longitude: longitude ?? null,
+    radiusMeters: radiusMeters ?? 200,
   };
 }
 
@@ -1092,9 +1111,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
       orderBy: { name: "asc" },
     });
-    const photos = await prisma.$queryRaw<Array<{ id: string; photoData: string | null }>>(Prisma.sql`SELECT "id", "photoData" FROM "Gym" WHERE "isActive" = true`);
-    const photoById = new Map(photos.map((photo) => [photo.id, photo.photoData]));
-    sendJson(response, 200, { gyms: gyms.map((gym) => ({ ...gym, photoData: photoById.get(gym.id) ?? null })) });
+    const extraRows = await prisma.$queryRaw<Array<{ id: string; photoData: string | null; latitude: number | null; longitude: number | null; radiusMeters: number | null }>>(
+      Prisma.sql`SELECT "id", "photoData", "latitude", "longitude", "radiusMeters" FROM "Gym" WHERE "isActive" = true`
+    ).catch(() => []);
+    const extraById = new Map(extraRows.map((e) => [e.id, e]));
+
+    sendJson(response, 200, {
+      gyms: gyms.map((gym) => {
+        const extra = extraById.get(gym.id);
+        return {
+          ...gym,
+          photoData: extra?.photoData ?? null,
+          latitude: extra?.latitude ?? null,
+          longitude: extra?.longitude ?? null,
+          radiusMeters: extra?.radiusMeters ?? 200,
+        };
+      }),
+    });
     return;
   }
 
@@ -1111,15 +1144,99 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
     try {
-      const { photoData, ...gymData } = input;
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
       const gym = await prisma.gym.create({
         data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      if (photoData) {
-        await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = ${photoData} WHERE "id" = ${gym.id}::uuid`);
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gym.id}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [gym.address, gym.city, gym.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gym.id, JSON.stringify(locationObj), gym.name]
+          ).catch(() => {});
+        }
       }
-      sendJson(response, 201, { gym: { ...gym, photoData: photoData ?? null } });
+
+      sendJson(response, 201, {
+        gym: {
+          ...gym,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
+        return;
+      }
+      throw error;
+    }
+    return;
+  }
+
+  const gymPatchMatch = url.pathname.match(/^\/api\/gyms\/([0-9a-f-]+)$/i);
+  if (request.method === "PATCH" && gymPatchMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+    const gymId = gymPatchMatch[1];
+    const input = parseGymInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    try {
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
+      const updated = await prisma.gym.update({
+        where: { id: gymId },
+        data: gymData,
+        select: { id: true, name: true, city: true, province: true, address: true },
+      });
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gymId}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [updated.address, updated.city, updated.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gymId, JSON.stringify(locationObj), updated.name]
+          ).catch(() => {});
+        }
+      }
+
+      sendJson(response, 200, {
+        gym: {
+          ...updated,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
