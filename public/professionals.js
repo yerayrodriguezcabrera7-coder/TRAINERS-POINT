@@ -4,6 +4,30 @@
   const $ = id => document.getElementById(id);
   const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  const standardRoles = ['Entrenador', 'Recepción', 'Administración'];
+
+  const roleStyles = {
+    Entrenador: { bg: '#e3f2fd', text: '#1565c0' },
+    Recepción: { bg: '#e8f5ec', text: '#2e7d32' },
+    Administración: { bg: '#fff0df', text: '#ff7f0a' },
+  };
+
+  const roleToSecurityRole = {
+    Entrenador: 'TRAINER',
+    Recepción: 'RECEPTION',
+    Administración: 'ADMIN',
+  };
+
+  function slugUsername(name) {
+    return String(name || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '.')
+      .replace(/^\.+|\.+$/g, '')
+      .slice(0, 60);
+  }
+
   function getAvatarTone(name) {
     const text = String(name || '').trim().toLocaleLowerCase('es');
     let hash = 0;
@@ -72,22 +96,31 @@
     return emp.active !== false && emp.enabled !== false && (!emp.status || emp.status === 'ACTIVE');
   }
 
-  function isTrainer(emp) {
-    const title = (emp.jobTitle || '').toLowerCase();
-    return title.includes('entrena') || title.includes('coach') || title.includes('trainer') || title.includes('preparador');
+  function normalizeJobTitle(job) {
+    const text = (job || '').toLowerCase();
+    if (text.includes('recep')) return 'Recepción';
+    if (text.includes('admin') || text.includes('direc')) return 'Administración';
+    return 'Entrenador';
   }
 
   function updateStats() {
     const employees = manageData?.employees || [];
     const total = employees.length;
-    const active = employees.filter(isActive).length;
-    const trainers = employees.filter(e => isTrainer(e) && isActive(e)).length;
-    const inactive = total - active;
+    let trainers = 0;
+    let reception = 0;
+    let admin = 0;
+
+    employees.forEach(emp => {
+      const normalized = normalizeJobTitle(emp.jobTitle);
+      if (normalized === 'Administración') admin++;
+      else if (normalized === 'Recepción') reception++;
+      else trainers++;
+    });
 
     $('count-total').textContent = String(total);
-    $('count-active').textContent = String(active);
     $('count-trainers').textContent = String(trainers);
-    $('count-inactive').textContent = String(inactive);
+    $('count-reception').textContent = String(reception);
+    $('count-admin').textContent = String(admin);
     $('heading-count').textContent = `(${total})`;
   }
 
@@ -99,16 +132,18 @@
 
     const q = searchQuery.toLowerCase().trim();
     const filtered = employees.filter(emp => {
+      const normalizedRole = normalizeJobTitle(emp.jobTitle);
       const name = (emp.name || '').toLowerCase();
       const job = (emp.jobTitle || '').toLowerCase();
       const email = (emp.email || '').toLowerCase();
 
-      const matchesSearch = !q || name.includes(q) || job.includes(q) || email.includes(q);
+      const matchesSearch = !q || name.includes(q) || job.includes(q) || email.includes(q) || normalizedRole.toLowerCase().includes(q);
       if (!matchesSearch) return false;
 
       if (activeFilter === 'all') return true;
-      if (activeFilter === 'active') return isActive(emp);
-      if (activeFilter === 'trainers') return isTrainer(emp);
+      if (activeFilter === 'Entrenador') return normalizedRole === 'Entrenador';
+      if (activeFilter === 'Recepción') return normalizedRole === 'Recepción';
+      if (activeFilter === 'Administración') return normalizedRole === 'Administración';
       if (activeFilter === 'shifts') return (emp.shifts || []).length > 0;
       if (activeFilter === 'inactive') return !isActive(emp);
       return true;
@@ -135,9 +170,11 @@
     listEl.innerHTML = '';
     filtered.forEach(emp => {
       const active = isActive(emp);
+      const normalizedRole = normalizeJobTitle(emp.jobTitle);
+      const roleColor = roleStyles[normalizedRole] || roleStyles.Entrenador;
       const signalType = active ? 'ok' : 'neutral';
       const empName = emp.name || 'Sin nombre';
-      const jobTitle = emp.jobTitle || 'Profesional del centro';
+      const jobTitle = emp.jobTitle || normalizedRole;
       const scheduleDays = (emp.schedule || []).filter(h => !h.closed).length;
       const shiftCount = (emp.shifts || []).length;
       const statusText = active
@@ -188,12 +225,15 @@
       const signalLine = document.createElement('div');
       signalLine.className = `client-card-signal signal-${signalType}`;
 
-      const signalIcon = document.createElement('span');
-      signalIcon.className = 'client-signal-icon';
-      signalIcon.setAttribute('aria-hidden', 'true');
-      signalIcon.innerHTML = active
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/></svg>';
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.style.padding = '2px 8px';
+      badge.style.borderRadius = '12px';
+      badge.style.fontWeight = '700';
+      badge.style.fontSize = '11px';
+      badge.style.background = roleColor.bg;
+      badge.style.color = roleColor.text;
+      badge.textContent = normalizedRole;
 
       const signalTextEl = document.createElement('span');
       signalTextEl.textContent = statusText;
@@ -201,7 +241,7 @@
         signalTextEl.textContent += ` (${shiftCount} turno${shiftCount !== 1 ? 's' : ''})`;
       }
 
-      signalLine.append(signalIcon, signalTextEl);
+      signalLine.append(badge, signalTextEl);
 
       const contactLine = document.createElement('span');
       contactLine.className = 'client-card-center';
@@ -247,20 +287,30 @@
     const titleEl = $('dialog-title');
     const eyebrowEl = $('dialog-eyebrow');
     const subtitleEl = $('dialog-subtitle');
+    const jobSelect = $('prof-job');
+
+    // Restaurar opciones estándar en el select de puesto laboral
+    jobSelect.innerHTML = `
+      <option value="Entrenador">Entrenador</option>
+      <option value="Recepción">Recepción</option>
+      <option value="Administración">Administración</option>
+    `;
 
     if (emp) {
+      const normalized = normalizeJobTitle(emp.jobTitle);
       eyebrowEl.textContent = 'EDITAR PROFESIONAL';
       titleEl.textContent = emp.name || 'Profesional';
-      if (subtitleEl) subtitleEl.textContent = 'Modifica los datos del trabajador o su estado.';
+      if (subtitleEl) subtitleEl.textContent = 'Modifica los datos del trabajador, su puesto laboral o su estado.';
       $('prof-name').value = emp.name || '';
-      $('prof-job').value = emp.jobTitle || '';
+      jobSelect.value = normalized;
       $('prof-email').value = emp.email || '';
       $('prof-color').value = emp.color || '#317b9b';
       $('prof-active').value = String(isActive(emp));
     } else {
       eyebrowEl.textContent = 'NUEVO PROFESIONAL';
       titleEl.textContent = 'Añadir profesional';
-      if (subtitleEl) subtitleEl.textContent = 'Completa los datos del trabajador para registrarlo en el centro.';
+      if (subtitleEl) subtitleEl.textContent = 'Selecciona su puesto laboral (Entrenador, Recepción o Administración) y completa sus datos.';
+      jobSelect.value = 'Entrenador';
       $('prof-color').value = '#317b9b';
       $('prof-active').value = 'true';
     }
@@ -365,10 +415,11 @@
       }
 
       const name = $('prof-name').value.trim();
-      const jobTitle = $('prof-job').value.trim();
+      const jobTitle = $('prof-job').value; // 'Entrenador', 'Recepción' o 'Administración'
       const email = $('prof-email').value.trim();
       const color = $('prof-color').value;
       const active = $('prof-active').value === 'true';
+      const securityRole = roleToSecurityRole[jobTitle] || 'TRAINER';
 
       if (!name) {
         errorEl.textContent = 'El nombre y apellidos son obligatorios.';
@@ -383,7 +434,7 @@
         closed: i === 6,
       }));
 
-      const record = {
+      const empRecord = {
         name,
         email,
         jobTitle,
@@ -399,7 +450,43 @@
           ? 'manage/employees/' + encodeURIComponent(editingEmployee.id)
           : 'manage/employees';
         const method = editingEmployee ? 'PUT' : 'POST';
-        await api(path, method, { record, revision: manageData.revision });
+        const savedEmp = await api(path, method, { record: empRecord, revision: manageData.revision });
+
+        // Si el usuario actual es ADMIN, sincronizar o crear su cuenta de usuario con el rol correspondiente
+        if (manageData.role === 'ADMIN') {
+          const empId = editingEmployee ? editingEmployee.id : savedEmp.id;
+          const linkedUser = (manageData.users || []).find(u => u.employeeId === empId);
+
+          if (linkedUser) {
+            const userRecord = {
+              username: linkedUser.username,
+              role: securityRole,
+              enabled: active,
+              name,
+              employeeId: empId,
+            };
+            await api('manage/users/' + encodeURIComponent(linkedUser.id), 'PUT', {
+              record: userRecord,
+              revision: manageData.revision,
+            });
+          } else {
+            const username = slugUsername(name);
+            const userRecord = {
+              username,
+              role: securityRole,
+              enabled: active,
+              name,
+              employeeId: empId,
+            };
+            await api('manage/users', 'POST', {
+              record: userRecord,
+              revision: manageData.revision,
+            }).catch(() => {
+              // Si falla por colisión de usuario opcional, el empleado ya está guardado con su puesto
+            });
+          }
+        }
+
         $('professional-dialog').close();
         showToast(editingEmployee ? 'Profesional actualizado correctamente.' : 'Profesional registrado con éxito.');
         await loadData();

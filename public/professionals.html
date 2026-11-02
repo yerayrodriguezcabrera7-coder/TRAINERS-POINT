@@ -29,7 +29,7 @@
             <div class="page-heading-copy">
               <p class="eyebrow">EQUIPO · PROFESIONALES</p>
               <h1>Profesionales <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Consulta la plantilla del centro, gestiona sus datos y prepara sus turnos.</p>
+              <p class="page-description">Consulta la plantilla del centro, gestiona sus puestos y prepara sus turnos.</p>
             </div>
             <button class="button button-primary" id="open-create" type="button">
               <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -39,24 +39,24 @@
 
           <section class="stats-grid" aria-label="Filtros rápidos de profesionales">
             <button class="stat-card stat-card-primary" type="button" data-filter="all" aria-pressed="true">
-              <span class="stat-label">Total profesionales</span>
+              <span class="stat-label">Total plantilla</span>
               <strong class="stat-value" id="count-total">—</strong>
-              <span class="stat-foot">Plantilla registrada</span>
+              <span class="stat-foot">Trabajadores registrados</span>
             </button>
-            <button class="stat-card" type="button" data-filter="active" aria-pressed="false">
-              <span class="stat-label">Activos</span>
-              <strong class="stat-value" id="count-active">—</strong>
-              <span class="stat-foot">En servicio</span>
-            </button>
-            <button class="stat-card" type="button" data-filter="trainers" aria-pressed="false">
+            <button class="stat-card" type="button" data-filter="Entrenador" aria-pressed="false">
               <span class="stat-label">Entrenadores</span>
               <strong class="stat-value" id="count-trainers">—</strong>
-              <span class="stat-foot">Equipo técnico</span>
+              <span class="stat-foot">Equipo de entrenamiento</span>
             </button>
-            <button class="stat-card" type="button" data-filter="inactive" aria-pressed="false">
-              <span class="stat-label">Inactivos</span>
-              <strong class="stat-value" id="count-inactive">—</strong>
-              <span class="stat-foot">Fuera de servicio</span>
+            <button class="stat-card" type="button" data-filter="Recepción" aria-pressed="false">
+              <span class="stat-label">Recepción</span>
+              <strong class="stat-value" id="count-reception">—</strong>
+              <span class="stat-foot">Atención y turnos</span>
+            </button>
+            <button class="stat-card" type="button" data-filter="Administración" aria-pressed="false">
+              <span class="stat-label">Administración</span>
+              <strong class="stat-value" id="count-admin">—</strong>
+              <span class="stat-foot">Gestión del centro</span>
             </button>
           </section>
 
@@ -71,8 +71,9 @@
 
             <div class="client-filter-chips" role="group" aria-label="Filtrar profesionales">
               <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">Todos</button>
-              <button class="filter-chip" type="button" data-filter="active" aria-pressed="false">Activos</button>
-              <button class="filter-chip" type="button" data-filter="trainers" aria-pressed="false">Entrenadores</button>
+              <button class="filter-chip" type="button" data-filter="Entrenador" aria-pressed="false">Entrenadores</button>
+              <button class="filter-chip" type="button" data-filter="Recepción" aria-pressed="false">Recepción</button>
+              <button class="filter-chip" type="button" data-filter="Administración" aria-pressed="false">Administración</button>
               <button class="filter-chip" type="button" data-filter="shifts" aria-pressed="false">Con turnos</button>
               <button class="filter-chip" type="button" data-filter="inactive" aria-pressed="false">Inactivos</button>
             </div>
@@ -114,18 +115,27 @@
             <span>Nombre y apellidos <b>*</b></span>
             <input name="name" id="prof-name" type="text" required maxlength="200" placeholder="Ej. Ana García López" autocomplete="name">
           </label>
+
+          <!-- Puesto laboral: Desplegable con Entrenador, Recepción o Administración -->
           <label class="form-field">
-            <span>Puesto laboral</span>
-            <input name="jobTitle" id="prof-job" type="text" maxlength="100" placeholder="Ej. Entrenadora personal">
+            <span>Puesto laboral <b>*</b></span>
+            <select name="jobTitle" id="prof-job" required>
+              <option value="Entrenador" selected>Entrenador</option>
+              <option value="Recepción">Recepción</option>
+              <option value="Administración">Administración</option>
+            </select>
           </label>
+
           <label class="form-field">
             <span>Correo electrónico</span>
             <input name="email" id="prof-email" type="email" maxlength="254" placeholder="ana@trainerspoint.com" autocomplete="email">
           </label>
+
           <label class="form-field">
             <span>Color en calendario</span>
             <input name="color" id="prof-color" type="color" value="#317b9b" style="padding:4px;height:43px;cursor:pointer;">
           </label>
+
           <label class="form-field">
             <span>Estado <b>*</b></span>
             <select name="active" id="prof-active">
