@@ -11,11 +11,12 @@ import {
   PaymentMethod,
   PaymentStatus,
   Prisma,
+  SaleStatus,
   type ClientStatus,
 } from "@prisma/client";
 import { prisma } from "./lib/prisma";
 import { Store, migration as calendarMigration } from "./calendar/store";
-import { accessMigration } from "./calendar/access";
+import { accessMigration, Access, type Identity } from "./calendar/access";
 import { server as createCalendarServer } from "./calendar/http";
 import { progressMigration } from "./progress-migration";
 
@@ -28,6 +29,9 @@ const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO",
 const validAttendanceStatuses: AttendanceStatus[] = ["PENDIENTE", "ASISTIO", "NO_ASISTIO", "CANCELADA"];
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
 let calendarBootstrapToken = "";
+let calendarAccess: Access | undefined;
+let calendarPool: Pool | undefined;
+let currentConfiguredGym = "trainers-point-bizkaia";
 
 type ClientInput = {
   firstName: string;
@@ -442,6 +446,75 @@ function hasTrustedOrigin(request: IncomingMessage, port: number): boolean {
 }
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
+  const isPublic = url.pathname === "/api/health" || url.pathname === "/api/login" || url.pathname.startsWith("/api/public/");
+  if (!isPublic && calendarAccess) {
+    const bearer = (request.headers.authorization || "").replace(/^Bearer /, "");
+    let selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;
+    let identity: Identity | null = null;
+    if (bearer && bearer === calendarBootstrapToken && (await calendarAccess.needsSetup(selectedGym))) {
+      identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
+    } else if (bearer) {
+      try {
+        identity = await calendarAccess.identify(selectedGym, bearer);
+      } catch {
+        identity = null;
+      }
+    }
+    if (!identity && bearer && url.pathname === "/api/gyms" && selectedGym !== currentConfiguredGym) {
+      try {
+        selectedGym = currentConfiguredGym;
+        identity = await calendarAccess.identify(selectedGym, bearer);
+      } catch {
+        identity = null;
+      }
+    }
+    if (!identity) {
+      const calendarOnlyRoutes = ["/api/me", "/api/logout", "/api/password/change", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
+      const isCalendarOnly = calendarOnlyRoutes.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
+      if (isCalendarOnly && calendarHandler) {
+        await calendarHandler(request, response);
+        return;
+      }
+      sendError(response, 401, "Inicia sesión para continuar.");
+      return;
+    }
+    if (identity.mustChangePassword &&
+      url.pathname !== "/api/me" &&
+      url.pathname !== "/api/logout" &&
+      url.pathname !== "/api/password/change") {
+      sendError(response, 403, "Debes cambiar la contraseña antes de continuar.");
+      return;
+    }
+    if (identity.role === "CLIENT") {
+      const isMeOrLogout = url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
+      if (!isMeOrLogout) {
+        sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
+        return;
+      }
+    }
+    if (url.pathname.startsWith("/api/gyms")) {
+      if (identity.role !== "ADMIN" && !(identity.role === "RECEPTION" && request.method === "GET")) {
+        sendError(response, 403, "Solo administración puede gestionar sedes.");
+        return;
+      }
+    }
+    if (identity.role === "TRAINER") {
+      if (url.pathname.startsWith("/api/services") && request.method !== "GET") {
+        sendError(response, 403, "Tu perfil no permite modificar servicios.");
+        return;
+      }
+      if (url.pathname.startsWith("/api/clients") && request.method !== "GET") {
+        sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
+        return;
+      }
+      if (url.pathname.startsWith("/api/service-packages") || url.pathname.includes("/attendance")) {
+        sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
+        return;
+      }
+    }
+    (request as any).identity = identity;
+    (request as any).selectedGym = selectedGym;
+  }
   if (request.method === "GET" && url.pathname === "/api/services") {
     const services = await prisma.service.findMany({
       where: { isActive: true },
@@ -519,7 +592,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         id: true,
         firstName: true,
         lastName: true,
-        dni: true,
+        dni: true, assignedWorkerId: true,
         address: true,
         objective: true,
         birthDate: true,
@@ -545,6 +618,17 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
     });
     if (!client) { sendError(response, 404, "No se encontró el cliente."); return; }
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1",
+        [(request as any).selectedGym || currentConfiguredGym, empId, client.id]
+      )).rows.length > 0 : false;
+      if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
+        sendError(response, 403, "No tienes acceso a esta ficha de cliente.");
+        return;
+      }
+    }
     const measurements = await prisma.clientMeasurement.findMany({
       where: { clientId: client.id },
       orderBy: { measuredAt: "asc" },
@@ -615,7 +699,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         data,
         select: {
           id: true,
-          dni: true,
+          dni: true, assignedWorkerId: true,
           address: true,
           birthDate: true,
           sex: true,
@@ -717,19 +801,32 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true },
+      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");
       return;
     }
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1",
+        [(request as any).selectedGym || currentConfiguredGym, empId, client.id]
+      )).rows.length > 0 : false;
+      if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
+        sendError(response, 403, "No tienes acceso a esta ficha de cliente."); return; } /*
+        return;
+      }
+      return;
+    }
 
+*/ }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
       include: { service: { select: { id: true, name: true, durationMin: true } } },
       orderBy: { purchasedAt: "desc" },
     });
-    const [bookings, bookingCounts] = await Promise.all([
+    const [bookings, bookingCounts, sales, debtSales] = await Promise.all([
       prisma.booking.findMany({
         where: { clientId },
         select: {
@@ -754,7 +851,55 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         },
         _count: { _all: true },
       }),
+      prisma.sale.findMany({
+        where: { clientId },
+        select: {
+          id: true,
+          status: true,
+          currency: true,
+          subtotal: true,
+          taxAmount: true,
+          totalAmount: true,
+          soldAt: true,
+          createdAt: true,
+          lines: { select: { description: true, quantity: true, unitPrice: true, lineTotal: true, type: true } },
+          payments: { select: { method: true, status: true, amount: true, paidAt: true } },
+        },
+        orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      }),
+      prisma.sale.findMany({
+        where: { clientId, status: SaleStatus.COMPLETADA },
+        select: {
+          currency: true,
+          totalAmount: true,
+          payments: {
+            where: { status: PaymentStatus.PAGADO },
+            select: { amount: true },
+          },
+        },
+      }),
     ]);
+
+    const debtByCurrency = new Map<string, number>();
+    for (const servicePackage of packages) {
+      if (
+        servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
+        servicePackage.paymentStatus === PaymentStatus.FALLIDO
+      ) {
+        debtByCurrency.set("EUR", (debtByCurrency.get("EUR") ?? 0) + Number(servicePackage.totalAmount));
+      }
+    }
+    for (const sale of debtSales) {
+      const paid = sale.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const outstanding = Math.max(0, Number(sale.totalAmount) - paid);
+      if (outstanding > 0) {
+        debtByCurrency.set(sale.currency, (debtByCurrency.get(sale.currency) ?? 0) + outstanding);
+      }
+    }
+    const debt = [...debtByCurrency]
+      .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
+      .filter(({ amount }) => amount > 0);
 
     sendJson(response, 200, {
       client,
@@ -777,6 +922,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         };
       }),
       bookings,
+      sales,
+      debt,
     });
     return;
   }
@@ -1033,6 +1180,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           }
         : {}),
     };
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(todayStart);
@@ -1044,8 +1192,24 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           attendance: AttendanceStatus.PENDIENTE,
         },
       };
+
     }
 
+    if ((request as any).identity?.role === "TRAINER") {
+      const empId = (request as any).identity.employeeId;
+      const trainerBookings = calendarPool ? (await calendarPool.query(
+        "SELECT data->>'clientId' as cid FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2",
+        [(request as any).selectedGym || currentConfiguredGym, empId]
+      )).rows.map((r: any) => r.cid) : [];
+      const trainerConditions: Prisma.ClientWhereInput[] = [];
+      if (empId) trainerConditions.push({ assignedWorkerId: empId });
+      if (trainerBookings.length) trainerConditions.push({ id: { in: trainerBookings } });
+      if (trainerConditions.length) {
+        where.AND = [{ OR: trainerConditions }];
+      } else {
+        where.id = "00000000-0000-0000-0000-000000000000";
+      }
+    }
     const [clients, total, grouped] = await Promise.all([
       prisma.client.findMany({
         where,
@@ -1197,7 +1361,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           id: true,
           firstName: true,
           lastName: true,
-          dni: true,
+          dni: true, assignedWorkerId: true,
           address: true,
           email: true,
           phone: true,
@@ -1223,7 +1387,6 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           createdAt: true,
         },
       });
-
       sendJson(response, 201, { client });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -1298,7 +1461,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       const client = await prisma.client.update({
         where: { id: gymMatch[1] },
         data: { gym: { connect: { id: gymId } } },
-        select: { id: true, gym: { select: { id: true, name: true } } },
+        select: { id: true, gym: { select: { id: true, name: true, city: true, province: true } } },
       });
       sendJson(response, 200, { client });
     } catch (error) {
@@ -1333,6 +1496,8 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/gestion.js": { file: "web/gestion.js", contentType: "text/javascript; charset=utf-8" },
   "/login.html": { file: "web/login.html", contentType: "text/html; charset=utf-8" },
   "/login.js": { file: "web/login.js", contentType: "text/javascript; charset=utf-8" },
+  "/change-password.html": { file: "web/change-password.html", contentType: "text/html; charset=utf-8" },
+  "/change-password.js": { file: "web/change-password.js", contentType: "text/javascript; charset=utf-8" },
   "/app.js": { file: "web/app.js", contentType: "text/javascript; charset=utf-8" },
   "/calendar-core.js": { file: "web/calendar-core.js", contentType: "text/javascript; charset=utf-8" },
   "/runtime.js": { file: "web/runtime.js", contentType: "text/javascript; charset=utf-8" },
@@ -1354,6 +1519,12 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/gyms.html": { file: "public/gyms.html", contentType: "text/html; charset=utf-8" },
   "/gyms.css": { file: "public/gyms.css", contentType: "text/css; charset=utf-8" },
   "/gyms.js": { file: "public/gyms.js", contentType: "text/javascript; charset=utf-8" },
+  "/usuarios": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
+  "/usuarios.html": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
+  "/users.js": { file: "public/users.js", contentType: "text/javascript; charset=utf-8" },
+  "/profesionales": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/profesionales.html": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/professionals.js": { file: "public/professionals.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
@@ -1407,7 +1578,7 @@ const server = createServer(async (request, response) => {
     });
 
     if (url.pathname === "/runtime.js") {
-      response.end(`window.CALENDAR_SERVER=true;window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
+      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
       return;
     }
 
@@ -1435,15 +1606,24 @@ const server = createServer(async (request, response) => {
 });
 
 async function start(): Promise<void> {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  const store = new Store(pool);
+  const calendarDatabaseUrl = process.env.CALENDAR_DATABASE_URL || process.env.DATABASE_URL;
+  const pool = new Pool({ connectionString: calendarDatabaseUrl });
+  const crmPool = calendarDatabaseUrl === process.env.DATABASE_URL
+    ? pool
+    : new Pool({ connectionString: process.env.DATABASE_URL });
+  calendarPool = pool;
+  const store = new Store(pool,prisma);
+  calendarAccess = new Access(pool,prisma);
   await pool.query(calendarMigration);
   await pool.query(accessMigration);
-  await pool.query(progressMigration);
-  const configuredGym = (await prisma.gym.findFirst({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true } }))?.id || "trainers-point-bizkaia";
+  await crmPool.query(progressMigration);
+  const activeGyms = await prisma.gym.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
+  const configuredGym = activeGyms[0]?.id || "trainers-point-bizkaia";
+  const developmentGyms = activeGyms.length ? activeGyms : [{ id: configuredGym, name: "Trainers Point" }];
   let gym = configuredGym;
+  currentConfiguredGym = gym;
   const schedule = Array.from({ length: 7 }, (_, i) => ({ open: "09:00", close: i === 5 ? "14:00" : "21:00", closed: i === 6 }));
-  await store.seed(gym, {
+  const initialCalendarConfig = {
     timezone: "Europe/Madrid",
     schedule,
     employees: [{ id: "e1", name: "Entrenador de prueba", color: "#8498bc", schedule }],
@@ -1454,7 +1634,27 @@ async function start(): Promise<void> {
     ],
     rooms: [{ id: "r1", name: "Sala principal" }],
     clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
-  });
+  };
+  await store.seed(gym, initialCalendarConfig);
+  if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {
+    if (process.env.NODE_ENV === "production")
+      throw new Error("No se permite activar la cuenta provisional admin/admin en producción.");
+    let databaseHost: string;
+    try {
+      databaseHost = new URL(calendarDatabaseUrl || "").hostname.toLowerCase();
+    } catch {
+      throw new Error("La cuenta provisional requiere una CALENDAR_DATABASE_URL local válida.");
+    }
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(databaseHost))
+      throw new Error("La cuenta provisional admin/admin solo se permite con PostgreSQL local; no se ha creado ninguna cuenta.");
+    let createdAdmin = false;
+    for (const activeGym of developmentGyms) {
+      if (activeGym.id !== gym) await store.seed(activeGym.id, initialCalendarConfig);
+      createdAdmin = await calendarAccess.seedLocalDevelopmentAdmin(activeGym.id) || createdAdmin;
+    }
+    if (createdAdmin)
+      console.warn("Cuenta provisional local creada para centros sin cuentas previas. Usuario: admin · Contraseña: admin. No usar fuera de desarrollo.");
+  }
   const token = process.env.CALENDAR_ADMIN_TOKEN || randomBytes(24).toString("hex");
   calendarBootstrapToken = token;
   const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: true });
@@ -1464,6 +1664,7 @@ async function start(): Promise<void> {
     void server.close(async () => {
       calendar.close();
       await pool.end();
+      if (crmPool !== pool) await crmPool.end();
       await prisma.$disconnect();
     });
   };

@@ -18,6 +18,7 @@ const gymFilterWrapper = document.querySelector("#gym-filter-wrapper");
 const clientFilterButtons = [...document.querySelectorAll(".filter-chip")];
 const validFilters = new Set(["all", "today", "attention", "pending-payment", "no-sessions", "leads", "low-sessions", "inactive"]);
 const initialFilter = new URLSearchParams(window.location.search).get("filtro");
+const explicitlySelectedToday = sessionStorage.getItem("clients-today-filter-explicit") === "true";
 const initialGymId =
   new URLSearchParams(window.location.search).get("gymId") ||
   localStorage.getItem("calendar-selected-gym") ||
@@ -62,7 +63,9 @@ let gyms = [];
 let services = [];
 let historyClientId;
 let clientsData = [];
-let activeFilter = validFilters.has(initialFilter) ? initialFilter : "today";
+let activeFilter = validFilters.has(initialFilter) && (initialFilter !== "today" || explicitlySelectedToday)
+  ? initialFilter
+  : "all";
 const arrivedBookings = new Map();
 let timelineTimer;
 if (initialFilter !== activeFilter) {
@@ -254,8 +257,6 @@ function renderToday(clients, animateBookingId = "") {
     const name = document.createElement("a");
     name.className = "today-appointment-name";
     name.href = getClientProfileHref(client.id);
-    name.target = "_blank";
-    name.rel = "noopener noreferrer";
     name.textContent = `${client.firstName} ${client.lastName}`.trim();
     const service = document.createElement("span");
     service.className = "today-appointment-service";
@@ -394,6 +395,8 @@ function renderActiveClientView(animateBookingId = "") {
 function setActiveFilter(filter, focusButton = false) {
   if (!validFilters.has(filter)) return;
   activeFilter = filter;
+  if (filter === "today") sessionStorage.setItem("clients-today-filter-explicit", "true");
+  else sessionStorage.removeItem("clients-today-filter-explicit");
   const url = new URL(window.location.href);
   url.searchParams.set("filtro", filter);
   window.history.replaceState(null, "", url);
@@ -1093,8 +1096,6 @@ async function checkDuplicate(field) {
       message.append(document.createTextNode(`Ya hay una ficha con este ${field === "phone" ? "teléfono" : "correo"}: `));
       const link = document.createElement("a");
       link.href = getClientProfileHref(match.client.id);
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
       link.textContent = `${match.client.firstName} ${match.client.lastName}`;
       link.setAttribute("aria-label", `Abrir ficha de ${link.textContent}`);
       message.append(link);
@@ -1149,6 +1150,7 @@ async function createIntakeClient(mode) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente.");
 
+    setActiveFilter("all");
     let packageFailed = false;
     if (proposal) {
       try {
@@ -1174,20 +1176,18 @@ async function createIntakeClient(mode) {
     await loadClients();
     const name = `${data.client.firstName} ${data.client.lastName}`;
     if (packageFailed) {
-      showToast("Cliente creado. No se pudo añadir el bono, puedes hacerlo desde su ficha.", true, {
+      showToast(`Ficha de ${name} creada. No se pudo añadir el bono, puedes hacerlo desde su ficha.`, true, {
         label: "Abrir ficha",
         href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
       });
     } else {
-      showToast(`${name} creada`, false, {
+      showToast(`Ficha de ${name} creada.`, false, {
         label: "Abrir ficha",
         href: `/clientes/${encodeURIComponent(data.client.id)}/ficha?filtro=${encodeURIComponent(activeFilter)}`,
       });
     }
   } catch (error) {
-    formError.textContent = error.message === "Ya existe un cliente con ese correo."
-      ? "Ya hay una ficha con este correo. Comprueba el aviso del campo."
-      : "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
+    formError.textContent = error.message || "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
     formError.hidden = false;
   } finally {
     submitButton.disabled = false;
@@ -1431,17 +1431,18 @@ createForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(client),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error("No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.");
+    if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.");
 
+    setActiveFilter("all");
     closeDialog();
-    showToast("Cliente añadido.");
+    showToast(`Ficha de ${data.client.firstName} ${data.client.lastName} añadida.`);
     searchInput.value = "";
     clearSearchButton.hidden = true;
     gymFilter.value = "";
     await loadGyms();
     await loadClients();
   } catch (error) {
-    formError.textContent = "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
+    formError.textContent = error.message || "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
     formError.hidden = false;
   } finally {
     submitButton.disabled = false;
@@ -1647,7 +1648,7 @@ function renderClient(client) {
   details.append(center);
   card.append(identity, details);
 
-  const open = () => { window.open(getClientProfileHref(client.id), "_blank", "noopener,noreferrer"); };
+  const open = () => { window.location.assign(getClientProfileHref(client.id)); };
   card.addEventListener("click", open);
   card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
   return card;

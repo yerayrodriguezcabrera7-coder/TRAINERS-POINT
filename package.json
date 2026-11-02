@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "build": "tsc",
-    "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
+    "dev": "node scripts/ensure-local-db.cjs && prisma migrate deploy && nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "start": "npm run build && node dist/index.js",
     "test": "npm run build && node --test tests/*.test.cjs web/calendar-core.test.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:test": "ts-node src/test-db.ts"
   },

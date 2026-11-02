@@ -24,14 +24,14 @@
   const items = [
     ['Inicio','home','/inicio.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/gestion.html?section=services'],
-    ['Profesionales','staff','/gestion.html?section=employees'], ['Fichajes','clock','/fichajes.html'],
-    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','gestion.html?section=users'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
+    ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'],
+    ['Turnos','calendar','gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','gestion.html?section=roles'], ['Catálogo','bag'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
+  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : (location.pathname === '/usuarios' || location.pathname === '/usuarios.html') ? '/usuarios' : (location.pathname === '/profesionales' || location.pathname === '/profesionales.html') ? '/profesionales' : location.pathname === '/gimnasios' ? '/gimnasios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : location.pathname.endsWith('fichajes.html') ? '/fichajes.html' : '/index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
@@ -58,7 +58,8 @@
     try {
       const response = await fetch('/api/gyms'); if (!response.ok) return;
       const data = await response.json();
-      const selected = localStorage.getItem('calendar-selected-gym') || data.selected || data.gyms[0]?.id;
+      const saved = localStorage.getItem('calendar-selected-gym');
+      const selected = data.gyms.some(g => g.id === saved) ? saved : data.selected || data.gyms[0]?.id;
       gymSwitcher.innerHTML = data.gyms.map(g => '<option value="'+g.id+'">'+g.name+'</option>').join('');
       gymSwitcher.value = selected;
       if (selected) localStorage.setItem('calendar-selected-gym', selected);
@@ -81,18 +82,43 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.matchMedia?.('(max-width: 600px)').matches)collapse(true);});
   document.addEventListener('DOMContentLoaded', async () => {
     if (!window.CALENDAR_SERVER) return;
-    const token = sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
+    const token = sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '';
     try {
       const response = await fetch('/api/me',{headers:{Authorization:'Bearer '+token}});
       if(!response.ok)return;
       const me=await response.json();
-      if(me.role!=='ADMIN')host.querySelectorAll('a.app-menu-item').forEach(a=>{
-        const href=a.getAttribute('href');
-        const allowed=['fichajes.html','gestion.html?section=shifts',...(me.role==='RECEPTION'?['inicio.html','index.html','clientes','gestion.html?section=services']:[])];
-        if(!allowed.includes(href)) a.hidden=true;
+      if(me.mustChangePassword && location.pathname !== '/change-password.html'){
+        location.replace('/change-password.html');
+        return;
+      }
+      const normalize = href => (href || '').replace(/^\//, '');
+      const allowedByRole = {
+        ADMIN: null,
+        RECEPTION: ['inicio.html', 'index.html', 'clientes', 'profesionales', 'gestion.html?section=services', 'fichajes.html', 'gestion.html?section=shifts'],
+        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'gestion.html?section=shifts'],
+        CLIENT: [],
+      };
+      const allowed = allowedByRole[me.role];
+      if (allowed !== null) {
+        host.querySelectorAll('a.app-menu-item').forEach(a => {
+          const href = normalize(a.getAttribute('href'));
+          if (!allowed.includes(href)) a.hidden = true;
+        });
+        host.querySelector('.menu-future')?.setAttribute('hidden', '');
+      }
+      host.querySelectorAll('.menu-group').forEach(group => {
+        group.hidden = ![...group.querySelectorAll('a')].some(a => !a.hidden);
       });
-      host.querySelectorAll('.menu-group').forEach(group=>{group.hidden=![...group.querySelectorAll('a')].some(a=>!a.hidden);});
-      if(me.role==='TRAINER')host.querySelector('.app-menu-brand').href='fichajes.html';
+      if (me.role === 'TRAINER') {
+        const brandLink = host.querySelector('.app-menu-brand');
+        if (brandLink) brandLink.href = '/index.html';
+      }
+      if (me.role === 'CLIENT') {
+        const nav = host.querySelector('#app-navigation');
+        if (nav) nav.hidden = true;
+        const center = host.querySelector('.app-menu-center');
+        if (center) center.hidden = true;
+      }
       const footer=document.createElement('div');footer.className='app-menu-account';
       const label=document.createElement('small');label.textContent=me.name;
       const link=document.createElement('a');link.href='login.html';link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';

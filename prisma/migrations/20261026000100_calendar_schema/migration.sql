@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS calendar.users(
   username text NOT NULL,
   role text NOT NULL CHECK(role IN ('ADMIN','RECEPTION','TRAINER')),
   password_hash text NOT NULL,
+  must_change_password boolean NOT NULL DEFAULT false,
   enabled boolean NOT NULL DEFAULT true,
   UNIQUE(gym_id,username),
   UNIQUE(gym_id,employee_id)

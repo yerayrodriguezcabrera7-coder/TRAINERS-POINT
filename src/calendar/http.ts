@@ -1,11 +1,11 @@
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
+﻿import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import { ZodError, z } from "zod";
 import { Store } from "./store";
 import { ApiError } from "./model";
-import { Access, Identity } from "./access";
+import { Access, Identity, initialPassword } from "./access";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -37,13 +37,13 @@ export function server(
 ) {
   if (token.length < 24)
     throw new Error("CALENDAR_ADMIN_TOKEN debe tener al menos 24 caracteres.");
-  const access = new Access(store.pool);
+  const access = new Access(store.pool,store.clientsDb);
   const attempts = new Map<string, { count: number; until: number }>();
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
-      const gym = defaultGym;
+      const gym = (req.headers["x-calendar-gym"] as string) || defaultGym;
       if (path === "/api/health") {
         send(res, 200, { mode: "server" });
         return;
@@ -62,7 +62,7 @@ export function server(
           return;
         }
         const publicRoute = path.startsWith("/api/public/");
-        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null };
+        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -74,38 +74,83 @@ export function server(
           )
             identity = await access.identify(gym,bearer);
           const admin = identity.role === "ADMIN";
-          const office = admin || identity.role === "RECEPTION";
+          const reception = identity.role === "RECEPTION";
+          const trainer = identity.role === "TRAINER";
+          const client = identity.role === "CLIENT";
+          const office = admin || reception;
+
+          if (identity.mustChangePassword &&
+            !(req.method === "GET" && path === "/api/me") &&
+            !(req.method === "POST" && path === "/api/password/change") &&
+            !(req.method === "POST" && path === "/api/logout"))
+            throw new ApiError(403, "Debes cambiar la contraseña antes de continuar.");
+
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
+          if (req.method === "POST" && path === "/api/password/change") {
+            send(res,200,await access.changePassword(gym,bearer,await body(req)));
+            return;
+          }
+
+          if (client) {
+            throw new ApiError(403, "Tu perfil no tiene acceso a las funciones de gestión.");
+          }
+
           if (req.method === "GET" && path === "/api/manage") {
             const s = await store.state(gym);
+            let clients = s.clients;
+            let bookings = s.bookings;
+            let employees = s.employees;
+            let staffNames = s.employees.map((e: any) => ({id:e.id,name:e.name}));
+            if (trainer) {
+              const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+              clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || c.assignedWorkerId === identity.employeeId);
+              bookings = s.bookings.filter((b: any) => b.employeeId === identity.employeeId);
+              employees = s.employees.filter((e: any) => e.id === identity.employeeId);
+              staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
+            }
             send(res,200,{ ...identity, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
-              clients: office ? s.clients : [], services: office ? s.services : [],
-              bookings: office ? s.bookings : [],
-              staffNames: office ? s.employees.map((e: any) => ({id:e.id,name:e.name})) : [],
-              employees: admin ? s.employees : s.employees.filter((e: any) => e.id === identity.employeeId),
-              users: admin ? await access.list(gym) : [],
+              clients,
+              services: s.services,
+              bookings,
+              staffNames,
+              employees: (admin || reception) ? s.employees : employees,
+              users: admin ? await access.list(gym,s.clients) : [],
             }); return;
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
-            if (!admin && !(identity.role === "RECEPTION" && management[1] === "clients")) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "users" && !admin) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
+            if (management[1] === "services" && !admin) throw new ApiError(403,"Solo administración puede modificar servicios.");
+            if (management[1] === "employees" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "clients" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar clientes.");
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
-              ? await access.save(gym,raw.record,id)
+              ? await access.save(gym,raw.record,id,identity.id !== "bootstrap" ? bearer : undefined)
               : await store.manage(gym,management[1],raw.record,raw.revision,id);
             if (management[1] === "users" && identity.id === "bootstrap") {
-              const session = await access.login(gym,raw.record);
-              send(res,201,{...result,token:session.token});
+              const session = await access.login(gym,{ username: raw.record.username, password: initialPassword });
+              send(res,201,{...result,...session});
             } else send(res,id ? 200 : 201,result);
             return;
           }
           if (path === "/api/config" && !admin) throw new ApiError(403,"Solo administración puede cambiar horarios y configuración.");
-          if (!office && !["/api/attendance","/api/attendance/clock"].includes(path)) throw new ApiError(403,"Tu perfil permite consultar tus turnos y fichajes.");
+          if (!office && !trainer && !["/api/attendance","/api/attendance/clock"].includes(path)) throw new ApiError(403,"Tu perfil no permite acceder a esta sección.");
         }
         if (req.method === "GET" && path === "/api/state") {
-          send(res, 200, await store.state(gym));
+          const s = await store.state(gym);
+          if (identity.role === "TRAINER") {
+            const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+            send(res, 200, {
+              ...s,
+              bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId),
+              employees: s.employees.filter((e: any) => e.id === identity.employeeId),
+              clients: s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId),
+            });
+            return;
+          }
+          send(res, 200, s);
           return;
         }
         if (req.method === "GET" && path === "/api/attendance") {
@@ -117,6 +162,7 @@ export function server(
               url.searchParams.get("from") || undefined,
               url.searchParams.get("to") || undefined,
               identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned",
+              identity.role,
             ),
           );
           return;
@@ -125,6 +171,30 @@ export function server(
           const raw = await body(req);
           if (identity.role !== "ADMIN" && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
           send(res, 201, await store.clock(gym, raw));
+          return;
+        }
+        if (req.method === "GET" && path === "/api/clients") {
+          const s = await store.state(gym);
+          let clients = s.clients;
+          if (identity.role === "TRAINER") {
+            const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+            clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId);
+          }
+          send(res, 200, {
+            clients: clients.map((c: any) => ({
+              id: c.id,
+              firstName: c.name.split(" ")[0] || c.name,
+              lastName: c.name.split(" ").slice(1).join(" ") || "",
+              email: c.email || "",
+              phone: c.phone || "",
+              notes: c.notes || "",
+              status: c.status || "ACTIVE",
+              servicePackages: [],
+              bookings: [],
+            })),
+            total: clients.length,
+            counts: {},
+          });
           return;
         }
         if (req.method === "GET" && path === "/api/public/catalog") {
@@ -152,10 +222,15 @@ export function server(
           req.method === "GET" &&
           ["/api/slots", "/api/public/slots"].includes(path)
         ) {
+          const queryParams = Object.fromEntries(url.searchParams);
+          if (identity.role === "TRAINER" && queryParams.employeeId && queryParams.employeeId !== identity.employeeId) {
+            send(res, 200, []);
+            return;
+          }
           send(
             res,
             200,
-            await store.slots(gym, Object.fromEntries(url.searchParams)),
+            await store.slots(gym, queryParams),
           );
           return;
         }
@@ -185,6 +260,7 @@ export function server(
           return;
         }
         if (req.method === "POST" && path === "/api/bookings") {
+          if (identity.role === "TRAINER") throw new ApiError(403, "Tu perfil no permite modificar reservas.");
           const raw = await body(req);
           send(
             res,
@@ -194,6 +270,7 @@ export function server(
           return;
         }
         if (req.method === "PUT" && path.startsWith("/api/bookings/")) {
+          if (identity.role === "TRAINER") throw new ApiError(403, "Tu perfil no permite modificar reservas.");
           const raw = await body(req);
           send(
             res,
@@ -220,15 +297,13 @@ export function server(
           ? "index.html"
           : path.replace(/^\//, "");
       if (file === "runtime.js" || path === "/runtime.js") {
-        // El token solo se entrega durante el arranque inicial local. En cuanto
-        // existe una cuenta, el navegador debe usar una sesión autenticada.
         const exposeBootstrapToken = options.exposeAdminToken && (await access.needsSetup(gym));
         res.writeHead(200, {
           "Content-Type": "text/javascript",
           "Cache-Control": "no-store",
         });
         res.end(
-          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);o={...o,headers:h};}return f(i,o);};})();${
+          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();${
             exposeBootstrapToken
               ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
               : ""
@@ -259,6 +334,8 @@ export function server(
         "gimnasios.css": "text/css",
         "login.html": "text/html",
         "login.js": "text/javascript",
+        "change-password.html": "text/html",
+        "change-password.js": "text/javascript",
       };
       if (!allowed[name]) throw new ApiError(404, "Archivo desconocido.");
       res.writeHead(200, {

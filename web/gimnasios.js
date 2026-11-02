@@ -2,7 +2,7 @@
   const list = document.querySelector('#gym-list');
   const dialog = document.querySelector('#create-dialog');
   const form = document.querySelector('#create-form');
-  const token = () => sessionStorage.getItem('calendar-user-token') || window.CALENDAR_DEV_TOKEN || sessionStorage.getItem('calendar-admin-token') || '';
+  const token = () => sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '';
   async function load() {
     const response = await fetch('/api/gyms');
     const data = await response.json();

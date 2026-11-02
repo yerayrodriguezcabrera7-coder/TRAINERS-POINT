@@ -7,6 +7,7 @@ El esquema propio del calendario se prepara al iniciar la aplicacion. Las reglas
 Rutas principales:
 
 - POST /api/login
+- POST /api/password/change
 - GET /api/me
 - GET /api/state
 - GET /api/slots
