@@ -1636,6 +1636,12 @@ async function start(): Promise<void> {
     ],
     rooms: [{ id: "r1", name: "Sala principal" }],
     clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
+    location: {
+      latitude: 43.2630,
+      longitude: -2.9350,
+      radiusMeters: 200,
+      address: "Trainers Point · Bizkaia",
+    },
   };
   await store.seed(gym, initialCalendarConfig);
   if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {
