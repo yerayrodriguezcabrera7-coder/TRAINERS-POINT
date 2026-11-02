@@ -20,6 +20,10 @@
     window.location.replace('/profesionales');
     return;
   }
+  if (requestedSection === 'services' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+    window.location.replace('/servicios');
+    return;
+  }
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];

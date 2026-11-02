@@ -1,5 +1,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { PrismaClient } = require('@prisma/client');
 
 let prisma;
@@ -148,3 +150,29 @@ test('Base de datos: Desactivar servicio sin eliminarlo físicamente', async () 
   assert.ok(allServices.some(s => s.id === service.id), 'Debe seguir existiendo en la base de datos');
 });
 
+test('Interfaz y archivos: Comprobar existencia y estructura de la página de servicios', () => {
+  const htmlPath = path.join(__dirname, '..', 'public', 'services.html');
+  const cssPath = path.join(__dirname, '..', 'public', 'services.css');
+  const jsPath = path.join(__dirname, '..', 'public', 'services.js');
+
+  assert.ok(fs.existsSync(htmlPath), 'Debe existir public/services.html');
+  assert.ok(fs.existsSync(cssPath), 'Debe existir public/services.css');
+  assert.ok(fs.existsSync(jsPath), 'Debe existir public/services.js');
+
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  assert.ok(html.includes('id="services-grid"'), 'Debe incluir el grid de servicios');
+  assert.ok(html.includes('id="open-service-create"'), 'Debe incluir el botón de añadir servicio');
+  assert.ok(html.includes('id="service-dialog"'), 'Debe incluir el diálogo modal');
+  assert.ok(html.includes('id="service-form"'), 'Debe incluir el formulario');
+  assert.ok(html.includes('id="service-search"'), 'Debe incluir el buscador');
+  assert.ok(html.includes('id="count-total"'), 'Debe incluir métricas de resumen');
+  assert.ok(html.includes('data-app-menu'), 'Debe incluir el menú de navegación corporativo');
+
+  const css = fs.readFileSync(cssPath, 'utf8');
+  assert.ok(css.includes('#ff8a1f'), 'Debe emplear el naranja de Trainers Point');
+  assert.ok(css.includes('#1e1e1e') || css.includes('#111111'), 'Debe emplear fondo oscuro');
+
+  const js = fs.readFileSync(jsPath, 'utf8');
+  assert.ok(js.includes('/api/') && js.includes('services'), 'Debe conectar realmente con la API de servicios');
+  assert.ok(js.includes('POST') && js.includes('PUT') && js.includes('PATCH'), 'Debe manejar altas, modificaciones y activaciones');
+});

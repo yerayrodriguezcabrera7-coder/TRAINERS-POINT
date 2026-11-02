@@ -1818,6 +1818,11 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/profesionales": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
   "/profesionales.html": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
   "/professionals.js": { file: "public/professionals.js", contentType: "text/javascript; charset=utf-8" },
+  "/servicios": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/servicios.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.css": { file: "public/services.css", contentType: "text/css; charset=utf-8" },
+  "/services.js": { file: "public/services.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
