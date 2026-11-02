@@ -150,6 +150,16 @@ enum InvoiceEventType {
   ERROR
 }
 
+
+enum ServiceModality {
+  INDIVIDUAL
+  DUAL
+}
+
+enum ServiceType {
+  PACK
+  SESION_INDIVIDUAL
+}
 model Client {
   id               String                 @id @default(uuid()) @db.Uuid
   firstName        String
@@ -340,19 +350,26 @@ model RolePermission {
 }
 
 model Service {
-  id          String                 @id @default(uuid()) @db.Uuid
-  name        String
-  description String?
-  durationMin Int
-  price       Decimal                @db.Decimal(10, 2)
-  isActive    Boolean                @default(true)
-  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
-  bookings    Booking[]
-  packages    ClientServicePackage[]
-  saleLines   SaleLine[]
+  id                         String                 @id @default(uuid()) @db.Uuid
+  name                       String
+  description                String?
+  modality                   ServiceModality        @default(INDIVIDUAL)
+  type                       ServiceType            @default(SESION_INDIVIDUAL)
+  trainingCount              Int                    @default(1)
+  price                      Decimal                @db.Decimal(10, 2)
+  durationMin                Int                    @default(60)
+  validityWeeks              Int?
+  recommendedWeeklyFrequency Int?
+  conditions                 String?
+  isActive                   Boolean                @default(true)
+  createdAt                  DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime               @updatedAt @db.Timestamptz(3)
+  bookings                   Booking[]
+  packages                   ClientServicePackage[]
+  saleLines                  SaleLine[]
 
   @@index([isActive, name])
+  @@index([modality, type])
 }
 
 model ClientServicePackage {

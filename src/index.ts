@@ -99,7 +99,31 @@ type ServiceInput = {
   description?: string;
   durationMin: number;
   price: number;
+  modality?: "INDIVIDUAL" | "DUAL";
+  type?: "PACK" | "SESION_INDIVIDUAL";
+  trainingCount?: number;
+  validityWeeks?: number | null;
+  recommendedWeeklyFrequency?: number | null;
+  conditions?: string | null;
+  isActive?: boolean;
 };
+
+const serviceSelectFields = {
+  id: true,
+  name: true,
+  description: true,
+  durationMin: true,
+  price: true,
+  modality: true,
+  type: true,
+  trainingCount: true,
+  validityWeeks: true,
+  recommendedWeeklyFrequency: true,
+  conditions: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 function sendJson(response: ServerResponse, status: number, data: unknown): void {
   response.writeHead(status, {
@@ -395,11 +419,71 @@ function parseServiceInput(value: unknown): ServiceInput | string {
   if (!Number.isFinite(price) || price < 0 || price > 99999999.99) {
     return "Introduce un precio válido.";
   }
-  if (description.length > 1000) {
-    return "La descripción debe tener como máximo 1000 caracteres.";
+  if (description.length > 2000) {
+    return "La descripción debe tener como máximo 2000 caracteres.";
   }
 
-  return { name, durationMin, price, ...(description ? { description } : {}) };
+  const rawModality = String(value.modality ?? "INDIVIDUAL").trim().toUpperCase();
+  if (rawModality !== "INDIVIDUAL" && rawModality !== "DUAL") {
+    return "La modalidad debe ser individual o dual.";
+  }
+  const modality: "INDIVIDUAL" | "DUAL" = rawModality as "INDIVIDUAL" | "DUAL";
+
+  const rawType = String(value.type ?? "SESION_INDIVIDUAL").trim().toUpperCase();
+  if (rawType !== "PACK" && rawType !== "SESION_INDIVIDUAL") {
+    return "El tipo debe ser pack o sesión individual.";
+  }
+  const type: "PACK" | "SESION_INDIVIDUAL" = rawType as "PACK" | "SESION_INDIVIDUAL";
+
+  const rawTrainingCount = value.trainingCount != null && value.trainingCount !== ""
+    ? Number(value.trainingCount)
+    : (type === "PACK" ? 10 : 1);
+  if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) {
+    return "El número de entrenamientos debe ser un entero entre 1 y 500.";
+  }
+  const trainingCount = rawTrainingCount;
+
+  let validityWeeks: number | null = null;
+  if (value.validityWeeks != null && value.validityWeeks !== "") {
+    const parsedWeeks = Number(value.validityWeeks);
+    if (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 104) {
+      return "La validez en semanas debe ser un número entre 1 y 104.";
+    }
+    validityWeeks = parsedWeeks;
+  }
+
+  let recommendedWeeklyFrequency: number | null = null;
+  if (value.recommendedWeeklyFrequency != null && value.recommendedWeeklyFrequency !== "") {
+    const parsedFreq = Number(value.recommendedWeeklyFrequency);
+    if (!Number.isInteger(parsedFreq) || parsedFreq < 1 || parsedFreq > 14) {
+      return "La frecuencia semanal recomendada debe ser un número entre 1 y 14.";
+    }
+    recommendedWeeklyFrequency = parsedFreq;
+  }
+
+  const rawConditions = typeof value.conditions === "string" ? value.conditions.trim() : "";
+  if (rawConditions.length > 5000) {
+    return "Las condiciones deben tener como máximo 5000 caracteres.";
+  }
+  const conditions = rawConditions || null;
+
+  const isActive = typeof value.isActive === "boolean"
+    ? value.isActive
+    : value.isActive === "true" || value.isActive === 1 || value.isActive === undefined || value.isActive === null;
+
+  return {
+    name,
+    durationMin,
+    price,
+    modality,
+    type,
+    trainingCount,
+    validityWeeks,
+    recommendedWeeklyFrequency,
+    conditions,
+    isActive,
+    ...(description ? { description } : {}),
+  };
 }
 
 function parseServicePackageInput(
@@ -535,9 +619,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     (request as any).selectedGym = selectedGym;
   }
   if (request.method === "GET" && url.pathname === "/api/services") {
+    const includeAll = url.searchParams.get("all") === "true" || url.searchParams.get("includeInactive") === "true";
     const services = await prisma.service.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      where: includeAll ? undefined : { isActive: true },
+      select: serviceSelectFields,
       orderBy: { name: "asc" },
     });
     sendJson(response, 200, { services });
@@ -597,9 +682,98 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 
     const service = await prisma.service.create({
       data: input,
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      select: serviceSelectFields,
     });
     sendJson(response, 201, { service });
+    return;
+  }
+
+  const serviceItemMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)$/i);
+  if (request.method === "PUT" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const input = parseServiceInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: input,
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  const serviceStatusMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)\/status$/i);
+  if (request.method === "PATCH" && serviceStatusMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceStatusMatch[1];
+    const body = await readJsonBody(request);
+    if (!isRecord(body) || typeof body.isActive !== "boolean") {
+      sendError(response, 400, "Indica si el servicio debe estar activo (true o false).");
+      return;
+    }
+
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: { isActive: body.isActive },
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  if (request.method === "DELETE" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { bookings: true, packages: true } } },
+    });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    if (existing._count.bookings > 0 || existing._count.packages > 0) {
+      const service = await prisma.service.update({
+        where: { id },
+        data: { isActive: false },
+        select: serviceSelectFields,
+      });
+      sendJson(response, 200, { service, deactivated: true, message: "El servicio tiene historial y ha sido desactivado en lugar de eliminado." });
+      return;
+    }
+
+    await prisma.service.delete({ where: { id } });
+    sendJson(response, 200, { deleted: true, id });
     return;
   }
 

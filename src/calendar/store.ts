@@ -68,7 +68,20 @@ export class Store {
     const services = await this.clientsDb.service.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, description: true, durationMin: true, price: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        durationMin: true,
+        price: true,
+        isActive: true,
+        modality: true,
+        type: true,
+        trainingCount: true,
+        validityWeeks: true,
+        recommendedWeeklyFrequency: true,
+        conditions: true,
+      },
     });
     if (services.length) {
       config.services = services.map(service => ({
@@ -76,9 +89,15 @@ export class Store {
         name: service.name,
         description: service.description || "",
         duration: service.durationMin,
-        capacity: 1,
+        capacity: service.modality === "DUAL" ? 2 : 1,
         price: Number(service.price),
         active: service.isActive,
+        modality: service.modality,
+        type: service.type,
+        trainingCount: service.trainingCount,
+        validityWeeks: service.validityWeeks,
+        recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
+        conditions: service.conditions,
       }));
     }
     return config;

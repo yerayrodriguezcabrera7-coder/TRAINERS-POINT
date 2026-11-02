@@ -58,6 +58,12 @@ export const serviceSchema = named.extend({
   price: z.number().min(0).max(100000).optional(),
   description: z.string().max(2000).optional(),
   active: z.boolean().optional(),
+  modality: z.enum(["INDIVIDUAL", "DUAL"]).optional(),
+  type: z.enum(["PACK", "SESION_INDIVIDUAL"]).optional(),
+  trainingCount: z.number().int().min(1).max(500).optional(),
+  validityWeeks: z.number().int().min(1).max(104).nullable().optional(),
+  recommendedWeeklyFrequency: z.number().int().min(1).max(14).nullable().optional(),
+  conditions: z.string().max(5000).nullable().optional(),
 });
 export const locationSchema = z.object({
   latitude: z.number().min(-90).max(90),
