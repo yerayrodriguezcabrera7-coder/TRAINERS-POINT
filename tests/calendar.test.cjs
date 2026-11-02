@@ -385,7 +385,7 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
       w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
     }});
     const w=dom.window,d=w.document;
-    await until(()=>d.getElementById('employee-filter').options.length===3);
+    await until(()=>d.getElementById('employee-filter').options.length===4);
     assert.equal(d.getElementById('mode-title').textContent,'Servidor conectado');
     const jump=d.getElementById('jump-date');jump.value='2030-10-22';jump.dispatchEvent(new w.Event('change'));
     d.getElementById('new-booking').click();
@@ -644,4 +644,52 @@ test('Recuperaciones: exclusividad concurrente y devolución al cancelar con ant
  assert.equal((await store.recoveries(id))[0].status,'SCHEDULED');
  await store.save(id,{...recovered,status:'CANCELLED'},recovered.id);
  assert.equal((await store.recoveries(id))[0].status,'PENDING');
+});
+
+test('Planificación: reserva sin asignar, asignación concurrente y centro de trabajo',async()=>{
+ const g=await gym(),center=await gym();const input=booking({employeeId:null,status:'PENDING',centerId:center});const b=await store.save(g,input);
+ assert.equal(b.employeeId,null);assert.equal((await store.state(g)).bookings[0].centerId,center);
+ await assert.rejects(store.save(g,{...input,status:'CONFIRMED'}),/Asigna un trabajador/);
+ const changes=await Promise.allSettled([store.save(g,{...b,employeeId:'e1',status:'CONFIRMED'},b.id),other.save(g,{...b,employeeId:'e2',status:'CONFIRMED'},b.id)]);
+ assert.equal(changes.filter(x=>x.status==='fulfilled').length,1);
+ const assigned=changes.find(x=>x.status==='fulfilled').value;
+ assert.ok(assigned.employeeId);assert.equal(assigned.history[0].action,'ASSIGNED');assert.equal(assigned.history[0].previous.employeeId,null);
+ const state=await store.state(g);assert.equal(state.bookings.filter(b=>!b.employeeId&&b.status==='PENDING').length,0);
+ await assert.rejects(store.save(g,booking({start:'13:00',centerId:'no-existe'})),/Centro desconocido/);
+});
+test('Planificación: reprogramar libera el hueco y conserva fecha, trabajador y centro anteriores',async()=>{
+ const g=await gym();const original=await store.save(g,booking());const pending=await store.save(g,{...original,status:'CANCELLED',needsReschedule:true},original.id,undefined,'recepcion');
+ assert.equal(pending.needsReschedule,true);assert.equal(pending.history[0].previous.date,original.date);assert.equal(pending.history[0].previous.employeeId,'e1');assert.equal(pending.history[0].previous.centerId,g);
+ await store.save(g,booking({clientId:'c1'}));
+ const next=await store.save(g,{...pending,start:'12:00',end:'13:00',status:'CONFIRMED',needsReschedule:false,employeeId:'e2'},pending.id,undefined,'recepcion');
+ assert.equal(next.id,original.id);assert.equal(next.needsReschedule,false);assert.equal(next.history.length,2);
+ assert.equal(next.history[1].previous.needsReschedule,true);
+ await assert.rejects(store.save(g,{...next,status:'CONFIRMED',needsReschedule:true},next.id),/liberar el horario/);
+});
+test('Planificación: trabajador solo completa o comunica incidencias en reservas propias',async()=>{
+ const g=await gym();const original=await store.save(g,booking({date:'2020-10-22'}));
+ await assert.rejects(store.workerAction(g,original.id,{id:'user2',employeeId:'e2'},{action:'COMPLETE',version:original.version}),/desconocida/);
+ const incident=await store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'INCIDENT',message:'Cliente solicita cambio de fecha.',version:original.version});
+ assert.equal(incident.incidents[0].message,'Cliente solicita cambio de fecha.');
+ await assert.rejects(store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:original.version}),/cambió/);
+ const completed=await store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:incident.version});assert.equal(completed.status,'COMPLETED');
+ const future=await store.save(g,booking());await assert.rejects(store.workerAction(g,future.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:future.version}),/no ha terminado/);
+});
+test('Pendientes: interfaz asigna una reserva y la elimina de la cola compartida',async()=>{
+ const {JSDOM}=require('jsdom'),g=await gym(),center=await gym();const b=await store.save(g,booking({employeeId:null,status:'PENDING',centerId:center}));
+ const app=server(store,g,'planning-ui-token-long-enough',{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;let dom;
+ const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('No se actualizó la cola de pendientes');};
+ try{dom=await JSDOM.fromURL(base+'/pendientes.html',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0)'));const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+test('Centros: un trabajador no puede estar en dos centros a la misma hora',async()=>{
+ const g=await gym(),center=await gym();await store.save(g,booking());await assert.rejects(store.save(g,booking({centerId:center,clientId:'c1'})),/ocupados/);
+ const b=await store.save(g,booking({centerId:center,clientId:'c1',employeeId:'e2'}));assert.equal(b.centerId,center);
+});
+test('Reprogramación de recuperación conserva el crédito y no genera otro cobro',async()=>{
+ const g=await gym();const first=await store.save(g,booking());const credit=await store.deferBooking(g,first.id,{id:'admin',role:'ADMIN',employeeId:null});
+ const recovered=await store.save(g,booking({start:'12:00',recoveryId:credit.id}));const pending=await store.save(g,{...recovered,status:'CANCELLED',needsReschedule:true},recovered.id);
+ assert.equal((await store.recoveries(g))[0].status,'RESCHEDULE_PENDING');
+ await assert.rejects(store.save(g,booking({start:'14:00',recoveryId:credit.id})),/pendiente/);
+ const next=await store.save(g,{...pending,start:'14:00',end:'15:00',status:'CONFIRMED',needsReschedule:false},pending.id);
+ assert.equal(next.chargeAmount,0);assert.equal((await store.recoveries(g))[0].status,'SCHEDULED');
 });

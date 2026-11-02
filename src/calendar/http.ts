@@ -22,6 +22,8 @@ async function body(req: IncomingMessage) {
     throw new ApiError(400, "JSON inválido.");
   }
 }
+function workerBooking(booking:any){const {history,...visible}=booking;return visible;}
+function clientBooking(booking:any){const {history,incidents,...visible}=booking;return visible;}
 function send(res: ServerResponse, status: number, value: unknown) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -92,6 +94,11 @@ export function server(
             return;
           }
 
+          const workerAction=path.match(/^\/api\/bookings\/([^/]+)\/worker-action$/);
+          if(workerAction && req.method==='POST'){
+            if(!trainer)throw new ApiError(403,"Esta acción corresponde al trabajador asignado.");
+            send(res,200,workerBooking(await store.workerAction(gym,decodeURIComponent(workerAction[1]),identity,await body(req))));return;
+          }
           if (path === "/api/recoveries" && req.method === "GET") {
             const items = await store.recoveries(gym);
             send(res,200,trainer ? items.filter(r=>r.employeeId===identity.employeeId) : client ? items.filter(r=>r.clientId===identity.clientId) : items); return;
@@ -106,10 +113,11 @@ export function server(
             if (!identity.clientId) throw new ApiError(403,"Cuenta sin cliente asociado.");
             const s=await store.state(gym);
             if(req.method === "GET") {
-              send(res,200,{services:s.services.filter((v:any)=>v.active!==false), employees:s.employees.filter((v:any)=>v.active!==false).map((v:any)=>({id:v.id,name:v.name})), rooms:s.rooms, bookings:s.bookings.filter((v:any)=>v.clientId===identity.clientId), recoveries:(await store.recoveries(gym)).filter(v=>v.clientId===identity.clientId)});return;
+              send(res,200,{services:s.services.filter((v:any)=>v.active!==false), employees:s.employees.filter((v:any)=>v.active!==false).map((v:any)=>({id:v.id,name:v.name})), rooms:s.rooms, bookings:s.bookings.filter((v:any)=>v.clientId===identity.clientId).map(clientBooking), recoveries:(await store.recoveries(gym)).filter(v=>v.clientId===identity.clientId)});return;
             }
             if(req.method === "POST") {
               const raw=await body(req);
+              if(!raw.employeeId)throw new ApiError(400,"Selecciona un trabajador.");
               send(res,201,await store.save(gym,{...raw,clientId:identity.clientId,id:undefined,version:undefined,status:"CONFIRMED",chargeAmount:undefined}));return;
             }
           }
@@ -129,7 +137,7 @@ export function server(
             if (trainer) {
               const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
               clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || c.assignedWorkerId === identity.employeeId);
-              bookings = s.bookings.filter((b: any) => b.employeeId === identity.employeeId);
+              bookings = s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking);
               employees = s.employees.filter((e: any) => e.id === identity.employeeId);
               staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
             }
@@ -192,9 +200,10 @@ export function server(
             const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
             send(res, 200, {
               ...s,
-              bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId),
+              bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking),
               employees: s.employees.filter((e: any) => e.id === identity.employeeId),
               clients: s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId),
+              leaveRequests: s.leaveRequests.filter((l:any)=>l.employeeId===identity.employeeId),
             });
             return;
           }
@@ -291,6 +300,7 @@ export function server(
               phone: z.string().max(40).default(""),
             })
             .parse(raw.client);
+          if(!raw.booking?.employeeId)throw new ApiError(400,"Selecciona un trabajador.");
           const clientId = randomUUID();
           const b = await store.save(
             gym,
@@ -313,7 +323,7 @@ export function server(
           send(
             res,
             201,
-            await store.save(gym, raw.booking, undefined, raw.client),
+            await store.save(gym, raw.booking, undefined, raw.client,identity.id),
           );
           return;
         }
@@ -328,6 +338,7 @@ export function server(
               raw.booking,
               decodeURIComponent(path.slice("/api/bookings/".length)),
               raw.client,
+              identity.id,
             ),
           );
           return;
@@ -379,6 +390,8 @@ export function server(
         "ausencias.html": "text/html",
         "ausencias.js": "text/javascript",
         "ausencias.css": "text/css",
+        "pendientes.html": "text/html",
+        "pendientes.js": "text/javascript",
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",

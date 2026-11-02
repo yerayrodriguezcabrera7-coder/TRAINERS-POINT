@@ -21,6 +21,7 @@ import {
   serviceSchema,
   leaveRequestInputSchema,
   LeaveRequest,
+  workerActionSchema,
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
 CREATE TABLE IF NOT EXISTS calendar.gyms(id text PRIMARY KEY, name text, config jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0);
@@ -164,6 +165,10 @@ export class Store {
       db.release();
     }
   }
+  async centers() {
+    if(this.clientsDb)return this.clientsDb.gym.findMany({where:{isActive:true},select:{id:true,name:true,address:true,city:true,province:true},orderBy:{name:'asc'}});
+    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:''}));
+  }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
     const { rows } = await this.pool.query(
@@ -171,17 +176,20 @@ export class Store {
       [gym],
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
+    const centers=await this.centers();
     return {
+      gymId:gym, centers,
       ...await this.externalConfig(gym, rows[0].config),
-      bookings: rows[0].bookings,
+      bookings: rows[0].bookings.map((b:Booking)=>{const center=centers.find(g=>g.id===(b.centerId||gym));return {...b,centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };
   }
-  async save(gym: string, raw: unknown, id?: string, newClient?: unknown) {
+  async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string) {
     const input = bookingSchema.parse(raw);
     return this.transaction(gym, async (db, c, bookings) => {
       const old = id ? bookings.find((b) => b.id === id) : undefined;
+      if(expectedEmployeeId && old?.employeeId!==expectedEmployeeId)throw new ApiError(404,"Reserva desconocida.");
       if (id && !old) throw new ApiError(404, "Reserva desconocida.");
       if (old && input.version !== old.version)
         throw new ApiError(
@@ -198,6 +206,15 @@ export class Store {
         { ...input, id: id || randomUUID(), version: old?.version || 1 },
         c,
       );
+      b.centerId=input.centerId || old?.centerId || gym;
+      const center=(await this.centers()).find(x=>x.id===b.centerId);
+      if(!center && b.centerId!==gym)throw new ApiError(400,"Centro desconocido o inactivo.");
+      b.centerName=center?.name || gym;
+      b.centerAddress=[center?.address,center?.city,center?.province].filter(Boolean).join(', ');
+      if(old?.needsReschedule && !b.needsReschedule && b.status !== 'CANCELLED' && DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toMillis()<=Date.now())throw new ApiError(409,"Elige una fecha y hora futuras para reprogramar.");
+      b.history=old?.history || [];
+      b.incidents=old?.incidents || [];
+      if(old){const {history,incidents,...previous}=old;b.history=[...b.history,{at:new Date().toISOString(),actorId,action:b.needsReschedule?'RESCHEDULE_REQUESTED':!old.employeeId&&b.employeeId?'ASSIGNED':'UPDATED',previous}];}
       if (!old || (b.status !== "CANCELLED" && ["clientId","employeeId","serviceId","date","start","status"].some(k => (b as any)[k] !== (old as any)[k])))
         this.assertActive(b, c);
       if (old && b.status !== "CANCELLED" && (await db.query("SELECT 1 FROM calendar.recoveries WHERE gym_id=$1 AND original_id=$2",[gym,old.id])).rowCount) throw new ApiError(409,"La sesión original tiene una recuperación. Programa la recuperación en lugar de reactivar la original.");
@@ -207,7 +224,7 @@ export class Store {
           400,
           "Una nueva cita debe estar pendiente o confirmada.",
         );
-      assertAvailable(b, bookings, c);
+      assertAvailable(b, bookings.map(o=>({...o,centerId:o.centerId||gym})), c);
       if (old && (old.recoveryId || null) !== (b.recoveryId || null)) throw new ApiError(409, "No se puede cambiar la recuperación de una reserva.");
       if (b.recoveryId) {
         const row = (await db.query("SELECT data FROM calendar.recoveries WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId])).rows[0];
@@ -220,7 +237,7 @@ export class Store {
         credit.status = b.status === "COMPLETED" ? "COMPLETED" : b.status === "NO_SHOW" ? "FORFEITED" : "SCHEDULED";
         if (b.status === "CANCELLED") {
           const notice = DateTime.fromISO(`${old!.date}T${old!.start}`, {zone:c.timezone}).toMillis() - Date.now();
-          credit.status = notice >= 2*3600000 ? "PENDING" : "FORFEITED";
+          credit.status = b.needsReschedule ? "RESCHEDULE_PENDING" : notice >= 2*3600000 ? "PENDING" : "FORFEITED";
           if (credit.status === "PENDING") credit.bookingId = null;
         }
         await db.query("UPDATE calendar.recoveries SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId,credit]);
@@ -236,6 +253,22 @@ export class Store {
           c,
         ]);
       return b;
+    });
+  }
+  async workerAction(gym:string,id:string,actor:{id:string;employeeId:string|null},raw:unknown){
+    const input=workerActionSchema.parse(raw);
+    if(input.action==='COMPLETE'){
+      const s=await this.state(gym);const old=s.bookings.find((b:Booking)=>b.id===id&&b.employeeId===actor.employeeId);
+      if(!actor.employeeId||!old)throw new ApiError(404,"Reserva desconocida.");
+      return this.save(gym,{...old,status:'COMPLETED',version:input.version},id,undefined,actor.id,actor.employeeId!);
+    }
+    return this.transaction(gym,async(db,c,bookings)=>{
+      const old=bookings.find(b=>b.id===id&&b.employeeId===actor.employeeId);
+      if(!actor.employeeId||!old)throw new ApiError(404,"Reserva desconocida.");
+      if(old.version!==input.version)throw new ApiError(409,"La reserva cambió. Actualiza antes de continuar.");
+      const message=input.message?.trim();if(!message)throw new ApiError(400,"Escribe la incidencia.");
+      old.incidents=[...(old.incidents||[]),{at:new Date().toISOString(),actorId:actor.id,message}];old.version++;
+      await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,id,old]);return old;
     });
   }
   async recoveries(gym: string) {
@@ -284,11 +317,11 @@ export class Store {
     const today = DateTime.now().setZone(config.timezone).toISODate()!;
     for (const b of bookings) {
       for (const [list,key] of [["clients","clientId"],["services","serviceId"],["employees","employeeId"],["rooms","roomId"]] as const)
-        if (!config[list].some(x => x.id === b[key])) throw new ApiError(409, "No se pueden eliminar fichas con historial. Usa el estado inactivo.");
+        if (b[key] !== null && !config[list].some(x => x.id === b[key])) throw new ApiError(409, "No se pueden eliminar fichas con historial. Usa el estado inactivo.");
       if (["PENDING","CONFIRMED"].includes(b.status) && b.date >= today) {
         normalize(b, config);
         if ((config.clients.find(x=>x.id===b.clientId)?.status || "ACTIVE") !== "ACTIVE" || config.employees.find(x=>x.id===b.employeeId)?.active === false) throw new ApiError(409,"El cliente o empleado está inactivo.");
-        assertAvailable(b, bookings, config);
+        assertAvailable({...b,centerId:b.centerId||gym}, bookings.map(o=>({...o,centerId:o.centerId||gym})), config);
       }
     }
     const linked = (await db.query(`SELECT employee_id FROM calendar.attendance WHERE gym_id=$1
@@ -388,6 +421,7 @@ export class Store {
             date: day,
             start: label(start),
             status: "PENDING",
+            needsReschedule:false,
             notes: "",
             sessionId: query.sessionId,
           },
@@ -400,7 +434,9 @@ export class Store {
           },
         );
         b.clientId = "slot-preview";
-        assertAvailable(b, c.bookings, c);
+        b.centerId=query.centerId||gym;
+        if(query.excludeId)b.id=query.excludeId;
+        assertAvailable(b, c.bookings.map(o=>({...o,centerId:o.centerId||gym})), c);
         slots.push({ start: b.start, end: b.end });
       } catch (e) {
         if (!(e instanceof ApiError)) throw e;

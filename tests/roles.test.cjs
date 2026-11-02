@@ -214,6 +214,13 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     assert.ok(t1State.bookings.every((b) => b.employeeId === "e2"), "Trainer 1 solo ve sus propias reservas");
     assert.ok(!t1State.bookings.some((b) => b.employeeId === "e3"), "Trainer 1 no ve reservas de Trainer 2");
 
+    assert.equal(t1State.bookings[0].history,undefined,"El trabajador no recibe versiones de otros empleados");
+    const ownSession=t1State.bookings[0];
+    const otherSession=(await (await req("state",t2)).json()).bookings[0];
+    assert.equal((await req("bookings/"+otherSession.id+"/worker-action",t1,"POST",{action:"INCIDENT",version:otherSession.version,message:"No autorizado"})).status,404);
+    assert.equal((await req("bookings/"+ownSession.id+"/worker-action",t1,"POST",{action:"INCIDENT",version:ownSession.version,message:"Cliente solicita otra fecha"})).status,200);
+    assert.ok(t1State.leaveRequests.every(l=>l.employeeId===meCli.employeeId||l.employeeId==='e2'));
+
     // Manage para Trainer 1: solo sus turnos/ficha
     const t1Manage = await (await req("manage", t1)).json();
     assert.equal(t1Manage.employees.length, 1);

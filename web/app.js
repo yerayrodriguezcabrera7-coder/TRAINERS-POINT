@@ -10,7 +10,7 @@ const todayKey = () => C.dateKey(new Date());
 const prettyDate = (key, options) => new Intl.DateTimeFormat('es-ES', options).format(C.parseDate(key));
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', room: 'all', editing: null };
+const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', room: 'all', center:'all', editing: null };
 let storageWritable = true;
 let toastTimer;
 
@@ -102,6 +102,7 @@ if(serverMode) {
   if(!adminToken){location.href='login.html';return;}
   currentUser = await api('me');
   if (currentUser.role === 'TRAINER') {
+    document.querySelector('h1').textContent='Mi calendario';
     state.employee = currentUser.employeeId;
     $('new-booking').hidden = true;
     $('schedule-button').hidden = true;
@@ -147,17 +148,19 @@ function visibleDates() {
 }
 function visibleBookings() {
   const dates = new Set(visibleDates());
-  return data.bookings.filter(b => dates.has(b.date) && (state.employee === 'all' || b.employeeId === state.employee) && (state.service === 'all' || b.serviceId === state.service) && (state.room === 'all' || b.roomId === state.room));
+  return data.bookings.filter(b => dates.has(b.date) && (state.center==='all'||b.centerId===state.center) && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service) && (state.room === 'all' || b.roomId === state.room));
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
-  fillSelect('employee-filter', data.employees, '<option value="all">Ver todos</option>');
+  fillSelect('employee-filter', data.employees, '<option value="all">Ver todos</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
   fillSelect('service-filter', data.services, '<option value="all">Todos los servicios</option>');
   fillSelect('room-filter', data.rooms, '<option value="all">Todos los espacios</option>');
-  fillSelect('booking-employee', data.employees);
+  fillSelect('booking-employee', data.employees,serverMode?'<option value="">Sin asignar</option>':'');
+  fillSelect('center-filter',data.centers||[], '<option value="all">Todos los centros</option>');
+  fillSelect('booking-center',data.centers||[{id:'local',name:'Centro actual'}]);
   fillSelect('booking-service', data.services);
   fillSelect('booking-room', data.rooms);
-  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
+  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room'],['center-filter','center']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
   if (currentUser?.role === 'TRAINER') {
     state.employee = currentUser.employeeId;
     const empFilter = $('employee-filter');
@@ -173,7 +176,7 @@ function titleForPeriod(dates) {
   const start = dates[0], end = dates.at(-1);
   return start.slice(0, 7) === end.slice(0, 7) ? `${C.parseDate(start).getDate()} – ${prettyDate(end, { day: 'numeric', month: 'long', year: 'numeric' })}` : `${prettyDate(start, { day: 'numeric', month: 'short', ...(start.slice(0,4) !== end.slice(0,4) ? {year:'numeric'} : {}) })} – ${prettyDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
-function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}`; }
+function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}`; }
 
 function renderTimeGrid(dates, bookings, employees) {
   const columns = dates.length * employees.length;
@@ -193,12 +196,12 @@ function renderTimeGrid(dates, bookings, employees) {
       const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && date >= leave.startDate && date <= leave.endDate);
       const selected = lookup('services',state.service);
       const serviceOpen = !selected?.schedule || C.isOpen(date,start,start+duration,selected.schedule);
-      const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id);
+      const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id)||employee.id==='__unassigned';
       const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee,date,start,start+duration,data.schedule);
       const label = `${prettyDate(date, { day: 'numeric', month: 'long' })}, ${C.timeLabel(start)}, ${employee.name}`;
       html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
     }
-    const dayBookings = bookings.filter(b => b.date === date && b.employeeId === employee.id);
+    const dayBookings = bookings.filter(b => b.date === date && (b.employeeId||'__unassigned') === employee.id);
     const placed = C.layoutEvents(dayBookings);
     placed.forEach(({ event: b, lane, count }) => {
       const startMin = C.minutes(b.start);
@@ -208,12 +211,12 @@ function renderTimeGrid(dates, bookings, employees) {
       const width = 100 / count;
       const left = lane * width;
       const currentEmployee = lookup('employees', b.employeeId);
-      const color = currentEmployee.color || '#317b9b';
+      const color = lookup('services',b.serviceId).color || '#317b9b';
       const soft = `${color}18`;
       const clientName = lookup('clients', b.clientId).name;
       const serviceName = lookup('services', b.serviceId).name;
       const roomName = lookup('rooms', b.roomId).name;
-      html += `<button class="event ${b.status}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}"><div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}</div></button>`;
+      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}"><div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
     });
     if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
     html += '</div>';
@@ -232,8 +235,8 @@ function renderMonth(bookings) {
     const dayBookings = bookings.filter(b => b.date === date);
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
-      const color = lookup('employees', b.employeeId).color || '#317b9b';
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}</span></button>`;
+      const color = lookup('services', b.serviceId).color || '#317b9b';
+      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
@@ -242,8 +245,18 @@ function renderMonth(bookings) {
 function render(updatePeriodTitle = false) {
   const dates = visibleDates();
   const bookings = visibleBookings();
-  const employees = state.employee === 'all' ? data.employees.filter(e => e.active !== false) : data.employees.filter(e => e.id === state.employee);
+  let employees = state.employee === 'all' ? data.employees.filter(e => e.active !== false) : data.employees.filter(e => e.id === state.employee);
+  if(serverMode&&currentUser?.role!=='TRAINER'&&['all','__unassigned'].includes(state.employee))employees=[...employees,{id:'__unassigned',name:'Sin asignar',color:'#b86b00',schedule:data.schedule}];
+  const queues=data.bookings.filter(b=>!b.employeeId&&['pending','confirmed'].includes(b.status));
+  const reschedules=data.bookings.filter(b=>b.needsReschedule);
+  $('planning-alerts').innerHTML=serverMode&&currentUser?.role!=='TRAINER'?`<a href="pendientes.html?tipo=asignacion" ${queues.length?'':'hidden'}>${queues.length} reservas pendientes de asignación →</a><a href="pendientes.html?tipo=reprogramacion" ${reschedules.length?'':'hidden'}>${reschedules.length} reservas pendientes de reprogramación →</a>`:'';
   $('period-label').textContent = titleForPeriod(dates);
+  $('stat-total').textContent=bookings.length;
+  $('stat-confirmed').textContent=bookings.filter(b=>b.status==='confirmed').length;
+  $('stat-pending').textContent=bookings.filter(b=>b.status==='pending').length;
+  $('stat-team').textContent=employees.filter(e=>e.id!=='__unassigned').length;
+  $('result-count').textContent=bookings.length+' reservas';
+  $('clear-filters').hidden=['employee','service','room','center'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
   document.querySelectorAll('[data-view]').forEach(button => {
@@ -281,6 +294,7 @@ function syncClientPicker() {
 }
 function updateHoursHint() {
   const date = $('booking-date').value;
+  if(!$('booking-employee').value){$('booking-hours').textContent='Pendiente de asignación: se guarda sin confirmar. La disponibilidad se comprobará al asignar un trabajador.';return;}
   if (!C.validDate(date)) { $('booking-hours').textContent = ''; return; }
   const hours = C.hoursFor(date, data.schedule);
   const employee=lookup('employees',$('booking-employee').value);
@@ -299,7 +313,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const bookingClients = serverMode && awsClientsLoaded ? awsClients : data.clients;
   fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
-  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId));
+  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId),serverMode?'<option value="">Sin asignar</option>':'');
+  fillSelect('booking-center',data.centers||[{id:'local',name:'Centro actual'}]);
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const start = minute ?? C.minutes(hours.open);
@@ -308,6 +323,10 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const duration = service.duration || 60;
   const values = b || {clientId:availableClients()[0]?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  if(employeeId==='__unassigned')$('booking-employee').value='';
+  $('booking-center').value=b?.centerId||data.gymId||(data.centers||[])[0]?.id||'local';
+  $('booking-center-info').textContent=b?.centerAddress||'';
+  $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)} · ${escapeHTML(h.previous.centerName||'')}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
   syncClientPicker();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
@@ -315,12 +334,15 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const isTrainer = currentUser?.role === 'TRAINER';
   const saveBtn = $('booking-form').querySelector('button[type="submit"]');
   if (saveBtn) saveBtn.hidden = isTrainer;
-  if ($('cancel-booking')) $('cancel-booking').hidden = isTrainer || !b || b.status === 'cancelled';
+  if ($('cancel-booking')) $('cancel-booking').hidden = isTrainer || !b || (b.status === 'cancelled'&&!b.needsReschedule);
   if ($('add-client')) $('add-client').hidden = isTrainer;
   $('booking-dialog').querySelectorAll('input, select, textarea').forEach(el => {
     if (el.id !== 'client-search') el.disabled = isTrainer;
   });
 
+  $('reschedule-booking').hidden=isTrainer||!b||!['pending','confirmed'].includes(b.status);
+  $('worker-complete').hidden=!isTrainer||b?.status!=='confirmed';
+  $('worker-incident').hidden=!isTrainer||!b;
   updateClientFields(); updateHoursHint();
   $('booking-dialog').showModal();
 }
@@ -330,11 +352,13 @@ $('booking-form').addEventListener('submit', async event => {
   if (currentUser?.role === 'TRAINER') return;
   const clientId = $('booking-client').value;
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
-  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
+  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:$('booking-center').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
   if(serverMode) {
     if(state.saving)return;
     state.saving=true;
     try {
+      if(!booking.employeeId&&booking.status==='confirmed')booking.status='pending';
+      booking.needsReschedule=state.editingSnapshot?.needsReschedule&&booking.status==='cancelled'||false;
       booking.version=state.editingVersion;
       booking.sessionId=state.editingSnapshot?.sessionId||null;
       booking.recoveryId=state.editingSnapshot?.recoveryId||null;
@@ -390,6 +414,18 @@ $('booking-service').addEventListener('change', () => {
     $('booking-end').value = C.timeLabel(end);
   }
 });
+$('booking-employee').addEventListener('change',updateHoursHint);
+$('booking-center').addEventListener('change',()=>{const c=(data.centers||[]).find(c=>c.id===$('booking-center').value);$('booking-center-info').textContent=[c?.address,c?.city,c?.province].filter(Boolean).join(', ');});
+$('reschedule-booking').onclick=async()=>{
+  if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
+  try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
+};
+async function workerAction(action){
+  const message=action==='INCIDENT'?prompt('Describe la incidencia o la solicitud de cancelación:'):undefined;
+  if(action==='INCIDENT'&&!message)return;
+  try{await api('bookings/'+encodeURIComponent(state.editing)+'/worker-action','POST',{action,message,version:state.editingVersion});$('booking-dialog').close();await refreshServer(true);toast(action==='COMPLETE'?'Sesión realizada.':'Incidencia comunicada a recepción.');}catch(e){formError('booking-error',e.message);}
+}
+$('worker-complete').onclick=()=>workerAction('COMPLETE');$('worker-incident').onclick=()=>workerAction('INCIDENT');
 $('booking-date').addEventListener('change', updateHoursHint);
 $('booking-start').addEventListener('change', () => {
   const service = lookup('services', $('booking-service').value);
@@ -411,7 +447,7 @@ $('confirm-cancel').addEventListener('click',async () => {
   const booking = data.bookings.find(b => b.id === state.editing);
   if (!booking) return;
   if(serverMode) {
-    try{await api('bookings/'+encodeURIComponent(booking.id),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',version:state.editingVersion})});$('cancel-dialog').close();$('booking-dialog').close();await refreshServer(true);toast('Reserva cancelada.');}
+    try{await api('bookings/'+encodeURIComponent(booking.id),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:false,version:state.editingVersion})});$('cancel-dialog').close();$('booking-dialog').close();await refreshServer(true);toast('Reserva cancelada.');}
     catch(e){$('cancel-dialog').close();formError('booking-error',e.message);}return;
   }
   booking.status = 'cancelled';
@@ -449,8 +485,8 @@ $('schedule-form').addEventListener('submit',async event => {
 
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',() => $(button.dataset.close).close()));
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => {state.view = button.dataset.view;render(true);}));
-for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
-$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service','room']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
+for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room'],['center-filter','center']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
+$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service','room','center']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
 $('new-booking').addEventListener('click',() => showBooking(null));
 $('today').addEventListener('click',() => {state.date=todayKey();render(true);});
 $('jump-date').addEventListener('change',event => {if(C.validDate(event.target.value)){state.date=event.target.value;render(true);}});

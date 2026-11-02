@@ -114,7 +114,9 @@ export const leaveRequestInputSchema = leaveRequestFields.pick({
 export const bookingSchema = z.object({
   id: id.optional(),
   clientId: id,
-  employeeId: id,
+  employeeId: id.nullable().default(null),
+  centerId: id.optional(),
+  needsReschedule: z.boolean().default(false),
   serviceId: id,
   roomId: id,
   date,
@@ -128,7 +130,7 @@ export const bookingSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 export type Input = z.infer<typeof bookingSchema>;
-export type Booking = Input & { id: string; end: string; version: number };
+export type Booking = Input & { id: string; end: string; version: number; centerName?:string; centerAddress?:string; history?: Array<{at:string;actorId:string;action:string;previous:Record<string,unknown>}>; incidents?:Array<{at:string;actorId:string;message:string}> };
 export const attendanceActionSchema = z.object({
   employeeId: id,
   action: z.enum(["IN", "OUT"]),
@@ -144,7 +146,7 @@ export function normalize(input: Input, c: Config): Booking {
   const service = c.services.find((x) => x.id === input.serviceId);
   if (
     !service ||
-    !c.employees.some((x) => x.id === input.employeeId) ||
+    (input.employeeId !== null && !c.employees.some((x) => x.id === input.employeeId)) ||
     !c.rooms.some((x) => x.id === input.roomId) ||
     !c.clients.some((x) => x.id === input.clientId)
   )
@@ -152,6 +154,8 @@ export function normalize(input: Input, c: Config): Booking {
       400,
       "Cliente, entrenador, sala o servicio desconocido.",
     );
+  if(!input.employeeId && !["PENDING","CANCELLED"].includes(input.status)) throw new ApiError(409,"Asigna un trabajador antes de confirmar o cerrar la reserva.");
+  if(input.needsReschedule && input.status !== "CANCELLED") throw new ApiError(400,"La reserva pendiente de reprogramación debe liberar el horario anterior.");
   const endMinute = minutes(input.start) + service.duration;
   if (endMinute >= 1440)
     throw new ApiError(400, "La cita debe terminar el mismo día.");
@@ -173,7 +177,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
   const service = c.services.find(s => s.id === b.serviceId)!;
-  if (service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
+  if (b.employeeId && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
   const serviceHours = service.schedule?.[day];
   if (serviceHours && (serviceHours.closed || b.start < serviceHours.open || b.end > serviceHours.close)) throw new ApiError(409, "Fuera del horario del servicio.");
   const worker = c.employees.find((x) => x.id === b.employeeId)!;
@@ -185,9 +189,9 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
         409,
         "Fuera del horario de apertura o del entrenador.",
       );
-  const override = worker.shifts?.find(s => s.date === b.date);
-  const periods = override ? override.periods : worker.weeklyPeriods ? worker.weeklyPeriods[day] : worker.schedule[day].closed ? [] : [worker.schedule[day]];
-  if (!periods.some(p => b.start >= p.open && b.end <= p.close))
+  const override = worker?.shifts?.find(s => s.date === b.date);
+  const periods = override ? override.periods : worker?.weeklyPeriods ? worker.weeklyPeriods[day] : !worker ? [] : worker.schedule[day].closed ? [] : [worker.schedule[day]];
+  if (worker && !periods.some(p => b.start >= p.open && b.end <= p.close))
     throw new ApiError(409, "Fuera del horario del entrenador.");
   const clashes = all.filter(
     (o) => o.id !== b.id && o.status !== "CANCELLED" && overlaps(b, o),
@@ -200,6 +204,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
     b.sessionId &&
     o.sessionId === b.sessionId &&
     o.employeeId === b.employeeId &&
+    o.centerId === b.centerId &&
     o.roomId === b.roomId &&
     o.serviceId === b.serviceId &&
     o.date === b.date &&
@@ -220,7 +225,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
       "La sesión grupal no coincide con el horario o los recursos.",
     );
   const resources = clashes.filter(
-    (o) => o.employeeId === b.employeeId || o.roomId === b.roomId,
+    (o) => (b.employeeId && o.employeeId === b.employeeId) || (o.roomId === b.roomId && o.centerId === b.centerId),
   );
   if (resources.some((o) => !same(o)))
     throw new ApiError(409, "Entrenador o sala ya ocupados.");
@@ -247,6 +252,8 @@ export function assertTransition(old: Booking, next: Booking, c: Config) {
         "date",
         "start",
         "end",
+        "centerId",
+        "needsReschedule",
         "notes",
         "sessionId",
       ] as const
@@ -261,3 +268,5 @@ export function assertTransition(old: Booking, next: Booking, c: Config) {
   )
     throw new ApiError(409, "La cita todavía no ha terminado.");
 }
+
+export const workerActionSchema=z.object({action:z.enum(["COMPLETE","INCIDENT"]),version:z.number().int().positive(),message:z.string().trim().max(1000).optional()});
