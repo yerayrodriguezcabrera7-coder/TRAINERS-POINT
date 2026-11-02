@@ -17,6 +17,7 @@ import {
   minutes,
   clientSchema,
   attendanceActionSchema,
+  haversineDistanceMeters,
   employeeSchema,
   serviceSchema,
 } from "./model";
@@ -33,6 +34,8 @@ CREATE TABLE IF NOT EXISTS calendar.attendance(
   clock_out timestamptz,
   CHECK(clock_out IS NULL OR clock_out >= clock_in)
 );
+ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_in jsonb;
+ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_out jsonb;
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_one_open_shift ON calendar.attendance(gym_id,employee_id) WHERE clock_out IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_by_gym_and_time ON calendar.attendance(gym_id,clock_in DESC);`;
 export class Store {
@@ -330,7 +333,8 @@ export class Store {
       throw new ApiError(400, "El historial permite consultar hasta 93 días.");
     if (end <= start) throw new ApiError(400, "Rango de fechas inválido.");
     const { rows } = await this.pool.query(
-      `SELECT id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut"
+      `SELECT id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
+              geo_in AS "geoIn",geo_out AS "geoOut"
        FROM calendar.attendance
        WHERE gym_id=$1 AND clock_in < $3 AND COALESCE(clock_out,now()) >= $2
        ORDER BY clock_in DESC`,
@@ -350,6 +354,7 @@ export class Store {
 
     return {
       timezone: zone,
+      centerLocation: (current as any).location || null,
       employees: employeesList.filter((e: any) => (!employeeId || e.id === employeeId) && (e.active !== false || recordsList.some(r => r.employeeId === e.id))).map(
         ({ id, name, color }: { id: string; name: string; color: string }) => ({
           id,
@@ -388,16 +393,45 @@ export class Store {
          FOR UPDATE`,
         [gym, input.employeeId],
       );
+      let geoRecord: any = null;
+      if (input.geo && typeof input.geo.latitude === "number" && typeof input.geo.longitude === "number") {
+        const gymConfig = gymResult.rows[0].config;
+        const gymLoc = gymConfig ? (gymConfig as any).location : null;
+        let distanceMeters: number | null = null;
+        let inGeofence: boolean | null = null;
+
+        if (gymLoc && typeof gymLoc.latitude === "number" && typeof gymLoc.longitude === "number") {
+          distanceMeters = haversineDistanceMeters(
+            input.geo.latitude,
+            input.geo.longitude,
+            gymLoc.latitude,
+            gymLoc.longitude,
+          );
+          const radius = gymLoc.radiusMeters || 200;
+          inGeofence = distanceMeters <= radius;
+        }
+
+        geoRecord = {
+          latitude: input.geo.latitude,
+          longitude: input.geo.longitude,
+          accuracy: input.geo.accuracy ?? null,
+          distanceMeters,
+          inGeofence,
+          recordedAt: new Date().toISOString(),
+        };
+      }
+
       let row;
       if (input.action === "IN") {
         if (open.rows.length)
           throw new ApiError(409, `${employee.name} ya tiene una jornada abierta.`);
         row = (
           await db.query(
-            `INSERT INTO calendar.attendance(id,gym_id,employee_id)
-             VALUES($1,$2,$3)
-             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut"`,
-            [randomUUID(), gym, input.employeeId],
+            `INSERT INTO calendar.attendance(id,gym_id,employee_id,geo_in)
+             VALUES($1,$2,$3,$4)
+             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
+                       geo_in AS "geoIn",geo_out AS "geoOut"`,
+            [randomUUID(), gym, input.employeeId, geoRecord ? JSON.stringify(geoRecord) : null],
           )
         ).rows[0];
       } else {
@@ -405,9 +439,10 @@ export class Store {
           throw new ApiError(409, `${employee.name} no tiene una jornada abierta.`);
         row = (
           await db.query(
-            `UPDATE calendar.attendance SET clock_out=now() WHERE id=$1
-             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut"`,
-            [open.rows[0].id],
+            `UPDATE calendar.attendance SET clock_out=now(), geo_out=$2 WHERE id=$1
+             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
+                       geo_in AS "geoIn",geo_out AS "geoOut"`,
+            [open.rows[0].id, geoRecord ? JSON.stringify(geoRecord) : null],
           )
         ).rows[0];
       }

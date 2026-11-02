@@ -7,7 +7,7 @@
     ? sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || ''
     : '';
 
-  let data = { timezone: 'Europe/Madrid', employees: [], records: [], serverNow: new Date().toISOString() };
+  let data = { timezone: 'Europe/Madrid', centerLocation: null, employees: [], records: [], serverNow: new Date().toISOString() };
   let me = null;
   let activeTab = 'clocking';
   let activeStatusFilter = 'all'; // 'all', 'working', 'away'
@@ -18,7 +18,6 @@
   const dateKey = (value = new Date(), timezone = data.timezone) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
   const initials = name => (name || '').trim().split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'TP';
   const formatDateTime = value => value ? new Intl.DateTimeFormat('es-ES', { timeZone: data.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
-  const formatTimeOnly = value => value ? new Intl.DateTimeFormat('es-ES', { timeZone: data.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value)) : '—';
   const formatHourMin = value => value ? new Intl.DateTimeFormat('es-ES', { timeZone: data.timezone, hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
 
   const formatDuration = (milliseconds, showSeconds = true) => {
@@ -37,6 +36,29 @@
 
   const openRecord = employeeId => data.records.find(record => record.employeeId === employeeId && !record.clockOut);
   const employeeName = id => data.employees.find(e => e.id === id)?.name || 'Empleado';
+
+  // Obtención legal y puntual de la geolocalización (solo en el momento del fichaje)
+  async function getCurrentGeolocation() {
+    if (!navigator.geolocation) return null;
+    return new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          resolve({
+            latitude: Number(position.coords.latitude.toFixed(6)),
+            longitude: Number(position.coords.longitude.toFixed(6)),
+            accuracy: position.coords.accuracy ? Math.round(position.coords.accuracy) : null,
+          });
+        },
+        error => {
+          // Si el usuario deniega el permiso o no hay señal GPS en interiores,
+          // se resuelve null para no bloquear el derecho legal de registrar la jornada.
+          console.warn('Ubicación puntual no disponible:', error.message);
+          resolve(null);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    });
+  }
 
   async function api(path, method = 'GET', body) {
     const response = await fetch(`/api/${path}`, {
@@ -82,7 +104,7 @@
     toastTimer = setTimeout(() => {
       el.classList.remove('visible');
       setTimeout(() => { el.hidden = true; }, 220);
-    }, 4000);
+    }, 4500);
   }
 
   async function loadMe() {
@@ -121,11 +143,9 @@
       $('page-description').textContent = `Registro personal de jornada y control horario de ${me.name || me.username}.`;
       $('attendance-list-title').textContent = 'Mi jornada laboral';
 
-      // Ocultar búsqueda innecesaria (solo se ve a sí mismo)
       if ($('search-box-wrap')) $('search-box-wrap').hidden = true;
       if ($('history-employee-select-wrap')) $('history-employee-select-wrap').hidden = true;
 
-      // Adaptar etiquetas de tarjetas para la vista personal
       $('label-working').textContent = 'Mi estado actual';
       $('label-away').textContent = 'Registro de hoy';
       $('label-total').textContent = 'Puesto';
@@ -178,7 +198,6 @@
       $('foot-away').textContent = away === 1 ? '1 persona fuera' : `${away} personas fuera`;
       $('foot-hours').textContent = 'Tiempo acumulado hoy';
     } else {
-      // Vista individual de entrenador o recepcionista
       const myEmpId = me.employeeId || (data.employees[0] ? data.employees[0].id : null);
       const myOpen = myEmpId ? openRecord(myEmpId) : null;
       const myTodayRecords = todayRecords.filter(r => !myEmpId || r.employeeId === myEmpId);
@@ -215,15 +234,40 @@
     }
   }
 
+  function renderGeoCell(geo) {
+    if (!geo) {
+      return '<span class="geo-badge no-gps">Sin GPS</span>';
+    }
+
+    const pinIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+    let badge = '';
+    if (geo.inGeofence === true) {
+      const dist = geo.distanceMeters != null ? `${geo.distanceMeters}m` : 'Verificado';
+      badge = `<span class="geo-badge in-center" title="Ubicación verificada en el centro (${dist})">${pinIcon} En centro (${dist})</span>`;
+    } else if (geo.inGeofence === false) {
+      const dist = geo.distanceMeters != null ? `${geo.distanceMeters}m` : 'Fuera';
+      badge = `<span class="geo-badge off-center" title="Fichaje fuera del centro (${dist})">${pinIcon} Fuera (${dist})</span>`;
+    } else {
+      const acc = geo.accuracy ? `±${geo.accuracy}m` : '';
+      badge = `<span class="geo-badge with-gps" title="Coordenadas GPS registradas">${pinIcon} GPS ${acc}</span>`;
+    }
+
+    // Para administradores: enlace a Google Maps
+    if (me && me.role === 'ADMIN' && typeof geo.latitude === 'number' && typeof geo.longitude === 'number') {
+      badge += ` <a href="https://www.google.com/maps?q=${geo.latitude},${geo.longitude}" target="_blank" rel="noopener noreferrer" class="map-link" title="Ver coordenadas en Google Maps">Mapa</a>`;
+    }
+
+    return badge;
+  }
+
   function renderEmployees(now = Date.now()) {
     let list = data.employees;
 
-    // Filtro por texto de búsqueda
     if (search) {
       list = list.filter(e => e.name.toLocaleLowerCase('es').includes(search));
     }
 
-    // Filtro rápido por estado (tarjetas de resumen)
     if (activeStatusFilter === 'working') {
       list = list.filter(e => openRecord(e.id));
     } else if (activeStatusFilter === 'away') {
@@ -239,10 +283,19 @@
       const soft = `${color}18`;
       const canClock = !me || me.role === 'ADMIN' || me.employeeId === employee.id;
 
-      // Calcular tiempo acumulado hoy para este empleado
       const today = dateKey(new Date(now));
       const empTodayRecords = data.records.filter(r => r.employeeId === employee.id && dateKey(new Date(r.clockIn)) === today);
       const empTodayTotal = empTodayRecords.reduce((sum, r) => sum + duration(r, now), 0);
+
+      // Geo info de la entrada actual si existe
+      let geoNote = '';
+      if (open && open.geoIn) {
+        if (open.geoIn.inGeofence === true) {
+          geoNote = `<span style="color:var(--tp-ok);font-size:10px;font-weight:600;">📍 En centro (${open.geoIn.distanceMeters ?? 0}m)</span>`;
+        } else if (open.geoIn.inGeofence === false) {
+          geoNote = `<span style="color:var(--tp-warning);font-size:10px;font-weight:600;">📍 Fuera (${open.geoIn.distanceMeters ?? 0}m)</span>`;
+        }
+      }
 
       return `
         <article class="attendance-card-row${open ? ' is-working' : ''}" data-employee="${escapeHTML(employee.id)}">
@@ -259,8 +312,9 @@
               ${open 
                 ? `<span class="client-status status-ACTIVO"><span class="pulse-dot"></span>EN TURNO</span>` 
                 : `<span class="client-status status-INACTIVO">FUERA</span>`}
-              <small style="color:var(--tp-muted);font-size:11px;">
+              <small style="color:var(--tp-muted);font-size:11px;display:flex;align-items:center;gap:6px;">
                 ${open ? `Entrada: <strong>${formatHourMin(open.clockIn)}</strong>` : 'Sin turno activo'}
+                ${geoNote}
               </small>
             </div>
 
@@ -303,6 +357,8 @@
     $('history-list').innerHTML = records.map(record => {
       const isOpen = !record.clockOut;
       const recDuration = duration(record, now);
+      const geoInfo = record.geoIn || record.geoOut;
+
       return `
         <tr>
           <td>
@@ -311,6 +367,7 @@
           <td>${escapeHTML(formatDateTime(record.clockIn))}</td>
           <td>${isOpen ? '<span style="color:var(--tp-ok);font-weight:700;">Jornada en curso</span>' : escapeHTML(formatDateTime(record.clockOut))}</td>
           <td class="duration-cell">${escapeHTML(formatDuration(recDuration, !isOpen))}</td>
+          <td>${renderGeoCell(geoInfo)}</td>
           <td>
             ${isOpen 
               ? '<span class="history-open-pill"><span class="pulse-dot"></span>En curso</span>' 
@@ -341,19 +398,48 @@
       warn('Solo puedes registrar tus propios fichajes.');
       return;
     }
-    if (button) button.disabled = true;
+
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span style="opacity:.8;">Obteniendo ubicación...</span>';
+    }
+
     try {
-      await api('attendance/clock', 'POST', { employeeId, action });
+      // Captura puntual y legal de geolocalización
+      const geo = await getCurrentGeolocation();
+
+      if (button) {
+        button.innerHTML = '<span style="opacity:.8;">Registrando...</span>';
+      }
+
+      const res = await api('attendance/clock', 'POST', { employeeId, action, geo });
       const empName = employeeName(employeeId);
+
+      // Feedback según la verificación de ubicación
+      const recordedGeo = action === 'IN' ? res.geoIn : res.geoOut;
+      let geoFeedback = '';
+      if (recordedGeo) {
+        if (recordedGeo.inGeofence === true) {
+          geoFeedback = ` · Ubicación verificada en centro (${recordedGeo.distanceMeters ?? 0}m)`;
+        } else if (recordedGeo.inGeofence === false) {
+          geoFeedback = ` · Aviso: a ${recordedGeo.distanceMeters ?? 0}m del centro`;
+        }
+      }
+
       const msg = action === 'IN'
-        ? `Entrada registrada correctamente para ${empName}.`
-        : `Salida registrada para ${empName}. Jornada finalizada.`;
+        ? `Entrada registrada para ${empName}${geoFeedback}.`
+        : `Salida registrada para ${empName}${geoFeedback}. Jornada finalizada.`;
+
       toast(msg);
       await load($('history-from').value, $('history-to').value, true);
     } catch (error) {
       warn(error.message);
       toast(error.message, true);
-      if (button) button.disabled = false;
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalText;
+      }
     }
   }
 
