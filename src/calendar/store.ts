@@ -340,12 +340,9 @@ export class Store {
     let employeesList = current.employees;
     let recordsList = rows;
 
-    if (viewerRole === "TRAINER") {
+    if (viewerRole === "TRAINER" || viewerRole === "RECEPTION") {
       employeesList = current.employees.filter((e: any) => e.id === employeeId);
       recordsList = rows.filter(r => r.employeeId === employeeId);
-    } else if (viewerRole === "RECEPTION") {
-      employeesList = current.employees;
-      recordsList = rows.filter(r => !r.clockOut || r.employeeId === employeeId);
     } else if (employeeId) {
       employeesList = current.employees.filter((e: any) => e.id === employeeId);
       recordsList = rows.filter(r => r.employeeId === employeeId);
@@ -353,7 +350,7 @@ export class Store {
 
     return {
       timezone: zone,
-      employees: employeesList.filter((e: any) => (!employeeId || viewerRole === "RECEPTION" || e.id === employeeId) && (e.active !== false || recordsList.some(r => r.employeeId === e.id))).map(
+      employees: employeesList.filter((e: any) => (!employeeId || e.id === employeeId) && (e.active !== false || recordsList.some(r => r.employeeId === e.id))).map(
         ({ id, name, color }: { id: string; name: string; color: string }) => ({
           id,
           name,

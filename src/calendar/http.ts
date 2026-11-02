@@ -326,6 +326,7 @@ export function server(
         "fichajes.html": "text/html",
         "fichajes.js": "text/javascript",
         "fichajes.css": "text/css",
+        "clients.css": "text/css",
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",
