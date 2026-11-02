@@ -129,7 +129,17 @@
     summaryEl.textContent = `Mostrando ${filtered.length} de ${users.length} usuarios`;
 
     if (!filtered.length) {
-      listEl.innerHTML = '<p class="list-message">No se encontraron usuarios con el filtro seleccionado.</p>';
+      listEl.innerHTML = `
+        <div class="empty-state">
+          <span class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/><path d="M12 3v9h9"/>
+            </svg>
+          </span>
+          <strong>No se encontraron usuarios</strong>
+          <span>Prueba con otro filtro o término de búsqueda.</span>
+        </div>
+      `;
       return;
     }
 
@@ -141,8 +151,10 @@
       const roleColor = roleStyles[user.role] || { bg: '#f1f1f1', text: '#444' };
       const roleLabel = roleNames[user.role] || user.role;
 
+      const isEnabled = user.enabled !== false;
+      const signalType = isEnabled ? 'ok' : 'neutral';
       const card = document.createElement('article');
-      card.className = 'client-card client-card-modern';
+      card.className = `client-card client-card-modern client-card-signal-${signalType}`;
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', `Editar usuario ${personName} (${user.username})`);
@@ -151,21 +163,24 @@
         <div class="client-card-identity">
           <span class="client-avatar client-avatar-tone-${tone}" aria-hidden="true">${esc(initials)}</span>
           <span style="min-width: 0;">
-            <strong class="client-card-name" style="display: block; font-size: 15px; color: var(--tp-ink); font-weight: 700;">${esc(personName)}</strong>
-            <span style="display: block; font-size: 13px; color: var(--tp-muted); margin-top: 2px;">${esc(user.username)}</span>
+            <strong class="client-card-name">${esc(personName)}</strong>
+            <span class="client-card-center" style="display: block; margin-top: 2px;">${esc(user.username)}</span>
           </span>
         </div>
-        <div class="client-card-details" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-          <span class="badge" style="padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; background: ${roleColor.bg}; color: ${roleColor.text};">
-            ${esc(roleLabel)}
-          </span>
-          <span class="client-status ${user.enabled !== false ? 'status-ACTIVO' : 'status-INACTIVO'}">
-            ${user.enabled !== false ? 'Activo' : 'Deshabilitado'}
-          </span>
-          <button class="button button-outline" type="button" style="min-height: 32px; padding: 0 12px; font-size: 12px; border-radius: 6px;">
-            Editar
-          </button>
+        <div class="client-card-details">
+          <div class="client-card-signal signal-${signalType}">
+            <span class="badge" style="padding: 2px 8px; border-radius: 12px; font-weight: 700; font-size: 11px; background: ${roleColor.bg}; color: ${roleColor.text};">
+              ${esc(roleLabel)}
+            </span>
+            <span class="client-status ${isEnabled ? 'status-ACTIVO' : 'status-INACTIVO'}">
+              ${isEnabled ? 'Activo' : 'Deshabilitado'}
+            </span>
+          </div>
+          <span class="client-card-center">${user.role === 'CLIENT' ? 'Cuenta de cliente' : 'Cuenta de empleado'}</span>
         </div>
+        <span class="card-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </span>
       `;
 
       card.addEventListener('click', () => openEditor(user));
@@ -284,8 +299,10 @@
       btn.addEventListener('click', () => {
         document.querySelectorAll('.filter-chip').forEach(b => {
           b.setAttribute('aria-pressed', 'false');
+          b.classList.remove('is-active');
         });
         btn.setAttribute('aria-pressed', 'true');
+        btn.classList.add('is-active');
         activeFilter = btn.dataset.filter;
         renderList();
       });
@@ -298,7 +315,12 @@
         if (!filter) return;
         activeFilter = filter;
         document.querySelectorAll('.filter-chip').forEach(b => {
-          b.setAttribute('aria-pressed', String(b.dataset.filter === filter));
+          const match = b.dataset.filter === filter;
+          b.setAttribute('aria-pressed', String(match));
+          b.classList.toggle('is-active', match);
+        });
+        document.querySelectorAll('.stat-card').forEach(sc => {
+          sc.setAttribute('aria-pressed', String(sc.dataset.filter === filter));
         });
         renderList();
       });

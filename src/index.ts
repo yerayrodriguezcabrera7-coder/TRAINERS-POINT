@@ -1522,6 +1522,9 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/usuarios": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/usuarios.html": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/users.js": { file: "public/users.js", contentType: "text/javascript; charset=utf-8" },
+  "/profesionales": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/profesionales.html": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/professionals.js": { file: "public/professionals.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {

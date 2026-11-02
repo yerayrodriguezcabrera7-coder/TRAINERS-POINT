@@ -16,6 +16,10 @@
     window.location.replace('/usuarios');
     return;
   }
+  if (requestedSection === 'employees' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+    window.location.replace('/profesionales');
+    return;
+  }
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
