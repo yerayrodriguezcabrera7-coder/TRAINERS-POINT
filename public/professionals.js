@@ -315,6 +315,28 @@
       $('prof-active').value = 'true';
     }
 
+    // Comprobar si el profesional tiene cuenta de usuario vinculada
+    const accountBox = $('prof-user-account-box');
+    const usernameEl = $('prof-user-username');
+    const feedbackEl = $('prof-pwd-feedback');
+    if (feedbackEl) { feedbackEl.hidden = true; feedbackEl.textContent = ''; }
+    
+    if (accountBox) {
+      if (emp) {
+        const linkedUser = (manageData?.users || []).find(u => u.employeeId === emp.id);
+        if (linkedUser) {
+          accountBox.hidden = false;
+          accountBox.dataset.userId = linkedUser.id;
+          accountBox.dataset.userName = emp.name;
+          if (usernameEl) usernameEl.textContent = `Usuario: ${linkedUser.username} · Rol: ${linkedUser.role}`;
+        } else {
+          accountBox.hidden = true;
+        }
+      } else {
+        accountBox.hidden = true;
+      }
+    }
+
     dialog.showModal();
   }
 
@@ -400,11 +422,50 @@
     $('close-dialog').addEventListener('click', () => $('professional-dialog').close());
     $('cancel-dialog').addEventListener('click', () => $('professional-dialog').close());
 
+    // Restablecer contraseña del entrenador desde la ficha de profesional
+    $('prof-btn-reset-pwd')?.addEventListener('click', async () => {
+      const accountBox = $('prof-user-account-box');
+      const userId = accountBox?.dataset.userId;
+      const userName = accountBox?.dataset.userName || 'este profesional';
+      const feedbackEl = $('prof-pwd-feedback');
+      const btn = $('prof-btn-reset-pwd');
+
+      if (!userId) return;
+
+      if (!confirm(`¿Restablecer la contraseña de ${userName} a "Trainerspoint"?\n\nEl entrenador podrá acceder con "Trainerspoint" y se le pedirá cambiarla en su primer inicio.`)) {
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Restableciendo…';
+
+      try {
+        await api(`manage/users/${encodeURIComponent(userId)}/reset-password`, 'POST');
+        if (feedbackEl) {
+          feedbackEl.textContent = '✓ Contraseña restablecida con éxito a "Trainerspoint". Se le solicitará crear una nueva al iniciar sesión.';
+          feedbackEl.hidden = false;
+        }
+        showToast(`Contraseña de ${userName} restablecida a "Trainerspoint".`);
+        await loadData();
+      } catch (err) {
+        if (feedbackEl) {
+          feedbackEl.textContent = err.message;
+          feedbackEl.style.color = '#dc2626';
+          feedbackEl.hidden = false;
+        }
+        showToast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Restablecer contraseña del entrenador';
+      }
+    });
+
     // Submit form
     $('professional-form').addEventListener('submit', async e => {
       e.preventDefault();
       const errorEl = $('form-error');
       const submitBtn = $('submit-professional');
+
       errorEl.hidden = true;
       errorEl.textContent = '';
 

@@ -1,4 +1,4 @@
-﻿import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { Pool } from "pg";
 import { z } from "zod";
 import type { PrismaClient } from "@prisma/client";
@@ -62,6 +62,9 @@ const accountSchema = z.object({
   name: z.string().min(1).max(200).optional().nullable(),
   role: z.enum(roles),
   enabled: z.boolean(),
+  password: z.string().min(4).max(128).optional().nullable(),
+  mustChangePassword: z.boolean().optional(),
+  resetPassword: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.role === "CLIENT") {
     if (!data.clientId) ctx.addIssue({ code: "custom", message: "Selecciona el cliente que tendrá acceso.", path: ["clientId"] });
@@ -225,12 +228,24 @@ export class Access {
         throw new ApiError(409, "Ese nombre de usuario ya está en uso. Elige un nombre de usuario diferente.");
       }
       const userId = id || randomUUID();
-      const passwordHash = old?.password_hash || await hashPassword(initialPassword);
+      let passwordHash = old?.password_hash || await hashPassword(initialPassword);
+      let mustChangePassword = old ? old.must_change_password : true;
+
+      if (input.resetPassword) {
+        passwordHash = await hashPassword(initialPassword);
+        mustChangePassword = true;
+      } else if (input.password && input.password.trim()) {
+        passwordHash = await hashPassword(input.password.trim());
+        mustChangePassword = input.mustChangePassword !== undefined ? input.mustChangePassword : true;
+      } else if (input.mustChangePassword !== undefined) {
+        mustChangePassword = input.mustChangePassword;
+      }
+
       await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,client_id,username,role,password_hash,enabled,must_change_password)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET
         employee_id=EXCLUDED.employee_id,client_id=EXCLUDED.client_id,username=EXCLUDED.username,role=EXCLUDED.role,
         password_hash=EXCLUDED.password_hash,enabled=EXCLUDED.enabled,must_change_password=EXCLUDED.must_change_password`,
-      [userId,gym,employeeId,clientId,input.username,input.role,passwordHash,input.enabled,old?.must_change_password || !old]);
+      [userId,gym,employeeId,clientId,input.username,input.role,passwordHash,input.enabled,mustChangePassword]);
       // Al invalidar sesiones del usuario modificado, preservar la sesión del admin que realiza la operación
       // (en caso de que el admin esté editando su propia cuenta).
       const callerTokenHash = callerToken ? digest(callerToken) : null;
@@ -395,6 +410,32 @@ export class Access {
     } catch (error) {
       await db.query("ROLLBACK");
       throw error;
+    } finally {
+      db.release();
+    }
+  }
+    async adminResetPassword(gym: string, userId: string, explicitPassword?: string, callerToken?: string) {
+    const db = await this.pool.connect();
+    try {
+      await db.query("BEGIN");
+      const user = (await db.query("SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2 FOR UPDATE", [gym, userId])).rows[0];
+      if (!user) throw new ApiError(404, "Usuario no encontrado.");
+
+      const pwd = (explicitPassword && explicitPassword.trim()) ? explicitPassword.trim() : initialPassword;
+      const pwdHash = await hashPassword(pwd);
+      await db.query("UPDATE calendar.users SET password_hash=$1, must_change_password=true WHERE id=$2", [pwdHash, userId]);
+
+      const callerTokenHash = callerToken ? digest(callerToken) : null;
+      if (callerTokenHash) {
+        await db.query("DELETE FROM calendar.sessions WHERE user_id=$1 AND token_hash<>$2", [userId, callerTokenHash]);
+      } else {
+        await db.query("DELETE FROM calendar.sessions WHERE user_id=$1", [userId]);
+      }
+      await db.query("COMMIT");
+      return { ok: true, username: user.username, temporaryPassword: pwd, mustChangePassword: true };
+    } catch (e) {
+      await db.query("ROLLBACK");
+      throw e;
     } finally {
       db.release();
     }
