@@ -8,3 +8,165 @@ test('Ventas a clientes reales, filtros, recuperación persistente y devolución
 test('Interfaz: producto, carrito y comprador de paso sin crear cliente',async()=>{const {JSDOM}=require('jsdom'),fs=require('node:fs');const product={id:randomUUID(),name:'Agua',unitPrice:'1.25',stock:3,isActive:true};let submitted;const dom=new JSDOM(fs.readFileSync('web/productos.html','utf8'),{url:'http://localhost/productos.html',runScripts:'outside-only'});const w=dom.window;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};w.fetch=async(url,o={})=>{let data={};if(url==='/api/me')data={role:'ADMIN'};if(url==='/api/manage')data={clients:[]};if(url==='/api/inventory/products')data={products:[product]};if(url.startsWith('/api/inventory/sales')&&o.method==='POST'){submitted=JSON.parse(o.body);data={totalAmount:2.5};}else if(url.startsWith('/api/inventory/sales'))data={sales:[]};return {ok:true,json:async()=>data};};try{w.eval(fs.readFileSync('web/productos.js','utf8'));for(let i=0;i<30&&!w.document.querySelector('[data-edit]');i++)await new Promise(r=>setTimeout(r,10));const d=w.document;assert.match(d.getElementById('products').textContent,/Agua/);d.getElementById('new-sale').click();d.querySelector('#cart input').value='2';d.getElementById('sale-form').requestSubmit(d.getElementById('confirm-sale'));for(let i=0;i<30&&!submitted;i++)await new Promise(r=>setTimeout(r,10));assert.equal(submitted.clientId,null);assert.equal(submitted.lines[0].quantity,2);assert.equal(submitted.lines[0].productId,product.id);assert.equal(submitted.lines[0].expectedUnitPrice,1.25);}finally{w.close();}});
 test('Un cambio de precio exige revisar la venta y no descuenta stock',async()=>{const gym=randomUUID();const p=await inventory.saveProduct(gym,{name:'Proteína',price:20,stock:5});await inventory.saveProduct(gym,{name:p.name,price:25,stock:5,revision:p.revision},p.id);const input={requestKey:randomUUID(),clientId:null,lines:[{productId:p.id,quantity:2,expectedUnitPrice:20}]};await assert.rejects(inventory.sell(gym,'admin',input),/precio.*ha cambiado/);assert.equal((await inventory.products(gym))[0].stock,5);assert.equal((await inventory.sales(gym,new URLSearchParams())).length,0);const sale=await inventory.sell(gym,'admin',{...input,lines:[{...input.lines[0],expectedUnitPrice:25}]});assert.equal(Number(sale.totalAmount),50);assert.equal((await inventory.products(gym))[0].stock,3);});
 test('Historial paginado estable, aislamiento de centro y validación de filtros',async()=>{const gym=randomUUID(),date=new Date('2030-07-15T12:00:00Z');await db.sale.createMany({data:Array.from({length:53},()=>({gymKey:gym,status:'COMPLETADA',subtotal:1,taxAmount:0,totalAmount:1,soldAt:date}))});await db.sale.create({data:{gymKey:randomUUID(),status:'COMPLETADA',subtotal:1,taxAmount:0,totalAmount:1,soldAt:date}});const first=await inventory.salesPage(gym,new URLSearchParams({page:'1',from:'2030-07-15',to:'2030-07-15',status:'COMPLETADA'}));const second=await inventory.salesPage(gym,new URLSearchParams({page:'2'}));assert.equal(first.sales.length,50);assert.equal(first.pagination.hasPrevious,false);assert.equal(first.pagination.hasNext,true);assert.equal(second.sales.length,3);assert.equal(second.pagination.hasPrevious,true);assert.equal(second.pagination.hasNext,false);assert.equal(new Set([...first.sales,...second.sales].map(s=>s.id)).size,53);assert.ok([...first.sales,...second.sales].every(s=>s.gymKey===gym));assert.equal((await inventory.salesPage(gym,new URLSearchParams({status:'CANCELADA'}))).sales.length,0);for(const q of [{page:'0'},{page:'1.2'},{client:'invalido'},{product:'invalido'},{from:'2030-02-30'},{from:'2030-08-01',to:'2030-07-01'},{status:'DESCONOCIDO'}])await assert.rejects(inventory.salesPage(gym,new URLSearchParams(q)));});
+
+test('Cobros: deuda única, pagos parciales mixtos, saldo y filtro por método',async()=>{
+ const gym=await db.gym.create({data:{name:randomUUID()}});
+ const client=await db.client.create({data:{firstName:'Ana',lastName:'Pagos',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});
+ const p=await inventory.saveProduct(gym.id,{name:'Bono producto',price:30,stock:10});
+ const input={requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity:2}]};
+ const sale=await inventory.sell(gym.id,'desk',input);
+ assert.equal(sale.outstandingAmount,60);assert.equal(sale.paymentStatus,'PENDIENTE');assert.equal(sale.payments.length,0);
+ await inventory.sell(gym.id,'desk',input);
+ assert.equal((await inventory.products(gym.id))[0].stock,8);assert.deepEqual(await inventory.debtSummary(gym.id),{[client.id]:60});
+ const first={requestKey:randomUUID(),amount:20,method:'EFECTIVO'};
+ let updated=await inventory.pay(gym.id,'desk',sale.id,first);
+ assert.equal(updated.paymentStatus,'PARCIAL');assert.equal(updated.outstandingAmount,40);
+ updated=await inventory.pay(gym.id,'desk',sale.id,first);assert.equal(updated.payments.length,1);
+ await assert.rejects(inventory.pay(gym.id,'desk',sale.id,{...first,amount:21}),/Identificador/);
+ await inventory.pay(gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:25,method:'TARJETA'});
+ updated=await inventory.pay(gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:15,method:'BIZUM'});
+ assert.equal(updated.paymentStatus,'PAGADO');assert.equal(updated.outstandingAmount,0);assert.equal(updated.paidAmount,60);
+ assert.deepEqual(await inventory.debtSummary(gym.id),{});
+ assert.deepEqual(updated.payments.map(p=>p.method).sort(),['BIZUM','EFECTIVO','TARJETA']);
+ assert.ok(updated.payments.every(p=>p.paidAt&&p.actorAccountId==='desk'));
+ assert.equal((await inventory.sales(gym.id,new URLSearchParams({method:'BIZUM',client:client.id})))[0].id,sale.id);
+ await assert.rejects(inventory.pay(gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:1,method:'EFECTIVO'}),/supera/);
+ await assert.rejects(inventory.pay(randomUUID(),'desk',sale.id,first),/desconocida/);
+ await assert.rejects(inventory.pay(gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:1,method:'OTRO'}));
+});
+
+test('Cobros simultáneos: no sobrecobrar y una sola aplicación del mismo recibo',async()=>{
+ const gym=await db.gym.create({data:{name:randomUUID()}}),client=await db.client.create({data:{firstName:'Cliente',lastName:'Concurrente',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});
+ const p=await inventory.saveProduct(gym.id,{name:'Producto',price:50,stock:4});
+ const sale=await inventory.sell(gym.id,'admin',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity:1}]});
+ const request={requestKey:randomUUID(),amount:10,method:'BIZUM'};
+ await Promise.all([inventory.pay(gym.id,'a',sale.id,request),inventory.pay(gym.id,'b',sale.id,request)]);
+ assert.equal(await db.payment.count({where:{saleId:sale.id}}),1);
+ const results=await Promise.allSettled(['a','b'].map(actor=>inventory.pay(gym.id,actor,sale.id,{requestKey:randomUUID(),amount:40,method:'TARJETA'})));
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ assert.equal((await inventory.sales(gym.id,new URLSearchParams()))[0].paidAmount,50);
+});
+
+test('Deudas: varios recibos, devolución reduce saldo, anulación y ventas antiguas sin inventar pagos',async()=>{
+ const gym=await db.gym.create({data:{name:randomUUID()}}),client=await db.client.create({data:{firstName:'Cliente',lastName:'Saldo',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});
+ const p=await inventory.saveProduct(gym.id,{name:'Toalla',price:10,stock:10});
+ const make=quantity=>inventory.sell(gym.id,'admin',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity}]});
+ const a=await make(3),b=await make(2);
+ assert.deepEqual(await inventory.debtSummary(gym.id),{[client.id]:50});
+ await inventory.pay(gym.id,'admin',a.id,{requestKey:randomUUID(),amount:10,method:'EFECTIVO'});
+ await inventory.reverse(gym.id,a.id,{requestKey:randomUUID(),lines:[{lineId:a.lines[0].id,quantity:1}]});
+ assert.deepEqual(await inventory.debtSummary(gym.id),{[client.id]:30});
+ await inventory.reverse(gym.id,b.id,{},true);
+ assert.deepEqual(await inventory.debtSummary(gym.id),{[client.id]:10});
+ const cancelled=await inventory.reverse(gym.id,a.id,{},true);
+ assert.equal(cancelled.outstandingAmount,0);assert.equal(cancelled.refundDue,10);assert.equal(cancelled.payments.length,1);
+ const legacy=await db.sale.create({data:{gymKey:gym.id,clientId:client.id,status:'COMPLETADA',subtotal:20,taxAmount:0,totalAmount:20}});
+ const old=(await inventory.sales(gym.id,new URLSearchParams())).find(s=>s.id===legacy.id);
+ assert.equal(old.paymentStatus,'SIN_VERIFICAR');assert.deepEqual(await inventory.debtSummary(gym.id),{});
+ await assert.rejects(inventory.pay(gym.id,'admin',legacy.id,{requestKey:randomUUID(),amount:20,method:'TARJETA'}),/no admite/);
+ const count=await db.client.count();
+ await assert.rejects(inventory.sell(gym.id,'admin',{requestKey:randomUUID(),clientId:null,paymentMode:'PENDING',lines:[{productId:p.id,quantity:1}]}),/paso/);
+ const walkin=await inventory.sell(gym.id,'admin',{requestKey:randomUUID(),clientId:null,paymentMode:'PAID',paymentMethod:'BIZUM',lines:[{productId:p.id,quantity:1}]});
+ assert.equal(walkin.paymentStatus,'PAGADO');assert.equal(walkin.clientId,null);assert.equal(walkin.payments[0].method,'BIZUM');assert.equal(await db.client.count(),count);
+});
+
+test('Calendario: saldo actualizado sin cambiar reservas ni su revisión',async()=>{
+ const {Store}=require('../dist/calendar/store'),{server}=require('../dist/calendar/http');
+ const gym=await db.gym.create({data:{name:randomUUID()}}),client=await db.client.create({data:{firstName:'Cliente',lastName:'Calendario',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});
+ const store=new Store(pool,db),hours=Array.from({length:7},()=>({open:'09:00',close:'19:00',closed:false}));
+ await store.seed(gym.id,{timezone:'Europe/Madrid',schedule:hours,employees:[{id:'e1',name:'Entrenador',color:'#123456',schedule:hours}],rooms:[{id:'r1',name:'Sala'}],services:[{id:'session',name:'Sesión',duration:60,capacity:1}],clients:[]});
+ const booking=await store.save(gym.id,{clientId:client.id,employeeId:'e1',serviceId:'session',roomId:'r1',date:'2030-12-02',start:'10:00',status:'CONFIRMED'});
+ const p=await inventory.saveProduct(gym.id,{name:'Camiseta',price:20,stock:3});
+ const sale=await inventory.sell(gym.id,'admin',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity:1}]});
+ const token=randomUUID(),http=server(store,gym.id,token);await new Promise(r=>http.listen(0,'127.0.0.1',r));
+ const get=async()=>{const r=await fetch(`http://127.0.0.1:${http.address().port}/api/state`,{headers:{Authorization:'Bearer '+token}});assert.equal(r.status,200);return r.json();};
+ let dom;
+ async function until(fn){const deadline=Date.now()+7000;while(Date.now()<deadline){if(fn())return;await new Promise(r=>setTimeout(r,25));}throw Error('Aviso de deuda no actualizado');}
+ try{const first=await get();assert.equal(first.clientDebts[client.id],20);
+ const {JSDOM}=require('jsdom');const base=`http://127.0.0.1:${http.address().port}`;
+ dom=await JSDOM.fromURL(base+'/?fecha=2030-12-02',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.sessionStorage.setItem('calendar-user-token',token);w.CALENDAR_SERVER=true;w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};}});
+ await until(()=>dom.window.document.querySelector('.booking-debt-badge'));
+ assert.match(dom.window.document.querySelector('.booking-debt-badge').textContent,/20/);
+ await inventory.pay(gym.id,'admin',sale.id,{requestKey:randomUUID(),amount:5,method:'EFECTIVO'});
+ const partial=await get();assert.equal(partial.clientDebts[client.id],15);assert.equal(partial.revision,first.revision);
+ await until(()=>dom.window.document.querySelector('.booking-debt-badge')?.textContent.includes('15'));
+ dom.window.document.querySelector('[data-booking]').click();assert.match(dom.window.document.getElementById('booking-debt').textContent,/15/);assert.match(dom.window.document.querySelector('#booking-debt a').href,/productos.html\?client=/);
+ await inventory.pay(gym.id,'admin',sale.id,{requestKey:randomUUID(),amount:15,method:'TARJETA'});
+ const final=await get();assert.deepEqual(final.clientDebts,{});assert.deepEqual(final.bookings,first.bookings);assert.equal(final.bookings[0].id,booking.id);
+ await until(()=>!dom.window.document.querySelector('.booking-debt-badge'));assert.equal(dom.window.document.getElementById('booking-debt').hidden,true);
+ }finally{dom?.window.close();await new Promise(r=>http.close(r));}
+});
+
+test('API completa: registrar deuda, cobrar en recepción y consultar la ficha del mismo cliente',async()=>{
+ const {spawn}=require('node:child_process'),net=require('node:net');
+ const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
+ const gym=await db.gym.create({data:{name:'000 · Prueba HTTP pagos'}}),client=await db.client.create({data:{firstName:'Cliente',lastName:'HTTP',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});
+ const opts=pool.options,url=`postgresql://postgres:${opts.password}@127.0.0.1:${opts.port}/postgres`,token=randomUUID();
+ const child=spawn(process.execPath,['dist/index.js'],{env:{...process.env,PORT:String(port),DATABASE_URL:url,CALENDAR_DATABASE_URL:url,CALENDAR_ADMIN_TOKEN:token,TRAINERS_POINT_DEV_ADMIN:'false'},stdio:['ignore','pipe','pipe']});
+ let logs='';child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);
+ const base=`http://127.0.0.1:${port}`,headers={Authorization:'Bearer '+token,'X-Calendar-Gym':gym.id,'Content-Type':'application/json',Origin:base};
+ const request=async(path,method='GET',body)=>{const response=await fetch(base+'/api/'+path,{method,headers,body:body?JSON.stringify(body):undefined});const data=await response.json();return {status:response.status,data};};
+ let dom;
+ try{
+  let ready=false;for(let i=0;i<100;i++){if(child.exitCode!==null)throw Error(logs);try{ready=(await fetch(base+'/api/health')).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,50));}assert.ok(ready,logs);
+  const created=await request('inventory/products','POST',{name:'Producto HTTP',price:24,stock:4});assert.equal(created.status,201,JSON.stringify(created.data));
+  const {Access}=require('../dist/calendar/access'),access=new Access(pool,db);
+  await access.seedLocalDevelopmentAdmin(gym.id);
+  await access.save(gym.id,{name:'Recepción de prueba',username:'desk',role:'RECEPTION',enabled:true});
+  const login=await access.login(gym.id,{username:'desk',password:'Trainerspoint'});
+  await access.changePassword(gym.id,login.token,{currentPassword:'Trainerspoint',newPassword:'Reception-test-password-123',confirmPassword:'Reception-test-password-123'});
+  headers.Authorization='Bearer '+login.token;
+  assert.equal((await request('inventory/products','POST',{name:'No autorizado',price:2,stock:1})).status,403);
+  const sale=await request('inventory/sales','POST',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:created.data.id,quantity:1}]});assert.equal(sale.status,201,JSON.stringify(sale.data));
+  let history=await request('clients/'+client.id+'/service-history');assert.equal(history.status,200,JSON.stringify(history.data));assert.equal(history.data.debt[0].amount,24);assert.equal(history.data.sales[0].paymentStatus,'PENDIENTE');
+  const {JSDOM}=require('jsdom');
+  dom=await JSDOM.fromURL(base+'/productos.html?client='+client.id,{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.sessionStorage.setItem('calendar-user-token',headers.Authorization.slice(7));w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};}});
+  async function until(fn){for(let i=0;i<140;i++){if(fn())return;await new Promise(r=>setTimeout(r,25));}throw Error('La tienda no actualizó el cobro');}
+  const document=dom.window.document;await until(()=>document.querySelector('[data-pay]'));
+  document.querySelector('[data-pay]').click();document.getElementById('payment-amount').value='5';document.getElementById('payment-method').value='EFECTIVO';document.getElementById('payment-form').requestSubmit(document.getElementById('confirm-payment'));
+  await until(()=>document.querySelector('.payment-summary')?.textContent.includes('Pago parcial'));
+  history=await request('clients/'+client.id+'/service-history');assert.equal(history.data.debt[0].amount,19);
+  const paid=await request('inventory/sales/'+sale.data.id+'/payments','POST',{requestKey:randomUUID(),amount:19,method:'BIZUM'});assert.equal(paid.status,200,JSON.stringify(paid.data));assert.equal(paid.data.paymentStatus,'PAGADO');
+  history=await request('clients/'+client.id+'/service-history');assert.deepEqual(history.data.debt,[]);assert.ok(history.data.sales[0].payments.some(p=>p.method==='BIZUM'));assert.equal(history.data.sales[0].payments.length,2);
+  assert.equal((await request('inventory/sales/'+sale.data.id+'/cancel','POST',{})).status,403);
+  document.querySelector('[data-return]').click();document.querySelector('#return-lines input[data-line]').value='1';document.getElementById('return-reason').value='Cambio solicitado por el cliente';document.getElementById('return-form').requestSubmit(document.querySelector('#return-form button.primary'));
+  await until(()=>document.querySelector('[data-refund]'));
+  document.querySelector('[data-refund]').click();document.getElementById('payment-note').value='Dinero entregado al cliente';document.getElementById('payment-confirm').checked=true;document.getElementById('payment-method').value='BIZUM';document.getElementById('payment-form').requestSubmit(document.getElementById('confirm-payment'));
+  await until(()=>!document.querySelector('[data-refund]'));
+  history=await request('clients/'+client.id+'/service-history');assert.equal(history.data.sales[0].refundedAmount,24);assert.deepEqual(history.data.debt,[]);
+  const legacy=await db.sale.create({data:{gymKey:gym.id,clientId:client.id,status:'COMPLETADA',subtotal:12,taxAmount:0,totalAmount:12,soldAt:new Date()}});
+  document.getElementById('sales-tab').click();await until(()=>document.querySelector('[data-verify]'));
+  document.querySelector('[data-verify]').click();document.getElementById('payment-note').value='Justificante del cobro revisado';document.getElementById('payment-confirm').checked=true;document.getElementById('payment-form').requestSubmit(document.getElementById('confirm-payment'));
+  await until(()=>!document.querySelector('[data-verify]'));
+  assert.equal(await db.payment.count({where:{saleId:legacy.id,status:'PAGADO'}}),1);
+  assert.equal((await fetch(base+'/api/inventory/sales/'+sale.data.id+'/payments',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
+ }finally{dom?.window.close();child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
+});
+
+
+test('Devolución: motivo y responsable, producto deteriorado sin reponer y reembolso concurrente',async()=>{
+ const gym=randomUUID(),product=await inventory.saveProduct(gym,{name:'Botella',price:20,stock:3});
+ const sale=await inventory.sell(gym,'desk',{requestKey:randomUUID(),clientId:null,paymentMethod:'TARJETA',lines:[{productId:product.id,quantity:2}]});
+ const reversed=await inventory.reverse(gym,sale.id,{requestKey:randomUUID(),reason:'Producto deteriorado',lines:[{lineId:sale.lines[0].id,quantity:1,restock:false}]},false,'reception-1');
+ assert.equal((await inventory.products(gym))[0].stock,1);assert.equal(reversed.refundDue,20);assert.equal(reversed.outstandingAmount,0);
+ assert.equal(reversed.returnHistory[0].actor,'reception-1');assert.equal(reversed.returnHistory[0].reason,'Producto deteriorado');
+ const input={requestKey:randomUUID(),amount:20,method:'TARJETA',note:'Reembolso entregado'};
+ const results=await Promise.allSettled([inventory.refund(gym,'r1',sale.id,input),inventory.refund(gym,'r2',sale.id,{...input,requestKey:randomUUID()})]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const receipt=results.find(r=>r.status==='fulfilled').value.payments.find(p=>p.kind==='REFUND');
+ const retry=await inventory.refund(gym,'r1',sale.id,{...input,requestKey:receipt.requestKey});assert.equal(retry.refundDue,0);assert.equal(retry.outstandingAmount,0);assert.equal(retry.refundedAmount,20);
+ assert.equal(await db.payment.count({where:{saleId:sale.id,kind:'REFUND'}}),1);
+ await assert.rejects(inventory.refund(gym,'r1',sale.id,{...input,requestKey:randomUUID(),amount:1}),/supera/);
+ assert.doesNotThrow(()=>inventoryPermission({role:'RECEPTION'},'return'));assert.throws(()=>inventoryPermission({role:'TRAINER'},'return'),/permiso/);
+});
+
+test('Ventas antiguas: recepción verifica una vez el pago con fecha, método y evidencia',async()=>{
+ const gym=randomUUID(),sale=await db.sale.create({data:{gymKey:gym,status:'COMPLETADA',subtotal:35,taxAmount:0,totalAmount:35}});
+ const input={requestKey:randomUUID(),amount:35,method:'BIZUM',paidAt:'2026-01-03T10:00:00.000Z',note:'Justificante revisado en recepción'};
+ const results=await Promise.all([inventory.verifyPaid(gym,'desk',sale.id,input),inventory.verifyPaid(gym,'desk',sale.id,input)]);
+ assert.ok(results.every(r=>r.paymentStatus==='PAGADO'));assert.equal(await db.payment.count({where:{saleId:sale.id}}),1);
+ assert.equal(results[0].payments[0].paidAt.toISOString(),input.paidAt);assert.equal(results[0].payments[0].actorAccountId,'desk');
+ await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,requestKey:randomUUID()}),/ya está verificada/);
+ await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,note:'Otro justificante'}),/ya utilizado/);
+ await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,paidAt:'2099-01-01T00:00:00.000Z'}));
+});

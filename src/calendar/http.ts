@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import { ZodError, z } from "zod";
 import { Store } from "./store";
+import { Inventory } from "../inventory";
 import { ApiError } from "./model";
 import { Access, Identity, initialPassword } from "./access";
 async function body(req: IncomingMessage) {
@@ -207,7 +208,8 @@ export function server(
             });
             return;
           }
-          send(res, 200, s);
+          const clientDebts = store.clientsDb ? await new Inventory(store.clientsDb).debtSummary(gym) : {};
+          send(res, 200, {...s,clientDebts});
           return;
         }
         if (req.method === "GET" && path === "/api/attendance") {

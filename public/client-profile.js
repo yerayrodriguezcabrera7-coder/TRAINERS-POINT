@@ -114,10 +114,10 @@ function renderPurchaseHistory(data) {
     })),
     ...data.sales.map((sale) => ({
       date: sale.soldAt || sale.createdAt,
-      title: sale.lines.map((line) => line.description).join(", ") || "Venta",
-      detail: sale.payments.map((payment) => `${payment.method} · ${payment.status}`).join(" · ") || "Sin pagos registrados",
+      title: sale.lines.map((line) => `${line.description} × ${Number(line.quantity)}`).join(", ") || "Venta",
+      detail: `Pendiente: ${currencyText(sale.outstandingAmount||0)} · ` + (sale.payments.map((payment) => `${payment.kind==="REFUND"?"Dinero devuelto":"Cobro"} ${currencyText(payment.amount)} · ${{EFECTIVO:"Efectivo",TARJETA:"Tarjeta",BIZUM:"Bizum"}[payment.method]||payment.method} · ${historyDate(payment.paidAt)} · ${payment.status}`).join(" · ") || "Sin pagos registrados"),
       amount: sale.totalAmount,
-      status: sale.status,
+      status: `${({COMPLETADA:"Venta confirmada",CANCELADA:"Venta anulada",REEMBOLSADA:"Venta devuelta"})[sale.status] || sale.status} · ${({PAGADO:"Pagado",PARCIAL:"Pago parcial",PENDIENTE:"Pago pendiente",SIN_VERIFICAR:"Sin verificar"})[sale.paymentStatus] || sale.paymentStatus}`,
       currency: sale.currency,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -183,6 +183,11 @@ async function loadPurchaseHistory() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
     renderPurchaseHistory(data);
+    const me=await (await fetch('/api/me')).json();
+    if(['ADMIN','RECEPTION'].includes(me.role)){
+      const link=document.createElement('a');link.href='/productos.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+      document.querySelector('#profile-debt-card').append(link);
+    }
     renderBookingHistory(data.bookings);
   } catch (error) {
     for (const container of [purchaseHistory, bookingHistory]) {
@@ -620,3 +625,9 @@ function getReachedMilestone(previousMeasurements, updatedMeasurements) {
 }
 
 loadProfile();
+
+// Refresh debts independently of the client's editable profile fields.
+setInterval(async()=>{
+ if(document.hidden||!clientId)return;
+ try{const response=await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-history`);if(response.ok)renderPurchaseHistory(await response.json());}catch{}
+},5000);

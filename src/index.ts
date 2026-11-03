@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Inventory, inventoryPermission } from "./inventory";
+import { Inventory, inventoryPermission, saleBalance } from "./inventory";
 import { ApiError } from "./calendar/model";
 import { ZodError } from "zod";
 import { createReadStream } from "node:fs";
@@ -627,15 +627,19 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       const gym=(request as any).selectedGym as string;
       const inventory=new Inventory(prisma);
       const product=url.pathname.match(/^\/api\/inventory\/products(?:\/([0-9a-f-]+))?$/i);
+      const payment=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/payments$/i);
+      const receiptAction=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(refunds|verify-payment)$/i);
       const reversal=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
-      inventoryPermission(actor,request.method==='GET'?'read':url.pathname==='/api/inventory/sales'?'sell':'admin');
+      inventoryPermission(actor,request.method==='GET'?'read':url.pathname==='/api/inventory/sales'||payment||receiptAction?.[2]==='verify-payment'?'sell':reversal?.[2]==='return'||receiptAction?.[2]==='refunds'?'return':'admin');
       if(product && request.method==='GET'&&!product[1])sendJson(response,200,{products:await inventory.products(gym)});
       else if(product&&request.method==='POST'&&!product[1])sendJson(response,201,await inventory.saveProduct(gym,await readJsonBody(request)));
       else if(product&&request.method==='PUT'&&product[1])sendJson(response,200,await inventory.saveProduct(gym,await readJsonBody(request),product[1]));
       else if(product&&request.method==='DELETE'&&product[1])sendJson(response,200,await inventory.removeProduct(gym,product[1]));
       else if(url.pathname==='/api/inventory/sales'&&request.method==='GET')sendJson(response,200,await inventory.salesPage(gym,url.searchParams));
       else if(url.pathname==='/api/inventory/sales'&&request.method==='POST')sendJson(response,201,await inventory.sell(gym,actor!.id,await readJsonBody(request)));
-      else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel'));
+      else if(payment&&request.method==='POST')sendJson(response,200,await inventory.pay(gym,actor!.id,payment[1],await readJsonBody(request)));
+      else if(receiptAction&&request.method==='POST')sendJson(response,200,await (receiptAction[2]==='refunds'?inventory.refund(gym,actor!.id,receiptAction[1],await readJsonBody(request)):inventory.verifyPaid(gym,actor!.id,receiptAction[1],await readJsonBody(request))));
+      else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel',actor!.id));
       else sendError(response,404,"Operación desconocida.");
     } catch(error) {
       if(error instanceof ApiError)sendError(response,error.status,error.message);
@@ -1020,7 +1024,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true },
+      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true, gymId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");
@@ -1040,6 +1044,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
 */ }
+    if(client.gymId!==(request as any).selectedGym){sendError(response,404,"Cliente desconocido en este centro.");return;}
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
       include: { service: { select: { id: true, name: true, durationMin: true } } },
@@ -1071,9 +1076,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         _count: { _all: true },
       }),
       prisma.sale.findMany({
-        where: { clientId },
+        where: { clientId, gymKey: (request as any).selectedGym },
         select: {
           id: true,
+          paymentTracking: true,
           status: true,
           currency: true,
           subtotal: true,
@@ -1081,20 +1087,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           totalAmount: true,
           soldAt: true,
           createdAt: true,
-          lines: { select: { description: true, quantity: true, unitPrice: true, lineTotal: true, type: true } },
-          payments: { select: { method: true, status: true, amount: true, paidAt: true } },
+          lines: { select: { description: true, quantity: true, returnedQuantity: true, unitPrice: true, lineTotal: true, type: true } },
+          payments: { select: { method: true, kind: true, note: true, status: true, amount: true, paidAt: true } },
         },
         orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
         take: 100,
       }),
       prisma.sale.findMany({
-        where: { clientId, status: SaleStatus.COMPLETADA },
+        where: { clientId, gymKey:(request as any).selectedGym, status: SaleStatus.COMPLETADA },
         select: {
+          status: true, paymentTracking: true, lines: true,
           currency: true,
           totalAmount: true,
           payments: {
             where: { status: PaymentStatus.PAGADO },
-            select: { amount: true },
+            select: { amount: true, status: true, kind: true },
           },
         },
       }),
@@ -1110,8 +1117,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       }
     }
     for (const sale of debtSales) {
-      const paid = sale.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-      const outstanding = Math.max(0, Number(sale.totalAmount) - paid);
+      const outstanding = saleBalance(sale).outstandingAmount;
       if (outstanding > 0) {
         debtByCurrency.set(sale.currency, (debtByCurrency.get(sale.currency) ?? 0) + outstanding);
       }
@@ -1141,7 +1147,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         };
       }),
       bookings,
-      sales,
+      sales: sales.map(saleBalance),
       debt,
     });
     return;

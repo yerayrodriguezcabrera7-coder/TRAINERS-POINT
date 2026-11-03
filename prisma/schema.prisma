@@ -115,6 +115,7 @@ enum SaleLineType {
 }
 
 enum PaymentMethod {
+  BIZUM
   EFECTIVO
   TARJETA
   TRANSFERENCIA
@@ -478,6 +479,9 @@ model StockMovement {
 }
 
 model Sale {
+  returnHistory Json @default("[]") @db.JsonB
+  paymentTracking  Boolean    @default(false)
+  requestFingerprint String?
   returnKeys       String[]   @default([])
   gymKey           String?
   requestKey       String?    @unique
@@ -528,6 +532,10 @@ model SaleLine {
 }
 
 model Payment {
+  kind String @default("COLLECTION")
+  note String?
+  requestKey String? @unique
+  actorAccountId String?
   id        String        @id @default(uuid()) @db.Uuid
   saleId    String        @db.Uuid
   method    PaymentMethod
