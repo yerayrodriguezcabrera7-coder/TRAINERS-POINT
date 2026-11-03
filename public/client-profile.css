@@ -415,3 +415,386 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
   .profile-heading-actions button { width: 100%; }
   .bono-fields-grid { grid-template-columns: 1fr; }
 }
+
+
+/* --- Rich Visual Bono Styles --- */
+.add-bono-dialog {
+  width: min(640px, calc(100% - 24px));
+  max-width: 640px;
+}
+.bono-cards-section {
+  display: grid;
+  gap: 8px;
+}
+.bono-section-label {
+  color: var(--tp-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.bono-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.bono-select-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-md);
+  background: var(--tp-surface);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  position: relative;
+  text-align: left;
+}
+.bono-select-card:hover {
+  border-color: var(--tp-accent);
+  background: #fffdf8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(17, 17, 17, 0.06);
+}
+.bono-select-card.is-selected {
+  border: 2px solid var(--tp-accent);
+  background: #fff8ef;
+  box-shadow: 0 4px 16px rgba(255, 127, 10, 0.18);
+}
+.bono-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.bono-card-modality {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--tp-surface-muted);
+  color: var(--tp-ink);
+}
+.bono-card-modality.modality-dual {
+  background: #efeaf5;
+  color: #63458a;
+}
+.bono-card-check {
+  display: none;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--tp-accent);
+}
+.bono-select-card.is-selected .bono-card-check {
+  display: inline-block;
+}
+.bono-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tp-ink);
+  margin: 0;
+  line-height: 1.25;
+}
+.bono-card-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.bono-card-price {
+  font-family: var(--tp-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--tp-ink);
+  font-variant-numeric: tabular-nums;
+}
+.bono-card-unit-rate {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-muted);
+}
+.bono-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--tp-muted);
+}
+.bono-card-validity-tag {
+  color: var(--tp-accent);
+  font-weight: 700;
+}
+
+/* Stepper */
+.bono-stepper {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: stretch;
+}
+.bono-step-btn {
+  min-height: 44px;
+  border: 1px solid var(--tp-line);
+  background: var(--tp-surface-muted);
+  color: var(--tp-ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bono-step-btn:first-child { border-radius: var(--tp-radius-sm) 0 0 var(--tp-radius-sm); }
+.bono-step-btn:last-child { border-radius: 0 var(--tp-radius-sm) var(--tp-radius-sm) 0; }
+.bono-step-btn:hover { border-color: var(--tp-accent); background: #fff8ef; color: var(--tp-black); }
+.bono-stepper input {
+  border-radius: 0 !important;
+  text-align: center;
+  font-family: var(--tp-display) !important;
+  font-size: 20px !important;
+  font-weight: 700;
+  min-height: 44px;
+}
+
+/* Payment chips */
+.bono-choice-section {
+  display: grid;
+  gap: 6px;
+}
+.bono-field-title {
+  color: var(--tp-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.payment-chips-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.payment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-sm);
+  background: var(--tp-surface);
+  color: var(--tp-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.payment-chip:hover {
+  border-color: var(--tp-accent);
+  background: #fffcf8;
+}
+.payment-chip.is-selected {
+  border-color: var(--tp-accent);
+  background: #fff3e5;
+  color: var(--tp-black);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(255, 127, 10, 0.12);
+}
+.chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-pagado { background: #2d7750; }
+.dot-pendiente { background: #d97706; }
+.dot-fallido { background: #b15f5a; }
+.dot-reembolsado { background: #716593; }
+
+/* Visual Ticket Preview */
+.bono-ticket-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px dashed var(--tp-line);
+  border-left: 4px solid var(--tp-accent);
+  border-radius: var(--tp-radius-md);
+  background: #fbf9f5;
+}
+.ticket-eyebrow {
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--tp-accent);
+  margin-bottom: 4px;
+}
+.ticket-title {
+  margin: 0;
+  font-family: var(--tp-display);
+  font-size: 16px;
+  color: var(--tp-ink);
+}
+.ticket-client {
+  margin: 3px 0 8px;
+  font-size: 11px;
+  color: var(--tp-muted);
+}
+.ticket-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ticket-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--tp-surface-muted);
+  color: var(--tp-ink);
+}
+.ticket-tag-validity {
+  background: #fff0df;
+  color: var(--tp-accent);
+}
+.ticket-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  gap: 2px;
+}
+.ticket-price-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--tp-muted);
+  letter-spacing: 0.08em;
+}
+.ticket-price {
+  font-family: var(--tp-display);
+  font-size: 24px;
+  color: var(--tp-ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.ticket-rate {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tp-accent);
+}
+.ticket-status {
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.status-pill-pagado {
+  background: #e7f4eb;
+  color: #2d7750;
+}
+.status-pill-pendiente {
+  background: #fff4df;
+  color: #a97420;
+}
+
+/* Rich Bono History Cards with Progress Bars */
+.bono-history-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--tp-line);
+  border-left: 4px solid var(--tp-accent);
+  border-radius: var(--tp-radius-md);
+  background: var(--tp-surface);
+  transition: all 0.16s ease;
+}
+.bono-history-card:hover {
+  border-color: var(--tp-accent);
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.05);
+}
+.bono-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bono-history-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bono-history-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #fff2e0;
+  color: var(--tp-accent);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.bono-history-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.bono-history-title {
+  margin: 0;
+  font-family: var(--tp-display);
+  font-size: 16px;
+  color: var(--tp-ink);
+}
+.bono-history-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bono-history-progress-wrap {
+  display: grid;
+  gap: 6px;
+}
+.bono-history-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.bono-sessions-highlight {
+  font-weight: 800;
+  color: var(--tp-ink);
+}
+.bono-history-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tp-surface-muted);
+  overflow: hidden;
+  position: relative;
+}
+.bono-history-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tp-accent);
+  transition: width 0.3s ease;
+}
+.bono-history-progress-fill.is-depleted {
+  background: var(--tp-muted);
+}
+.bono-history-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--tp-line);
+  font-size: 11px;
+  color: var(--tp-muted);
+}
+.bono-history-amount {
+  font-family: var(--tp-display);
+  font-size: 16px;
+  color: var(--tp-ink);
+  font-weight: 700;
+}

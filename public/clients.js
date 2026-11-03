@@ -565,14 +565,75 @@ async function loadGyms() {
   }
 }
 
+function renderPurchaseCardsGrid(selectedId = "") {
+  const container = document.querySelector("#purchase-cards-grid");
+  if (!container) return;
+  container.replaceChildren();
+
+  if (!services.length) {
+    container.innerHTML = '<p class="bono-cards-loading">No hay servicios disponibles.</p>';
+    return;
+  }
+
+  services.forEach((service) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `bono-select-card${service.id === selectedId ? " is-selected" : ""}`;
+    card.dataset.serviceId = service.id;
+
+    const topRow = document.createElement("div");
+    topRow.className = "bono-card-top";
+    const mod = document.createElement("span");
+    mod.className = `bono-card-modality${service.modality === "DUAL" ? " modality-dual" : ""}`;
+    mod.textContent = service.modality === "DUAL" ? "Dúo / Pareja" : "Individual";
+    const check = document.createElement("span");
+    check.className = "bono-card-check";
+    check.textContent = "✓ Seleccionado";
+    topRow.append(mod, check);
+
+    const name = document.createElement("h4");
+    name.className = "bono-card-name";
+    name.textContent = service.name;
+
+    const priceRow = document.createElement("div");
+    priceRow.className = "bono-card-price-row";
+    const price = document.createElement("strong");
+    price.className = "bono-card-price";
+    price.textContent = formatCurrency(service.price);
+    const unitRate = document.createElement("span");
+    unitRate.className = "bono-card-unit-rate";
+    const rate = service.trainingCount > 0 ? (Number(service.price) / service.trainingCount).toFixed(2) : Number(service.price).toFixed(2);
+    unitRate.textContent = `${rate} €/ses.`;
+    priceRow.append(price, unitRate);
+
+    const meta = document.createElement("div");
+    meta.className = "bono-card-meta";
+    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">4 semanas</span>`;
+
+    card.append(topRow, name, priceRow, meta);
+
+    card.addEventListener("click", () => {
+      document.querySelectorAll("#purchase-cards-grid .bono-select-card").forEach((c) => c.classList.remove("is-selected"));
+      card.classList.add("is-selected");
+      if (purchaseServiceSelect) {
+        purchaseServiceSelect.value = service.id;
+        purchaseServiceSelect.dispatchEvent(new Event("change"));
+      }
+    });
+
+    container.append(card);
+  });
+}
+
 function renderServiceOptions(selectedId = "") {
+  renderPurchaseCardsGrid(selectedId);
   const serviceSelect = document.querySelector("#purchase-service");
+  if (!serviceSelect) return;
   serviceSelect.replaceChildren();
   const placeholder = document.createElement("option");
   placeholder.value = "";
   placeholder.textContent = services.length ? "Selecciona un servicio" : "Añade un servicio primero";
   serviceSelect.append(placeholder);
-  serviceSelect.disabled = services.length === 0;
 
   for (const service of services) {
     const option = document.createElement("option");
@@ -1864,6 +1925,12 @@ function updatePurchaseCallout() {
   const service = services.find((s) => s.id === purchaseServiceSelect.value);
   const sessions = Number(purchaseForm.elements.namedItem("sessionsBought")?.value || 0);
   const total = Number(purchaseForm.elements.namedItem("totalAmount")?.value || 0);
+  const ticketPreview = document.querySelector("#purchase-ticket-preview");
+  const ticketService = document.querySelector("#purchase-ticket-service");
+  const ticketDuration = document.querySelector("#purchase-ticket-duration");
+  const ticketTotal = document.querySelector("#purchase-ticket-total");
+  const ticketRate = document.querySelector("#purchase-ticket-rate");
+
   if (service) {
     purchaseCalcCallout.hidden = false;
     if (purchaseCalcDuration) purchaseCalcDuration.textContent = `${service.durationMin || 60} min`;
@@ -1874,10 +1941,54 @@ function updatePurchaseCallout() {
         purchaseCalcRate.textContent = "—";
       }
     }
+
+    if (ticketPreview) {
+      ticketPreview.hidden = false;
+      if (ticketService) ticketService.textContent = service.name;
+      if (ticketDuration) ticketDuration.textContent = `${service.durationMin || 60} min · ${service.modality === "DUAL" ? "Dúo" : "Individual"}`;
+      if (ticketTotal) ticketTotal.textContent = formatCurrency(total);
+      if (ticketRate) {
+        const rate = sessions > 0 ? (total / sessions).toFixed(2) : "0.00";
+        ticketRate.textContent = `${rate} €/sesión · ${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`;
+      }
+    }
   } else {
     purchaseCalcCallout.hidden = true;
+    if (ticketPreview) ticketPreview.hidden = true;
   }
 }
+
+// Clients dialog stepper click handler
+historyDialog?.addEventListener("click", (event) => {
+  const stepBtn = event.target.closest(".bono-step-btn");
+  if (!stepBtn) return;
+  const step = Number(stepBtn.dataset.step);
+  const input = purchaseForm.elements.namedItem("sessionsBought");
+  if (!input) return;
+  const current = Number(input.value || 1);
+  input.value = String(Math.max(1, Math.min(500, current + step)));
+  updatePurchaseCallout();
+});
+
+// Clients dialog payment method chips click handler
+document.querySelector("#purchase-payment-chips")?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".payment-chip");
+  if (!btn) return;
+  document.querySelectorAll("#purchase-payment-chips .payment-chip").forEach((b) => b.classList.remove("is-selected"));
+  btn.classList.add("is-selected");
+  const methodSelect = purchaseForm.elements.namedItem("paymentMethod");
+  if (methodSelect) methodSelect.value = btn.dataset.value;
+});
+
+// Clients dialog payment status chips click handler
+document.querySelector("#purchase-status-chips")?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".payment-chip");
+  if (!btn) return;
+  document.querySelectorAll("#purchase-status-chips .payment-chip").forEach((b) => b.classList.remove("is-selected"));
+  btn.classList.add("is-selected");
+  const statusSelect = purchaseForm.elements.namedItem("paymentStatus");
+  if (statusSelect) statusSelect.value = btn.dataset.value;
+});
 
 if (purchaseServiceSelect) {
   purchaseServiceSelect.addEventListener("change", () => {
@@ -1888,6 +1999,10 @@ if (purchaseServiceSelect) {
       if (sessionsInput) sessionsInput.value = service.trainingCount || 1;
       if (totalInput) totalInput.value = Number(service.price).toFixed(2);
     }
+    // Update card selection highlight
+    document.querySelectorAll("#purchase-cards-grid .bono-select-card").forEach((c) => {
+      c.classList.toggle("is-selected", c.dataset.serviceId === purchaseServiceSelect.value);
+    });
     updatePurchaseCallout();
   });
 }
@@ -1896,3 +2011,4 @@ const purchaseSessionsInput = purchaseForm?.elements.namedItem("sessionsBought")
 const purchaseTotalInput = purchaseForm?.elements.namedItem("totalAmount");
 if (purchaseSessionsInput) purchaseSessionsInput.addEventListener("input", updatePurchaseCallout);
 if (purchaseTotalInput) purchaseTotalInput.addEventListener("input", updatePurchaseCallout);
+
