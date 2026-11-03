@@ -100,16 +100,16 @@ type GymInput = {
 
 type ServiceInput = {
   name: string;
-  description?: string;
+  description?: string | null;
   durationMin: number;
   price: number;
-  modality?: "INDIVIDUAL" | "DUAL";
-  type?: "PACK" | "SESION_INDIVIDUAL";
-  trainingCount?: number;
-  validityWeeks?: number | null;
-  recommendedWeeklyFrequency?: number | null;
-  conditions?: string | null;
-  isActive?: boolean;
+  modality: "INDIVIDUAL" | "DUAL";
+  type: "PACK" | "SESION_INDIVIDUAL";
+  trainingCount: number;
+  validityWeeks: number | null;
+  recommendedWeeklyFrequency: number | null;
+  conditions: string | null;
+  isActive: boolean;
 };
 
 const serviceSelectFields = {
@@ -415,13 +415,13 @@ function parseServiceInput(value: unknown): ServiceInput | string {
   const price = typeof value.price === "number" ? value.price : Number(value.price);
 
   if (!name || name.length > 120) {
-    return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
+    return "El nombre del servicio es obligatorio y debe tener como máximo 120 caracteres.";
   }
-  if (!Number.isInteger(durationMin) || durationMin < 1 || durationMin > 1440) {
-    return "La duración debe estar entre 1 y 1440 minutos.";
+  if (value.durationMin === undefined || value.durationMin === null || value.durationMin === "" || !Number.isInteger(durationMin) || durationMin < 5 || durationMin > 1440) {
+    return "La duración por sesión es obligatoria y debe estar entre 5 y 1440 minutos.";
   }
-  if (!Number.isFinite(price) || price < 0 || price > 99999999.99) {
-    return "Introduce un precio válido.";
+  if (value.price === undefined || value.price === null || value.price === "" || !Number.isFinite(price) || price < 0 || price > 99999999.99) {
+    return "El precio total es obligatorio, no puede ser negativo y debe tener un valor válido (hasta 99.999.999,99 €).";
   }
   if (description.length > 2000) {
     return "La descripción debe tener como máximo 2000 caracteres.";
@@ -435,32 +435,33 @@ function parseServiceInput(value: unknown): ServiceInput | string {
 
   const rawType = String(value.type ?? "SESION_INDIVIDUAL").trim().toUpperCase();
   if (rawType !== "PACK" && rawType !== "SESION_INDIVIDUAL") {
-    return "El tipo debe ser pack o sesión individual.";
+    return "El tipo de servicio debe ser pack o sesión individual.";
   }
   const type: "PACK" | "SESION_INDIVIDUAL" = rawType as "PACK" | "SESION_INDIVIDUAL";
 
-  const rawTrainingCount = value.trainingCount != null && value.trainingCount !== ""
-    ? Number(value.trainingCount)
-    : (type === "PACK" ? 10 : 1);
+  if (value.trainingCount === undefined || value.trainingCount === null || value.trainingCount === "") {
+    return "Indica el número de sesiones del servicio.";
+  }
+  const rawTrainingCount = Number(value.trainingCount);
   if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) {
-    return "El número de entrenamientos debe ser un entero entre 1 y 500.";
+    return "El número de sesiones debe ser un entero entre 1 y 500.";
   }
   const trainingCount = rawTrainingCount;
 
-  let validityWeeks: number | null = null;
+  let validityWeeks: number = 4;
   if (value.validityWeeks != null && value.validityWeeks !== "") {
     const parsedWeeks = Number(value.validityWeeks);
-    if (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 104) {
-      return "La validez en semanas debe ser un número entre 1 y 104.";
+    if (!Number.isInteger(parsedWeeks) || parsedWeeks !== 4) {
+      return "La duración/validez del servicio debe ser de 4 semanas solo.";
     }
-    validityWeeks = parsedWeeks;
+    validityWeeks = 4;
   }
 
   let recommendedWeeklyFrequency: number | null = null;
   if (value.recommendedWeeklyFrequency != null && value.recommendedWeeklyFrequency !== "") {
     const parsedFreq = Number(value.recommendedWeeklyFrequency);
     if (!Number.isInteger(parsedFreq) || parsedFreq < 1 || parsedFreq > 14) {
-      return "La frecuencia semanal recomendada debe ser un número entre 1 y 14.";
+      return "La frecuencia semanal recomendada debe ser un número entero entre 1 y 14.";
     }
     recommendedWeeklyFrequency = parsedFreq;
   }
@@ -486,7 +487,7 @@ function parseServiceInput(value: unknown): ServiceInput | string {
     recommendedWeeklyFrequency,
     conditions,
     isActive,
-    ...(description ? { description } : {}),
+    description: description || null,
   };
 }
 

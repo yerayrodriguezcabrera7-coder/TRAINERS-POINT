@@ -8,22 +8,6 @@
   const bookingNames = {PENDING:'Pendiente',CONFIRMED:'Confirmada',CANCELLED:'Cancelada',COMPLETED:'Finalizada',NO_SHOW:'No asistió'};
   const days = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   const requestedSection = new URLSearchParams(location.search).get('section');
-  if (requestedSection === 'clients' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
-    window.location.replace('/clientes');
-    return;
-  }
-  if (requestedSection === 'users' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
-    window.location.replace('/usuarios');
-    return;
-  }
-  if (requestedSection === 'employees' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
-    window.location.replace('/profesionales');
-    return;
-  }
-  if (requestedSection === 'services' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
-    window.location.replace('/servicios');
-    return;
-  }
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
@@ -42,6 +26,29 @@
   function notice(message,error=false) {$('notice').textContent=message;$('notice').hidden=false;$('notice').classList.toggle('error',error);}
   async function load() {
     data=await api('manage');
+    if (data.role === 'TRAINER') {
+      section = 'shifts';
+      if (requestedSection && requestedSection !== 'shifts') {
+        history.replaceState(null, '', '?section=shifts');
+      }
+    } else {
+      if (requestedSection === 'clients' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+        window.location.replace('/clientes');
+        return;
+      }
+      if (requestedSection === 'users' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+        window.location.replace('/usuarios');
+        return;
+      }
+      if (requestedSection === 'employees' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+        window.location.replace('/profesionales');
+        return;
+      }
+      if (requestedSection === 'services' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+        window.location.replace('/servicios');
+        return;
+      }
+    }
     const allowed=data.role==='ADMIN'?Object.keys(labels):data.role==='RECEPTION'?['services','shifts']:['shifts'];
     if(requestedSection === 'clients') allowed.push('clients');
     if(!allowed.includes(section)) {section=allowed[0];history.replaceState(null,'','?section='+section);}

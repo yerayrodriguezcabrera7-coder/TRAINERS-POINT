@@ -1,3 +1,23 @@
+let currentUserRole = null;
+async function fetchUserRole() {
+  try {
+    const res = await fetch("/api/me");
+    if (res.ok) {
+      const me = await res.json();
+      currentUserRole = me.role;
+      if (currentUserRole === 'TRAINER') {
+        document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
+        document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
+        document.querySelector("#profile-gym-form")?.setAttribute("hidden", "");
+        const detailsForm = document.querySelector("#client-details-form");
+        if (detailsForm) {
+          detailsForm.querySelectorAll("button[type=submit], input, select").forEach(el => el.disabled = true);
+        }
+      }
+    }
+  } catch (_) {}
+}
+fetchUserRole();
 const metrics = [
   ["weight", "Peso", "kg"],
   ["hip", "Cadera", "cm"],
@@ -103,52 +123,98 @@ function renderPurchaseHistory(data) {
     : "Sin pagos pendientes";
 
   purchaseHistory.replaceChildren();
-  const purchases = [
-    ...data.packages.map((item) => ({
-      date: item.purchasedAt,
-      title: item.service.name,
-      detail: `${item.sessionsBought} sesiones · ${item.sessionsRemaining} disponibles · ${item.paymentMethod}`,
-      amount: item.totalAmount,
-      status: item.paymentStatus,
-      currency: "EUR",
-    })),
-    ...data.sales.map((sale) => ({
-      date: sale.soldAt || sale.createdAt,
-      title: sale.lines.map((line) => `${line.description} × ${Number(line.quantity)}`).join(", ") || "Venta",
-      detail: `Pendiente: ${currencyText(sale.outstandingAmount||0)} · ` + (sale.payments.map((payment) => `${payment.kind==="REFUND"?"Dinero devuelto":"Cobro"} ${currencyText(payment.amount)} · ${{EFECTIVO:"Efectivo",TARJETA:"Tarjeta",BIZUM:"Bizum"}[payment.method]||payment.method} · ${historyDate(payment.paidAt)} · ${payment.status}`).join(" · ") || "Sin pagos registrados"),
-      amount: sale.totalAmount,
-      status: `${({COMPLETADA:"Venta confirmada",CANCELADA:"Venta anulada",REEMBOLSADA:"Venta devuelta"})[sale.status] || sale.status} · ${({PAGADO:"Pagado",PARCIAL:"Pago parcial",PENDIENTE:"Pago pendiente",SIN_VERIFICAR:"Sin verificar"})[sale.paymentStatus] || sale.paymentStatus}`,
-      currency: sale.currency,
-    })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const packages = data.packages || [];
+  const sales = data.sales || [];
 
-  if (!purchases.length) {
+  if (!packages.length && !sales.length) {
     const empty = document.createElement("p");
     empty.className = "profile-empty";
-    empty.textContent = "Este cliente todavía no tiene compras registradas.";
+    empty.textContent = "Este cliente todavía no tiene bonos ni compras registradas.";
     purchaseHistory.append(empty);
     return;
   }
 
-  for (const purchase of purchases) {
+  // Render Rich Bono Cards
+  packages.forEach((pkg) => {
+    const card = document.createElement("article");
+    card.className = "bono-history-card";
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "bono-history-header";
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "bono-history-title-wrap";
+    const icon = document.createElement("div");
+    icon.className = "bono-history-icon";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"/><path d="M4 13v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M12 7v10"/><path d="M8 7v10"/><path d="M16 7v10"/></svg>';
+    const title = document.createElement("h4");
+    title.className = "bono-history-title";
+    title.textContent = pkg.service.name;
+    titleWrap.append(icon, title);
+
+    const badges = document.createElement("div");
+    badges.className = "bono-history-badges";
+    const status = document.createElement("span");
+    status.className = `badge-status badge-${String(pkg.paymentStatus).toLowerCase()}`;
+    status.textContent = pkg.paymentStatus;
+    badges.append(status);
+    header.append(titleWrap, badges);
+
+    // Progress Bar
+    const progressWrap = document.createElement("div");
+    progressWrap.className = "bono-history-progress-wrap";
+    const labels = document.createElement("div");
+    labels.className = "bono-history-progress-labels";
+    const availLabel = document.createElement("span");
+    availLabel.innerHTML = `<strong class="bono-sessions-highlight">${pkg.sessionsRemaining}</strong> de ${pkg.sessionsBought} sesiones disponibles`;
+    const usedLabel = document.createElement("span");
+    usedLabel.textContent = `${pkg.sessionsUsed || 0} completadas · ${pkg.sessionsScheduled || 0} próximas`;
+    labels.append(availLabel, usedLabel);
+
+    const track = document.createElement("div");
+    track.className = "bono-history-progress-track";
+    const fill = document.createElement("div");
+    const percent = pkg.sessionsBought > 0 ? Math.min(100, Math.round((pkg.sessionsRemaining / pkg.sessionsBought) * 100)) : 0;
+    fill.className = `bono-history-progress-fill${pkg.sessionsRemaining === 0 ? " is-depleted" : ""}`;
+    fill.style.width = `${percent}%`;
+    track.append(fill);
+    progressWrap.append(labels, track);
+
+    // Footer
+    const footer = document.createElement("div");
+    footer.className = "bono-history-footer";
+    const metaLeft = document.createElement("div");
+    metaLeft.textContent = `${historyDate(pkg.purchasedAt)} · ${pkg.paymentMethod} · 4 semanas de validez`;
+    const amount = document.createElement("strong");
+    amount.className = "bono-history-amount";
+    amount.textContent = currencyText(pkg.totalAmount, "EUR");
+    footer.append(metaLeft, amount);
+
+    card.append(header, progressWrap, footer);
+    purchaseHistory.append(card);
+  });
+
+  // Sales (if any)
+  sales.forEach((sale) => {
     const item = document.createElement("article");
     item.className = "client-history-item";
     const details = document.createElement("div");
     const title = document.createElement("strong");
-    title.textContent = purchase.title;
+    title.textContent = sale.lines.map((line) => `${line.description} × ${Number(line.quantity)}`).join(", ") || "Venta de productos";
     const metadata = document.createElement("small");
-    metadata.textContent = `${historyDate(purchase.date)} · ${purchase.detail}`;
+    metadata.textContent = `${historyDate(sale.soldAt || sale.createdAt)} · Pendiente: ${currencyText(sale.outstandingAmount || 0)} · ${sale.payments.map((p) => `${p.kind === 'REFUND' ? 'Dinero devuelto' : 'Cobro'} ${currencyText(p.amount)} · ${{EFECTIVO:'Efectivo',TARJETA:'Tarjeta',BIZUM:'Bizum'}[p.method] || p.method} · ${historyDate(p.paidAt)}`).join(' · ') || 'Sin pagos registrados'}`;
     details.append(title, metadata);
     const summary = document.createElement("div");
     summary.className = "client-history-summary";
     const amount = document.createElement("strong");
-    amount.textContent = currencyText(purchase.amount, purchase.currency);
+    amount.textContent = currencyText(sale.totalAmount, sale.currency);
     const status = document.createElement("small");
-    status.textContent = purchase.status;
+    status.className = `badge-status badge-${String(sale.status).toLowerCase()}`;
+    status.textContent = `${({COMPLETADA:'Venta confirmada',CANCELADA:'Venta anulada',REEMBOLSADA:'Venta devuelta'})[sale.status] || sale.status} · ${({PAGADO:'Pagado',PARCIAL:'Pago parcial',PENDIENTE:'Pago pendiente',SIN_VERIFICAR:'Sin verificar'})[sale.paymentStatus] || sale.paymentStatus}`;
     summary.append(amount, status);
     item.append(details, summary);
     purchaseHistory.append(item);
-  }
+  });
 }
 
 function renderBookingHistory(bookings) {
@@ -184,8 +250,8 @@ async function loadPurchaseHistory() {
     if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
-    if(['ADMIN','RECEPTION'].includes(me.role)){
-      const link=document.createElement('a');link.href='/productos.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+    if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
+      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/productos.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }
     renderBookingHistory(data.bookings);
@@ -402,6 +468,7 @@ function renderChart(measurements, previousMeasurements = []) {
 function renderProgress(data, previousMeasurements = []) { progress = data; renderHeader(data.client); renderClientDetails(data.client); renderSummary(data.measurements, previousMeasurements); renderHistory(data.measurements); renderChart(data.measurements, previousMeasurements); }
 
 async function loadProfile() {
+  if (!currentUserRole) await fetchUserRole();
   if (!clientId) { showError("No encontramos esta ficha. Vuelve a clientes y elige una persona."); return; }
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/progress`, { headers: { Accept: "application/json" } });
@@ -415,6 +482,7 @@ async function loadProfile() {
     renderProgress(data); loading.hidden = true; view.hidden = false;
     void loadAvailableGyms();
     void loadPurchaseHistory();
+    void loadBonoServices();
   } catch (error) {
     showError(error instanceof Error && error.message
       ? error.message
@@ -622,6 +690,319 @@ function getReachedMilestone(previousMeasurements, updatedMeasurements) {
     }
   }
   return "";
+}
+
+// --- Client Bono Management ---
+const addBonoDialog = document.querySelector("#add-bono-dialog");
+const addBonoForm = document.querySelector("#add-bono-form");
+const openAddBonoBtn = document.querySelector("#open-add-bono");
+const openAddBonoTopBtn = document.querySelector("#open-add-bono-top");
+const closeAddBonoBtn = document.querySelector("#close-add-bono");
+const cancelAddBonoBtn = document.querySelector("#cancel-add-bono");
+const bonoServiceSelect = document.querySelector("#bono-service-select");
+const bonoSessionsInput = document.querySelector("#bono-sessions-bought");
+const bonoAmountInput = document.querySelector("#bono-total-amount");
+const bonoPaymentMethod = document.querySelector("#bono-payment-method");
+const bonoPaymentStatus = document.querySelector("#bono-payment-status");
+const bonoNotesInput = document.querySelector("#bono-notes");
+const bonoFormError = document.querySelector("#bono-form-error");
+const saveAddBonoBtn = document.querySelector("#save-add-bono");
+
+const bonoCardsGrid = document.querySelector("#bono-cards-grid");
+const bonoCalcCallout = document.querySelector("#bono-calc-callout");
+const bonoCalcSessions = document.querySelector("#bono-calc-sessions");
+const bonoCalcUnitRate = document.querySelector("#bono-calc-unit-rate");
+const bonoCalcDuration = document.querySelector("#bono-calc-duration");
+
+const bonoTicketPreview = document.querySelector("#bono-ticket-preview");
+const ticketServiceName = document.querySelector("#ticket-service-name");
+const ticketClientName = document.querySelector("#ticket-client-name");
+const ticketModalityBadge = document.querySelector("#ticket-modality-badge");
+const ticketDurationBadge = document.querySelector("#ticket-duration-badge");
+const ticketTotalPrice = document.querySelector("#ticket-total-price");
+const ticketUnitRate = document.querySelector("#ticket-unit-rate");
+const ticketStatusPill = document.querySelector("#ticket-status-pill");
+
+let activeServicesList = [];
+
+async function loadBonoServices() {
+  try {
+    const response = await fetch("/api/services?activeOnly=true", { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudieron cargar los servicios.");
+    activeServicesList = data.services || [];
+    renderBonoServices();
+    renderBonoCardsGrid();
+  } catch (error) {
+    if (bonoCardsGrid) {
+      bonoCardsGrid.innerHTML = '<p class="bono-cards-loading error">No se pudo cargar el catálogo de bonos.</p>';
+    }
+  }
+}
+
+function renderBonoServices() {
+  if (!bonoServiceSelect) return;
+  bonoServiceSelect.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = activeServicesList.length ? "Selecciona un servicio…" : "No hay servicios disponibles";
+  bonoServiceSelect.append(placeholder);
+
+  for (const s of activeServicesList) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    const modalityText = s.modality === "DUAL" ? " [Dúo]" : " [Individual]";
+    opt.textContent = `${s.name}${modalityText} — ${s.trainingCount} ses. · ${currencyText(s.price)}`;
+    bonoServiceSelect.append(opt);
+  }
+}
+
+function renderBonoCardsGrid() {
+  if (!bonoCardsGrid) return;
+  bonoCardsGrid.replaceChildren();
+
+  if (!activeServicesList.length) {
+    bonoCardsGrid.innerHTML = '<p class="bono-cards-loading">No hay servicios o bonos activos en el catálogo.</p>';
+    return;
+  }
+
+  activeServicesList.forEach((service, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "bono-select-card";
+    card.dataset.serviceId = service.id;
+
+    const topRow = document.createElement("div");
+    topRow.className = "bono-card-top";
+    const mod = document.createElement("span");
+    mod.className = `bono-card-modality${service.modality === "DUAL" ? " modality-dual" : ""}`;
+    mod.textContent = service.modality === "DUAL" ? "Dúo / Pareja" : "Individual";
+    const check = document.createElement("span");
+    check.className = "bono-card-check";
+    check.textContent = "✓ Seleccionado";
+    topRow.append(mod, check);
+
+    const name = document.createElement("h4");
+    name.className = "bono-card-name";
+    name.textContent = service.name;
+
+    const priceRow = document.createElement("div");
+    priceRow.className = "bono-card-price-row";
+    const price = document.createElement("strong");
+    price.className = "bono-card-price";
+    price.textContent = currencyText(service.price);
+    const unitRate = document.createElement("span");
+    unitRate.className = "bono-card-unit-rate";
+    const rate = service.trainingCount > 0 ? (Number(service.price) / service.trainingCount).toFixed(2) : Number(service.price).toFixed(2);
+    unitRate.textContent = `${rate} €/ses.`;
+    priceRow.append(price, unitRate);
+
+    const meta = document.createElement("div");
+    meta.className = "bono-card-meta";
+    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">4 semanas</span>`;
+
+    card.append(topRow, name, priceRow, meta);
+
+    card.addEventListener("click", () => {
+      selectBonoCard(service.id);
+    });
+
+    bonoCardsGrid.append(card);
+  });
+}
+
+function selectBonoCard(serviceId) {
+  if (!bonoCardsGrid) return;
+  bonoCardsGrid.querySelectorAll(".bono-select-card").forEach((c) => {
+    c.classList.toggle("is-selected", c.dataset.serviceId === serviceId);
+  });
+  if (bonoServiceSelect) {
+    bonoServiceSelect.value = serviceId;
+  }
+  const service = activeServicesList.find((s) => s.id === serviceId);
+  if (service) {
+    if (bonoSessionsInput) bonoSessionsInput.value = service.trainingCount || 1;
+    if (bonoAmountInput) bonoAmountInput.value = Number(service.price).toFixed(2);
+  }
+  updateBonoCalculation();
+}
+
+function updateBonoCalculation() {
+  const selectedId = bonoServiceSelect?.value;
+  const service = activeServicesList.find((s) => s.id === selectedId);
+  const sessions = Number(bonoSessionsInput?.value || 0);
+  const total = Number(bonoAmountInput?.value || 0);
+
+  if (service) {
+    if (bonoCalcCallout) {
+      bonoCalcCallout.hidden = false;
+      if (bonoCalcSessions) bonoCalcSessions.textContent = `${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`;
+      if (bonoCalcDuration) bonoCalcDuration.textContent = `${service.durationMin || 60} min`;
+      if (bonoCalcUnitRate) {
+        if (sessions > 0 && !isNaN(total) && total >= 0) {
+          const rate = total / sessions;
+          bonoCalcUnitRate.textContent = `${rate.toFixed(2)} €/sesión`;
+        } else {
+          bonoCalcUnitRate.textContent = "—";
+        }
+      }
+    }
+
+    if (bonoTicketPreview) {
+      bonoTicketPreview.hidden = false;
+      if (ticketServiceName) ticketServiceName.textContent = service.name;
+      if (ticketClientName && progress?.client) {
+        ticketClientName.textContent = `Cliente: ${progress.client.firstName} ${progress.client.lastName}`;
+      }
+      if (ticketModalityBadge) ticketModalityBadge.textContent = service.modality === "DUAL" ? "Dúo / Pareja" : "Individual";
+      if (ticketDurationBadge) ticketDurationBadge.textContent = `${service.durationMin || 60} min / sesión`;
+      if (ticketTotalPrice) ticketTotalPrice.textContent = currencyText(total);
+      if (ticketUnitRate) {
+        const rate = sessions > 0 ? (total / sessions).toFixed(2) : "0.00";
+        ticketUnitRate.textContent = `${rate} €/sesión · ${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`;
+      }
+      if (ticketStatusPill && bonoPaymentStatus) {
+        const isPaid = bonoPaymentStatus.value === "PAGADO";
+        ticketStatusPill.className = `ticket-status ${isPaid ? "status-pill-pagado" : "status-pill-pendiente"}`;
+        ticketStatusPill.textContent = isPaid ? "Cobrado / Pagado" : "Pendiente de cobro";
+      }
+    }
+  } else {
+    if (bonoCalcCallout) bonoCalcCallout.hidden = true;
+    if (bonoTicketPreview) bonoTicketPreview.hidden = true;
+  }
+}
+
+function openAddBonoModal() {
+  if (!addBonoDialog) return;
+  addBonoForm.reset();
+  if (bonoFormError) bonoFormError.hidden = true;
+  if (bonoCalcCallout) bonoCalcCallout.hidden = true;
+  if (bonoTicketPreview) bonoTicketPreview.hidden = true;
+
+  // Reset payment chips to default (TARJETA & PAGADO)
+  document.querySelectorAll("#bono-payment-chips .payment-chip").forEach((btn) => {
+    btn.classList.toggle("is-selected", btn.dataset.value === "TARJETA");
+  });
+  if (bonoPaymentMethod) bonoPaymentMethod.value = "TARJETA";
+
+  document.querySelectorAll("#bono-status-chips .payment-chip").forEach((btn) => {
+    btn.classList.toggle("is-selected", btn.dataset.value === "PAGADO");
+  });
+  if (bonoPaymentStatus) bonoPaymentStatus.value = "PAGADO";
+
+  if (progress?.client) {
+    const fullName = `${progress.client.firstName} ${progress.client.lastName}`.trim();
+    const titleEl = document.querySelector("#add-bono-title");
+    if (titleEl) titleEl.textContent = `Añadir bono a ${fullName}`;
+  }
+  if (!activeServicesList.length) {
+    void loadBonoServices();
+  } else {
+    renderBonoCardsGrid();
+  }
+  addBonoDialog.showModal();
+}
+
+// Stepper click handler
+addBonoDialog?.addEventListener("click", (event) => {
+  const stepBtn = event.target.closest(".bono-step-btn");
+  if (!stepBtn) return;
+  const step = Number(stepBtn.dataset.step);
+  const current = Number(bonoSessionsInput.value || 1);
+  bonoSessionsInput.value = String(Math.max(1, Math.min(500, current + step)));
+  updateBonoCalculation();
+});
+
+// Payment method chips click handler
+document.querySelector("#bono-payment-chips")?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".payment-chip");
+  if (!btn) return;
+  document.querySelectorAll("#bono-payment-chips .payment-chip").forEach((b) => b.classList.remove("is-selected"));
+  btn.classList.add("is-selected");
+  if (bonoPaymentMethod) bonoPaymentMethod.value = btn.dataset.value;
+  updateBonoCalculation();
+});
+
+// Payment status chips click handler
+document.querySelector("#bono-status-chips")?.addEventListener("click", (event) => {
+  const btn = event.target.closest(".payment-chip");
+  if (!btn) return;
+  document.querySelectorAll("#bono-status-chips .payment-chip").forEach((b) => b.classList.remove("is-selected"));
+  btn.classList.add("is-selected");
+  if (bonoPaymentStatus) bonoPaymentStatus.value = btn.dataset.value;
+  updateBonoCalculation();
+});
+
+if (openAddBonoBtn) openAddBonoBtn.addEventListener("click", openAddBonoModal);
+if (openAddBonoTopBtn) openAddBonoTopBtn.addEventListener("click", openAddBonoModal);
+if (closeAddBonoBtn) closeAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
+if (cancelAddBonoBtn) cancelAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
+
+if (bonoServiceSelect) {
+  bonoServiceSelect.addEventListener("change", () => {
+    selectBonoCard(bonoServiceSelect.value);
+  });
+}
+
+if (bonoSessionsInput) bonoSessionsInput.addEventListener("input", updateBonoCalculation);
+if (bonoAmountInput) bonoAmountInput.addEventListener("input", updateBonoCalculation);
+
+if (addBonoForm) {
+  addBonoForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (currentUserRole === "TRAINER") return;
+    if (bonoFormError) bonoFormError.hidden = true;
+    if (!addBonoForm.reportValidity()) return;
+
+    if (!bonoServiceSelect.value) {
+      if (bonoFormError) {
+        bonoFormError.textContent = "Por favor, selecciona un servicio o pack antes de guardar.";
+        bonoFormError.hidden = false;
+      }
+      return;
+    }
+
+    if (saveAddBonoBtn) {
+      saveAddBonoBtn.disabled = true;
+      saveAddBonoBtn.textContent = "Guardando bono…";
+    }
+
+    const payload = {
+      serviceId: bonoServiceSelect.value,
+      sessionsBought: Number(bonoSessionsInput.value),
+      totalAmount: Number(bonoAmountInput.value),
+      paymentMethod: bonoPaymentMethod.value,
+      paymentStatus: bonoPaymentStatus.value,
+      notes: bonoNotesInput?.value.trim() || undefined,
+    };
+
+    try {
+      const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-packages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo añadir el bono al cliente.");
+      }
+      addBonoDialog.close();
+      showProfileToast("Bono añadido al cliente correctamente.");
+      document.querySelector(".client-purchases-section")?.setAttribute("open", "");
+      await loadPurchaseHistory();
+    } catch (error) {
+      if (bonoFormError) {
+        bonoFormError.textContent = error instanceof Error ? error.message : "Error al guardar el bono.";
+        bonoFormError.hidden = false;
+      }
+    } finally {
+      if (saveAddBonoBtn) {
+        saveAddBonoBtn.disabled = false;
+        saveAddBonoBtn.textContent = "Guardar bono";
+      }
+    }
+  });
 }
 
 loadProfile();

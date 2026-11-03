@@ -173,11 +173,14 @@
               ${esc(roleLabel)}
             </span>
             <span class="client-status ${isEnabled ? 'status-ACTIVO' : 'status-INACTIVO'}">
-              ${isEnabled ? 'Activo' : 'Deshabilitado'}
-            </span>
+              ${isEnabled ? 'Activo' : 'Deshabilitado'}</span>
+            ${user.mustChangePassword ? '<span class="badge" style="padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; background:#fff3e0; color:#d97706;">Requiere cambio clave</span>' : ''}
           </div>
           <span class="client-card-center">${user.role === 'CLIENT' ? 'Cuenta de cliente' : 'Cuenta de empleado'}</span>
         </div>
+        <button type="button" class="history-action btn-card-reset-pwd" data-user-id="${esc(user.id)}" data-user-name="${esc(personName)}" title="Restablecer contraseña a Trainerspoint" style="margin-left:auto; margin-right:10px; padding:4px 10px; font-size:11px;">
+          🔑 Restablecer clave
+        </button>
         <span class="card-arrow" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </span>
@@ -265,6 +268,13 @@
       }
     }
 
+    const pwdInput = $('user-password');
+    if (pwdInput) pwdInput.value = '';
+    const mustChangeCb = $('user-must-change-password');
+    if (mustChangeCb) mustChangeCb.checked = true;
+    const pwdFeedback = $('password-feedback');
+    if (pwdFeedback) { pwdFeedback.hidden = true; pwdFeedback.textContent = ''; }
+
     const event = new Event('change');
     $('user-role').dispatchEvent(event);
 
@@ -279,8 +289,7 @@
     try {
       manageData = await api('manage');
       if (manageData.role !== 'ADMIN') {
-        listEl.innerHTML = '<p class="list-message">Solo administración puede gestionar los usuarios.</p>';
-        showToast('Solo administración puede gestionar los usuarios.', true);
+        location.replace('/index.html');
         return;
       }
       updateStats();
@@ -356,6 +365,48 @@
       e.preventDefault();
       const errorEl = $('form-error');
       const submitBtn = $('submit-user');
+
+    // Botón de restablecimiento rápido en el diálogo
+    $('btn-quick-reset-pwd')?.addEventListener('click', () => {
+      const pwdInput = $('user-password');
+      const mustChangeCb = $('user-must-change-password');
+      const pwdFeedback = $('password-feedback');
+      if (pwdInput) pwdInput.value = 'Trainerspoint';
+      if (mustChangeCb) mustChangeCb.checked = true;
+      if (pwdFeedback) {
+        pwdFeedback.textContent = '✓ Contraseña preparada como "Trainerspoint". Guarda para confirmar.';
+        pwdFeedback.hidden = false;
+      }
+    });
+
+    // Botón de restablecimiento rápido directo desde la tarjeta
+    $('user-rows')?.addEventListener('click', async (e) => {
+      const resetBtn = e.target.closest('.btn-card-reset-pwd');
+      if (!resetBtn) return;
+      e.stopPropagation();
+
+      const userId = resetBtn.dataset.userId;
+      const userName = resetBtn.dataset.userName || 'este usuario';
+
+      if (!confirm(`¿Deseas restablecer la contraseña de ${userName} a la contraseña provisional "Trainerspoint"?\n\nEl usuario podrá acceder con ella y se le solicitará cambiarla en su próximo inicio.`)) {
+        return;
+      }
+
+      resetBtn.disabled = true;
+      resetBtn.textContent = 'Restableciendo…';
+
+      try {
+        await api(`manage/users/${encodeURIComponent(userId)}/reset-password`, 'POST');
+        showToast(`Contraseña de ${userName} restablecida a "Trainerspoint".`);
+        await loadData();
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        resetBtn.disabled = false;
+        resetBtn.textContent = '🔑 Restablecer clave';
+      }
+    });
+
       errorEl.hidden = true;
       errorEl.textContent = '';
 
@@ -369,6 +420,8 @@
       const username = form.username.value.trim();
       const enabled = form.enabled.value === 'true';
       const name = role !== 'CLIENT' ? (form.name ? form.name.value.trim() : '') : '';
+      const password = form.password ? form.password.value.trim() : '';
+      const mustChangePassword = form.mustChangePassword ? form.mustChangePassword.checked : true;
       const employeeId = role !== 'CLIENT' ? (form.employeeId ? form.employeeId.value : null) : null;
       const clientId = role === 'CLIENT' ? form.clientId.value : null;
 
@@ -389,6 +442,7 @@
         username,
         enabled,
         ...(name ? { name } : {}),
+        ...(password ? { password, mustChangePassword } : {}),
         ...(role === 'CLIENT' ? { clientId } : (employeeId ? { employeeId } : {})),
       };
 
