@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { CashRegister, cashPermission } from "./cash";
 import { Inventory, inventoryPermission, saleBalance } from "./inventory";
 import { ApiError } from "./calendar/model";
 import { ZodError } from "zod";
@@ -620,6 +621,26 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
     (request as any).identity = identity;
     (request as any).selectedGym = selectedGym;
+  }
+  if (url.pathname.startsWith("/api/cash/")) {
+    try {
+      const actor=(request as any).identity as Identity | undefined;
+      cashPermission(actor);
+      const gym=(request as any).selectedGym as string,cash=new CashRegister(prisma);
+      const session=url.pathname.match(/^\/api\/cash\/sessions\/([0-9a-f-]+)(?:\/(movements|close))?$/i);
+      if(url.pathname==='/api/cash/current'&&request.method==='GET')sendJson(response,200,await cash.current(gym));
+      else if(url.pathname==='/api/cash/sessions'&&request.method==='GET')sendJson(response,200,await cash.history(gym,url.searchParams));
+      else if(url.pathname==='/api/cash/sessions'&&request.method==='POST')sendJson(response,201,await cash.open(gym,actor!,await readJsonBody(request)));
+      else if(session&&request.method==='GET'&&!session[2])sendJson(response,200,await cash.detail(gym,session[1]));
+      else if(session&&request.method==='POST'&&session[2]==='movements')sendJson(response,201,await cash.movement(gym,actor!,session[1],await readJsonBody(request)));
+      else if(session&&request.method==='POST'&&session[2]==='close')sendJson(response,200,await cash.close(gym,actor!,session[1],await readJsonBody(request)));
+      else sendError(response,404,'Operación de caja desconocida.');
+    }catch(error){
+      if(error instanceof ApiError)sendError(response,error.status,error.message);
+      else if(error instanceof ZodError)sendError(response,400,'Revisa los importes, las fechas y el motivo del movimiento.');
+      else throw error;
+    }
+    return;
   }
   if (url.pathname.startsWith("/api/inventory/")) {
     try {
@@ -1806,6 +1827,9 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 }
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
+  "/caja.html": {file:"web/caja.html",contentType:"text/html; charset=utf-8"},
+  "/caja.js": {file:"web/caja.js",contentType:"text/javascript; charset=utf-8"},
+  "/caja.css": {file:"web/caja.css",contentType:"text/css; charset=utf-8"},
   "/": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
   "/index.html": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
   "/inicio.html": { file: "web/inicio.html", contentType: "text/html; charset=utf-8" },

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { DateTime } from 'luxon';
 import { ApiError } from './calendar/model';
+import { cashSessionFor } from './cash';
 import type { Identity } from './calendar/access';
 const productInput=z.object({name:z.string().trim().min(1).max(200),description:z.string().trim().max(2000).default(''),price:z.number().min(0).max(1000000).refine(v=>Math.abs(v*100-Math.round(v*100))<1e-6),stock:z.number().int().min(0).max(1000000),revision:z.number().int().positive().optional()});
 const paymentMethod=z.enum(['EFECTIVO','TARJETA','BIZUM']);
@@ -49,7 +50,8 @@ export class Inventory {
    lines.push({type:'PRODUCTO' as const,productId:p.id,description:p.name,quantity:l.quantity,unitPrice:p.unitPrice,taxRate:0,lineSubtotal:amount/100,taxAmount:0,lineTotal:amount/100});
   }
   if(total>999999999999)throw new ApiError(400,'El importe de la venta supera el máximo permitido.');
-  const sale=await tx.sale.create({data:{paymentTracking:true,requestFingerprint:fingerprint,gymKey:gym,requestKey:v.requestKey,sellerAccountId:actor,clientId:v.clientId,status:'COMPLETADA',soldAt:new Date(),subtotal:total/100,taxAmount:0,totalAmount:total/100,lines:{create:lines},...(v.paymentMode==='PAID'&&total>0?{payments:{create:{requestKey:v.requestKey,actorAccountId:actor,method:v.paymentMethod,status:'PAGADO',amount:total/100,paidAt:new Date()}}}:{})},include:{lines:true,payments:true}});
+  const cashSessionId=await cashSessionFor(tx,gym);
+  const sale=await tx.sale.create({data:{cashSessionId,paymentTracking:true,requestFingerprint:fingerprint,gymKey:gym,requestKey:v.requestKey,sellerAccountId:actor,clientId:v.clientId,status:'COMPLETADA',soldAt:new Date(),subtotal:total/100,taxAmount:0,totalAmount:total/100,lines:{create:lines},...(v.paymentMode==='PAID'&&total>0?{payments:{create:{cashSessionId,requestKey:v.requestKey,actorAccountId:actor,method:v.paymentMethod,status:'PAGADO',amount:total/100,paidAt:new Date()}}}:{})},include:{lines:true,payments:true}});
   for(const l of v.lines){await tx.product.update({where:{id:l.productId},data:{stock:{decrement:l.quantity},revision:{increment:1}}});await tx.stockMovement.create({data:{productId:l.productId,type:'VENTA',quantity:-l.quantity,reference:sale.id}});}
   return saleBalance(sale);
  });}
@@ -62,7 +64,8 @@ export class Inventory {
   for(const item of items){const line=sale.lines.find(l=>l.id===item.lineId);if(!line?.productId||item.quantity>Number(line.quantity)-line.returnedQuantity)throw new ApiError(409,'La devolución supera las unidades pendientes.');
    await tx.saleLine.update({where:{id:line.id},data:{returnedQuantity:{increment:item.quantity}}});if(!('restock' in item)||item.restock){await tx.product.update({where:{id:line.productId},data:{stock:{increment:item.quantity},revision:{increment:1}}});await tx.stockMovement.create({data:{productId:line.productId,type:'DEVOLUCION',quantity:item.quantity,reference:sale.id,notes:cancel?'Anulación de venta':requested!.reason}});}
   }
-  const lines=await tx.saleLine.findMany({where:{saleId:id}});return saleBalance(await tx.sale.update({where:{id},data:{returnHistory:[...(Array.isArray(sale.returnHistory)?sale.returnHistory:[]),{at:new Date().toISOString(),actor,reason:cancel?'Anulación de venta':requested!.reason,requestKey:requested?.requestKey||null,lines:items}],...(!cancel?{returnKeys:{push:requested!.requestKey}}:{}),status:cancel?'CANCELADA':lines.every(l=>l.returnedQuantity===Number(l.quantity))?'REEMBOLSADA':'COMPLETADA'},include:{lines:true,payments:true}}));
+  const cashSessionId=await cashSessionFor(tx,gym);
+  const lines=await tx.saleLine.findMany({where:{saleId:id}});return saleBalance(await tx.sale.update({where:{id},data:{returnHistory:[...(Array.isArray(sale.returnHistory)?sale.returnHistory:[]),{cashSessionId,at:new Date().toISOString(),actor,reason:cancel?'Anulación de venta':requested!.reason,requestKey:requested?.requestKey||null,lines:items}],...(!cancel?{returnKeys:{push:requested!.requestKey}}:{}),status:cancel?'CANCELADA':lines.every(l=>l.returnedQuantity===Number(l.quantity))?'REEMBOLSADA':'COMPLETADA'},include:{lines:true,payments:true}}));
  });}
  private salesFilters(q:URLSearchParams) {
   const validDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>DateTime.fromISO(v).isValid);
@@ -94,7 +97,8 @@ export class Inventory {
    }
    if(!sale.clientId||(!sale.paymentTracking&&sale.payments.length===0)||sale.status!=='COMPLETADA')throw new ApiError(409,'Esta venta no admite cobros pendientes.');
    if(cents(v.amount)>cents(saleBalance(sale).outstandingAmount))throw new ApiError(409,'El pago supera el importe pendiente. Actualiza el saldo.');
-   await tx.payment.create({data:{saleId:id,requestKey:v.requestKey,actorAccountId:actor,method:v.method,status:'PAGADO',amount:v.amount,paidAt:v.paidAt?new Date(v.paidAt):new Date(),note:v.note}});
+   const cashSessionId=await cashSessionFor(tx,gym,v.paidAt?new Date(v.paidAt):new Date());
+   await tx.payment.create({data:{cashSessionId,saleId:id,requestKey:v.requestKey,actorAccountId:actor,method:v.method,status:'PAGADO',amount:v.amount,paidAt:v.paidAt?new Date(v.paidAt):new Date(),note:v.note}});
    return saleBalance(await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}}));
   });
  }
@@ -112,7 +116,7 @@ export class Inventory {
    }
    if(sale.paymentTracking||sale.payments.length||sale.status!=='COMPLETADA')throw new ApiError(409,'Esta venta ya está verificada o no admite esta confirmación. Actualiza el historial.');
    if(cents(v.amount)!==cents(saleBalance(sale).netAmount))throw new ApiError(409,'El importe de la venta ha cambiado. Actualiza antes de verificar.');
-   await tx.payment.create({data:{saleId:id,requestKey:v.requestKey,actorAccountId:actor,method:v.method,status:'PAGADO',amount:v.amount,paidAt:new Date(v.paidAt!),note:v.note}});
+   await tx.payment.create({data:{saleId:id,requestKey:v.requestKey,actorAccountId:actor,historicalVerification:true,method:v.method,status:'PAGADO',amount:v.amount,paidAt:new Date(v.paidAt!),note:v.note}});
    return saleBalance(await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}}));
   });
  }
@@ -128,7 +132,8 @@ export class Inventory {
     return saleBalance(sale);
    }
    if(cents(v.amount)>cents(saleBalance(sale).refundDue))throw new ApiError(409,'El importe supera el dinero pendiente de devolver.');
-   await tx.payment.create({data:{saleId:id,requestKey:v.requestKey,actorAccountId:actor,kind:'REFUND',method:v.method,status:'PAGADO',amount:v.amount,paidAt:v.paidAt?new Date(v.paidAt):new Date(),note:v.note}});
+   const cashSessionId=await cashSessionFor(tx,gym,v.paidAt?new Date(v.paidAt):new Date());
+   await tx.payment.create({data:{cashSessionId,saleId:id,requestKey:v.requestKey,actorAccountId:actor,kind:'REFUND',method:v.method,status:'PAGADO',amount:v.amount,paidAt:v.paidAt?new Date(v.paidAt):new Date(),note:v.note}});
    return saleBalance(await tx.sale.findUniqueOrThrow({where:{id},include:{lines:true,payments:true}}));
   });
  }

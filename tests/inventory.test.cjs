@@ -116,6 +116,7 @@ test('API completa: registrar deuda, cobrar en recepción y consultar la ficha d
   const login=await access.login(gym.id,{username:'desk',password:'Trainerspoint'});
   await access.changePassword(gym.id,login.token,{currentPassword:'Trainerspoint',newPassword:'Reception-test-password-123',confirmPassword:'Reception-test-password-123'});
   headers.Authorization='Bearer '+login.token;
+  const drawer=await request('cash/sessions','POST',{requestKey:randomUUID(),openingAmount:100});assert.equal(drawer.status,201,JSON.stringify(drawer.data));
   assert.equal((await request('inventory/products','POST',{name:'No autorizado',price:2,stock:1})).status,403);
   const sale=await request('inventory/sales','POST',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:created.data.id,quantity:1}]});assert.equal(sale.status,201,JSON.stringify(sale.data));
   let history=await request('clients/'+client.id+'/service-history');assert.equal(history.status,200,JSON.stringify(history.data));assert.equal(history.data.debt[0].amount,24);assert.equal(history.data.sales[0].paymentStatus,'PENDIENTE');
@@ -139,6 +140,17 @@ test('API completa: registrar deuda, cobrar en recepción y consultar la ficha d
   document.querySelector('[data-verify]').click();document.getElementById('payment-note').value='Justificante del cobro revisado';document.getElementById('payment-confirm').checked=true;document.getElementById('payment-form').requestSubmit(document.getElementById('confirm-payment'));
   await until(()=>!document.querySelector('[data-verify]'));
   assert.equal(await db.payment.count({where:{saleId:legacy.id,status:'PAGADO'}}),1);
+  dom.window.close();
+  dom=await JSDOM.fromURL(base+'/caja.html',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.sessionStorage.setItem('calendar-user-token',headers.Authorization.slice(7));w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};}});
+  const cashDoc=dom.window.document;await until(()=>cashDoc.getElementById('expected-amount').textContent.includes('105'));
+  assert.match(cashDoc.getElementById('cash-payments').textContent,/Efectivo/);assert.match(cashDoc.getElementById('cash-payments').textContent,/Bizum/);
+  cashDoc.getElementById('add-movement').click();cashDoc.getElementById('movement-type').value='WITHDRAWAL';cashDoc.getElementById('movement-amount').value='10';cashDoc.getElementById('movement-reason').value='Retirada para ingreso';cashDoc.getElementById('movement-form').requestSubmit(cashDoc.querySelector('#movement-form .primary'));
+  await until(()=>cashDoc.getElementById('expected-amount').textContent.includes('95'));
+  cashDoc.getElementById('close-cash').click();await until(()=>cashDoc.getElementById('close-dialog').open);
+  cashDoc.getElementById('counted-amount').value='94';cashDoc.getElementById('close-note').value='Diferencia en el cambio';cashDoc.getElementById('close-form').requestSubmit(cashDoc.querySelector('#close-form .primary'));
+  await until(()=>cashDoc.getElementById('session-state').textContent==='Cerrada');assert.match(cashDoc.getElementById('closing-result').textContent,/Falta dinero/);
+  const closedDrawer=await request('cash/sessions/'+drawer.data.id);assert.equal(Number(closedDrawer.data.difference),-1);assert.equal(closedDrawer.data.closedByName,'Recepción de prueba');
+  assert.equal((await request('cash/sessions')).data.sessions[0].collectedAmount,24);
   assert.equal((await fetch(base+'/api/inventory/sales/'+sale.data.id+'/payments',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  }finally{dom?.window.close();child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
 });
@@ -169,4 +181,79 @@ test('Ventas antiguas: recepción verifica una vez el pago con fecha, método y 
  await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,requestKey:randomUUID()}),/ya está verificada/);
  await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,note:'Otro justificante'}),/ya utilizado/);
  await assert.rejects(inventory.verifyPaid(gym,'desk',sale.id,{...input,paidAt:'2099-01-01T00:00:00.000Z'}));
+});
+
+test('Caja: ejemplo 100 inicial + 75 efectivo + 120 tarjeta = 175 en el cajón',async()=>{
+ const {CashRegister}=require('../dist/cash'),cash=new CashRegister(db),gym=randomUUID(),actor={id:'desk',name:'Recepción Uno',role:'RECEPTION'};
+ const opened=await cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:100});
+ const p=await inventory.saveProduct(gym,{name:'Compra',price:15,stock:30});
+ await inventory.sell(gym,actor.id,{requestKey:randomUUID(),clientId:null,paymentMethod:'EFECTIVO',lines:[{productId:p.id,quantity:5}]});
+ await inventory.sell(gym,actor.id,{requestKey:randomUUID(),clientId:null,paymentMethod:'TARJETA',lines:[{productId:p.id,quantity:8}]});
+ const current=(await cash.current(gym)).session;
+ assert.equal(current.summary.expectedCash,175);assert.equal(current.summary.collections.TARJETA,120);assert.equal(current.summary.soldTotal,195);assert.equal(current.summary.collections.EFECTIVO,75);
+ assert.equal(current.summary.debtCollections.EFECTIVO,0);assert.equal(current.summary.sales.length,2);assert.equal(current.openedByName,'Recepción Uno');assert.equal(current.id,opened.id);
+ const closed=await cash.close(gym,actor,current.id,{requestKey:randomUUID(),revision:current.revision,countedAmount:174,note:'Diferencia de cambio'});
+ assert.equal(Number(closed.difference),-1);assert.equal(closed.closedBy,'desk');assert.equal(closed.summary.expectedCash,175);
+});
+
+test('Caja: cobrar deudas anteriores por método, pendiente no es cobro, Bizum separado',async()=>{
+ const {CashRegister}=require('../dist/cash'),cash=new CashRegister(db),gym=await db.gym.create({data:{name:randomUUID()}}),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ const client=await db.client.create({data:{firstName:'Ana',lastName:'Caja',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}}),p=await inventory.saveProduct(gym.id,{name:'Producto',price:100,stock:5});
+ const old=await inventory.sell(gym.id,'desk',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity:1}]});
+ await cash.open(gym.id,actor,{requestKey:randomUUID(),openingAmount:100});
+ await inventory.pay(gym.id,'desk',old.id,{requestKey:randomUUID(),amount:30,method:'EFECTIVO'});
+ await inventory.pay(gym.id,'desk',old.id,{requestKey:randomUUID(),amount:40,method:'TARJETA'});
+ await inventory.sell(gym.id,'desk',{requestKey:randomUUID(),clientId:client.id,paymentMode:'PENDING',lines:[{productId:p.id,quantity:1}]});
+ await inventory.sell(gym.id,'desk',{requestKey:randomUUID(),clientId:null,paymentMethod:'BIZUM',lines:[{productId:p.id,quantity:1}]});
+ const summary=(await cash.current(gym.id)).session.summary;
+ assert.equal(summary.expectedCash,130);assert.equal(summary.collections.TARJETA,40);assert.equal(summary.collections.BIZUM,100);
+ assert.equal(summary.debtCollections.EFECTIVO,30);assert.equal(summary.debtCollections.TARJETA,40);assert.equal(summary.soldTotal,200);assert.equal(summary.payments.length,3);
+ const legacy=await db.sale.create({data:{gymKey:gym.id,status:'COMPLETADA',subtotal:20,taxAmount:0,totalAmount:20}});
+ await inventory.verifyPaid(gym.id,'desk',legacy.id,{requestKey:randomUUID(),amount:20,method:'EFECTIVO',paidAt:new Date(Date.now()-1000).toISOString(),note:'Justificante antiguo revisado'});
+ assert.equal((await cash.current(gym.id)).session.summary.expectedCash,130);
+});
+
+test('Caja: apertura única, movimientos idempotentes y cierre exige revisar operaciones nuevas',async()=>{
+ const {CashRegister,cashPermission}=require('../dist/cash'),cash=new CashRegister(db),gym=randomUUID(),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ const opened=await Promise.allSettled([cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:100}),cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:100})]);
+ assert.equal(opened.filter(r=>r.status==='fulfilled').length,1);let session=(await cash.current(gym)).session;
+ const input={requestKey:randomUUID(),direction:'IN',category:'CHANGE',amount:20,reason:'Añadir cambio'};
+ await cash.movement(gym,actor,session.id,input);await cash.movement(gym,actor,session.id,input);
+ await assert.rejects(cash.movement(gym,actor,session.id,{...input,amount:30}),/ya utilizado/);
+ await assert.rejects(cash.close(gym,actor,session.id,{requestKey:randomUUID(),revision:session.revision,countedAmount:120}),/operaciones nuevas/);
+ await cash.movement(gym,actor,session.id,{requestKey:randomUUID(),direction:'OUT',category:'WITHDRAWAL',amount:10,reason:'Retirada para ingreso'});
+ session=(await cash.current(gym)).session;assert.equal(session.summary.expectedCash,110);
+ const close={requestKey:randomUUID(),revision:session.revision,countedAmount:112,note:'Sobran dos euros'};
+ const closed=await cash.close(gym,actor,session.id,close);assert.equal(Number(closed.difference),2);
+ assert.equal((await cash.close(gym,actor,session.id,close)).id,closed.id);
+ await assert.rejects(cash.movement(gym,actor,session.id,{...input,requestKey:randomUUID()}),/cerrada/);
+ await assert.rejects(cash.detail(randomUUID(),session.id),/desconocida/);
+ assert.equal((await cash.current(gym)).session,null);
+ const history=await cash.history(gym,new URLSearchParams());assert.equal(history.sessions[0].id,closed.id);assert.equal('summary' in history.sessions[0],false);
+ assert.throws(()=>cashPermission({role:'TRAINER'}),/recepción/);assert.throws(()=>cashPermission({role:'CLIENT'}),/recepción/);assert.doesNotThrow(()=>cashPermission(actor));
+});
+
+test('Caja: devoluciones en caja posterior no cambian el cierre anterior',async()=>{
+ const {CashRegister}=require('../dist/cash'),cash=new CashRegister(db),gym=randomUUID(),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ await cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:100});
+ const p=await inventory.saveProduct(gym,{name:'Toalla',price:20,stock:5});
+ const sale=await inventory.sell(gym,'desk',{requestKey:randomUUID(),clientId:null,paymentMethod:'EFECTIVO',lines:[{productId:p.id,quantity:2}]});
+ let session=(await cash.current(gym)).session;
+ const first=await cash.close(gym,actor,session.id,{requestKey:randomUUID(),revision:session.revision,countedAmount:140});
+ await cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:140});
+ await inventory.reverse(gym,sale.id,{requestKey:randomUUID(),reason:'Cambio solicitado',lines:[{lineId:sale.lines[0].id,quantity:1}]},false,'desk');
+ let summary=(await cash.current(gym)).session.summary;assert.equal(summary.expectedCash,140);assert.equal(summary.returnsTotal,20);assert.equal(summary.soldTotal,0);
+ await inventory.refund(gym,'desk',sale.id,{requestKey:randomUUID(),amount:20,method:'EFECTIVO',note:'Dinero entregado al cliente'});
+ summary=(await cash.current(gym)).session.summary;assert.equal(summary.expectedCash,120);assert.equal(summary.refunds.EFECTIVO,20);
+ assert.deepEqual((await cash.detail(gym,first.id)).summary,first.summary);
+});
+
+test('Caja: operaciones sin caja se conservan sin atribuirlas después a una apertura',async()=>{
+ const {CashRegister}=require('../dist/cash'),cash=new CashRegister(db),gym=randomUUID(),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ const p=await inventory.saveProduct(gym,{name:'Agua',price:5,stock:5});
+ await inventory.sell(gym,'desk',{requestKey:randomUUID(),clientId:null,paymentMethod:'EFECTIVO',lines:[{productId:p.id,quantity:1}]});
+ assert.equal((await cash.current(gym)).unassignedPayments,1);
+ await cash.open(gym,actor,{requestKey:randomUUID(),openingAmount:105});
+ assert.equal((await cash.current(gym)).session.summary.expectedCash,105);
+ assert.equal((await cash.current(gym)).session.summary.collections.EFECTIVO,0);
 });

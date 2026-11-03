@@ -479,6 +479,8 @@ model StockMovement {
 }
 
 model Sale {
+  cashSessionId String? @db.Uuid
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
   returnHistory Json @default("[]") @db.JsonB
   paymentTracking  Boolean    @default(false)
   requestFingerprint String?
@@ -503,6 +505,7 @@ model Sale {
   payments         Payment[]
   invoice          Invoice?
 
+  @@index([cashSessionId])
   @@index([gymKey, soldAt])
   @@index([status, soldAt])
   @@index([clientId, soldAt])
@@ -532,6 +535,9 @@ model SaleLine {
 }
 
 model Payment {
+  cashSessionId String? @db.Uuid
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  historicalVerification Boolean @default(false)
   kind String @default("COLLECTION")
   note String?
   requestKey String? @unique
@@ -546,6 +552,7 @@ model Payment {
   createdAt DateTime      @default(now()) @db.Timestamptz(3)
   sale      Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
 
+  @@index([cashSessionId])
   @@index([saleId, status])
 }
 
@@ -601,4 +608,45 @@ model AuditLog {
 
   @@index([actorId, occurredAt])
   @@index([entityType, entityId, occurredAt])
+}
+
+
+model CashSession {
+  id String @id @default(uuid()) @db.Uuid
+  gymKey String
+  businessDate String @db.VarChar(10)
+  openedAt DateTime @default(now()) @db.Timestamptz(3)
+  openedBy String
+  openedByName String
+  openingAmount Decimal @db.Decimal(12, 2)
+  closedAt DateTime? @db.Timestamptz(3)
+  closedBy String?
+  closedByName String?
+  countedAmount Decimal? @db.Decimal(12, 2)
+  expectedAmount Decimal? @db.Decimal(12, 2)
+  difference Decimal? @db.Decimal(12, 2)
+  closingNote String?
+  revision Int @default(1)
+  requestKey String @unique
+  closeRequestKey String? @unique
+  summary Json? @db.JsonB
+  sales Sale[]
+  payments Payment[]
+  movements CashMovement[]
+  @@index([gymKey, openedAt])
+}
+
+model CashMovement {
+  id String @id @default(uuid()) @db.Uuid
+  sessionId String @db.Uuid
+  session CashSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  direction String
+  category String
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  actorId String
+  actorName String
+  @@index([sessionId, createdAt])
 }
