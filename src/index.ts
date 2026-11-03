@@ -2032,7 +2032,7 @@ async function start(): Promise<void> {
       address: "Trainers Point · Bizkaia",
     },
   };
-  await store.seed(gym, initialCalendarConfig);
+  if (!deployment.production) await store.seed(gym, initialCalendarConfig);
   if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {
     if (process.env.NODE_ENV === "production")
       throw new Error("No se permite activar la cuenta provisional admin/admin en producción.");

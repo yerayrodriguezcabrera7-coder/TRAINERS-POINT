@@ -335,7 +335,8 @@ test('Copias: guardar y restaurar PostgreSQL recupera clientes y bonos sin mostr
  }finally{await pool.query('DROP DATABASE restore_proof');}
 });
 
-test('Servidor en producción: arranca con dominio configurado y nunca publica la clave de administración',async()=>{
+test('Servidor en producción: arranca sin datos ficticios y nunca publica la clave de administración',async()=>{
+ const seededBefore=await pool.query('SELECT id,config FROM calendar.gyms ORDER BY id');
  const {spawn}=require('node:child_process'),net=require('node:net');const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
  const opts=pool.options,url=`postgresql://postgres:${opts.password}@127.0.0.1:${opts.port}/postgres`,secret=randomUUID()+randomUUID();
  const child=spawn(process.execPath,['dist/index.js'],{env:{...process.env,NODE_ENV:'production',PUBLIC_ORIGIN:'https://gym.example',HOST:'127.0.0.1',PORT:String(port),DATABASE_URL:url,CALENDAR_DATABASE_URL:url,CALENDAR_ADMIN_TOKEN:secret,TRAINERS_POINT_DEV_ADMIN:'false'},stdio:['ignore','pipe','pipe']});let log='';child.stderr.on('data',b=>log+=b);child.stdout.resume();
@@ -344,6 +345,7 @@ test('Servidor en producción: arranca con dominio configurado y nunca publica l
  assert.equal((await fetch(`http://127.0.0.1:${port}/api/manage`)).status,401);
  const hostRequest=host=>new Promise((resolve,reject)=>{require('node:http').get({host:'127.0.0.1',port,path:'/api/health',headers:{Host:host}},r=>{r.resume();resolve(r.statusCode);}).on('error',reject);});
  assert.equal(await hostRequest('malicious.example'),403);assert.equal(await hostRequest('gym.example'),200);
+ assert.deepEqual((await pool.query('SELECT id,config FROM calendar.gyms ORDER BY id')).rows,seededBefore.rows);
  }finally{child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
 });
 
