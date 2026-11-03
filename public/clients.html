@@ -338,40 +338,89 @@
             <p class="history-empty">Cargando historial…</p>
           </div>
           <form id="purchase-form" class="purchase-form">
-            <h3>Añadir sesiones</h3>
+            <div class="purchase-form-header">
+              <h3>Añadir bono / sesiones al cliente</h3>
+              <p>Selecciona un servicio para asignar los entrenamientos correspondientes.</p>
+            </div>
+            
+            <div class="bono-cards-section">
+              <span class="bono-section-label">1. Elige el bono o pack</span>
+              <div id="purchase-cards-grid" class="bono-cards-grid">
+                <p class="bono-cards-loading">Cargando catálogo de bonos…</p>
+              </div>
+            </div>
+
             <div class="form-grid">
-              <label class="form-field form-field-wide">
+              <label class="form-field form-field-wide" style="display:none">
                 <span>Servicio <b>*</b></span>
                 <select name="serviceId" id="purchase-service" required>
                   <option value="">Selecciona un servicio</option>
                 </select>
               </label>
+              <div id="purchase-calc-callout" class="form-field form-field-wide bono-calc-callout" hidden>
+                <div class="bono-calc-chip"><span class="bono-calc-chip-label">Precio/sesión:</span><strong id="purchase-calc-rate">—</strong></div>
+                <div class="bono-calc-chip"><span class="bono-calc-chip-label">Duración:</span><strong id="purchase-calc-duration">—</strong></div>
+                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong>4 semanas solo</strong></div>
+              </div>
               <label class="form-field">
                 <span>Sesiones incluidas <b>*</b></span>
-                <input name="sessionsBought" type="number" min="1" max="500" step="1" required value="1">
+                <div class="bono-stepper">
+                  <button type="button" class="bono-step-btn" data-step="-1" aria-label="Restar una sesión">−</button>
+                  <input name="sessionsBought" type="number" min="1" max="500" step="1" required value="1">
+                  <button type="button" class="bono-step-btn" data-step="1" aria-label="Sumar una sesión">+</button>
+                </div>
               </label>
               <label class="form-field">
                 <span>Importe total (€) <b>*</b></span>
                 <input name="totalAmount" type="number" min="0" max="9999999999.99" step="0.01" required placeholder="0,00">
               </label>
-              <label class="form-field">
-                <span>Forma de pago <b>*</b></span>
-                <select name="paymentMethod" required>
-                  <option value="TARJETA">Tarjeta</option>
+              
+              <div class="form-field form-field-wide bono-choice-section">
+                <span class="bono-field-title">Forma de pago <b>*</b></span>
+                <div id="purchase-payment-chips" class="payment-chips-group">
+                  <button type="button" class="payment-chip is-selected" data-value="TARJETA">💳 Tarjeta</button>
+                  <button type="button" class="payment-chip" data-value="EFECTIVO">💵 Efectivo</button>
+                  <button type="button" class="payment-chip" data-value="TRANSFERENCIA">🏦 Transferencia</button>
+                  <button type="button" class="payment-chip" data-value="OTRO">⋯ Otro</button>
+                </div>
+                <select name="paymentMethod" required style="display:none">
+                  <option value="TARJETA" selected>Tarjeta</option>
                   <option value="EFECTIVO">Efectivo</option>
                   <option value="TRANSFERENCIA">Transferencia</option>
                   <option value="OTRO">Otro</option>
                 </select>
-              </label>
-              <label class="form-field">
-                <span>Estado del pago <b>*</b></span>
-                <select name="paymentStatus" required>
-                  <option value="PAGADO">Pagado</option>
+              </div>
+
+              <div class="form-field form-field-wide bono-choice-section">
+                <span class="bono-field-title">Estado del cobro <b>*</b></span>
+                <div id="purchase-status-chips" class="payment-chips-group">
+                  <button type="button" class="payment-chip is-selected status-pagado" data-value="PAGADO"><span class="chip-dot dot-pagado"></span>Cobrado / Pagado</button>
+                  <button type="button" class="payment-chip status-pendiente" data-value="PENDIENTE"><span class="chip-dot dot-pendiente"></span>Pendiente (Añadir a deuda)</button>
+                </div>
+                <select name="paymentStatus" required style="display:none">
+                  <option value="PAGADO" selected>Pagado</option>
                   <option value="PENDIENTE">Pendiente</option>
                   <option value="FALLIDO">Fallido</option>
                   <option value="REEMBOLSADO">Reembolsado</option>
                 </select>
-              </label>
+              </div>
+
+              <div id="purchase-ticket-preview" class="form-field-wide bono-ticket-preview" hidden>
+                <div class="ticket-left">
+                  <span class="ticket-eyebrow">RESUMEN DEL BONO</span>
+                  <h3 id="purchase-ticket-service" class="ticket-title">Selecciona un pack</h3>
+                  <div class="ticket-tags">
+                    <span id="purchase-ticket-duration" class="ticket-tag">60 min</span>
+                    <span class="ticket-tag ticket-tag-validity">4 semanas solo</span>
+                  </div>
+                </div>
+                <div class="ticket-right">
+                  <span class="ticket-price-label">IMPORTE TOTAL</span>
+                  <strong id="purchase-ticket-total" class="ticket-price">0,00 €</strong>
+                  <span id="purchase-ticket-rate" class="ticket-rate">— €/sesión</span>
+                </div>
+              </div>
+
               <label class="form-field form-field-wide">
                 <span>Notas</span>
                 <input name="notes" maxlength="1000" placeholder="Opcional">
