@@ -118,6 +118,15 @@ export function server(
               users: admin ? await access.list(gym,s.clients) : [],
             }); return;
           }
+                    const resetMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/reset-password$/);
+          if (resetMatch && req.method === "POST") {
+            if (!admin) throw new ApiError(403, "Solo administración puede restablecer contraseñas.");
+            const userId = decodeURIComponent(resetMatch[1]);
+            const raw = await body(req).catch(() => ({}));
+            const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined);
+            send(res, 200, result);
+            return;
+          }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
             if (management[1] === "users" && !admin) throw new ApiError(403,"Solo administración puede gestionar usuarios.");

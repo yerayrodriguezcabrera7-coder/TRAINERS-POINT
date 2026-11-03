@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -472,4 +473,103 @@ test('Clientes y Bonos: Directorio de clientes incluye botón de asignación rá
   assert.ok(clientsJs.includes('updatePurchaseCallout'), 'Debe recalcular valores y tasa por sesión');
   assert.ok(clientsHtml.includes('purchase-calc-callout'), 'Debe contener bloque visual con duración y 4 semanas de validez');
   assert.ok(clientsHtml.includes('4 semanas solo'), 'Debe reflejar la validez fija de 4 semanas');
+});
+
+
+test('Seguridad y Accesos: Administrador puede cambiar o restablecer la contraseña de un entrenador si se le olvida', async () => {
+  const { Access, initialPassword } = require('../dist/calendar/access.js');
+  const { Pool } = require('pg');
+  const connectionString = process.env.CALENDAR_DATABASE_URL || process.env.DATABASE_URL || process.env.CALENDAR_DB;
+  const pool = new Pool({
+    connectionString,
+  });
+
+  const access = new Access(pool);
+
+  // Crear un gimnasio de prueba en el esquema calendar si no existe
+  const gymId = 'gym-pwd-test';
+  await pool.query(
+    `INSERT INTO calendar.gyms(id, name, config) 
+     VALUES($1, 'Gym Password Test', '{"employees":[{"id":"emp-pwd-1","name":"Carlos Entrenador","active":true,"jobTitle":"Entrenador"}],"clients":[]}')
+     ON CONFLICT(id) DO NOTHING`,
+    [gymId]
+  );
+
+  // Crear un administrador primero (requerido como primera cuenta del gimnasio)
+  const adminRes = await access.save(gymId, {
+    username: `admin.pwd.${Date.now()}`,
+    name: 'Admin Principal',
+    role: 'ADMIN',
+    enabled: true,
+  });
+  assert.ok(adminRes.id, 'Debe crear la cuenta inicial de administrador');
+
+  // Crear un usuario entrenador con contraseña inicial
+  const username = `carlos.trainer.${Date.now()}`;
+  const saveRes = await access.save(gymId, {
+    username,
+    role: 'TRAINER',
+    name: 'Carlos Entrenador',
+    employeeId: 'emp-pwd-1',
+    enabled: true,
+  });
+  assert.ok(saveRes.id, 'Debe crear el usuario');
+
+  // El entrenador inicia sesión por primera vez con contraseña inicial Trainerspoint
+  const firstLogin = await access.login(gymId, { username, password: initialPassword });
+  assert.ok(firstLogin.token);
+  assert.equal(firstLogin.mustChangePassword, true);
+
+  // El entrenador cambia su contraseña a una personal
+  await access.changePassword(gymId, firstLogin.token, {
+    currentPassword: initialPassword,
+    newPassword: 'Mi-Password-Super-Segura-1234',
+    confirmPassword: 'Mi-Password-Super-Segura-1234',
+  });
+
+  // Supongamos que el entrenador olvida su contraseña.
+  // El administrador restablece la contraseña del entrenador a la temporal Trainerspoint
+  const resetRes = await access.adminResetPassword(gymId, saveRes.id);
+  assert.ok(resetRes.ok);
+  assert.equal(resetRes.temporaryPassword, initialPassword);
+  assert.equal(resetRes.mustChangePassword, true);
+
+  // El entrenador ahora puede volver a entrar con la contraseña temporal Trainerspoint
+  const afterResetLogin = await access.login(gymId, { username, password: initialPassword });
+  assert.ok(afterResetLogin.token);
+  assert.equal(afterResetLogin.mustChangePassword, true);
+
+  // El administrador también puede establecerle directamente una nueva contraseña específica
+  const customPass = 'NuevaClaveTemporal2026';
+  await access.adminResetPassword(gymId, saveRes.id, customPass);
+
+  const customLogin = await access.login(gymId, { username, password: customPass });
+  assert.ok(customLogin.token);
+  assert.equal(customLogin.mustChangePassword, true);
+
+  // Limpiar
+  await pool.query('DELETE FROM calendar.sessions WHERE user_id IN (SELECT id FROM calendar.users WHERE gym_id=$1)', [gymId]);
+  await pool.query('DELETE FROM calendar.users WHERE gym_id=$1', [gymId]);
+  await pool.query('DELETE FROM calendar.gyms WHERE id=$1', [gymId]);
+  await pool.end();
+});
+
+test('Interfaz de Usuarios y Profesionales: Elementos para cambio y restablecimiento de contraseña de entrenadores', () => {
+  const usersHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.html'), 'utf8');
+  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.js'), 'utf8');
+  const profHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.html'), 'utf8');
+  const profJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.js'), 'utf8');
+
+  // En gestión de usuarios (users.html y users.js)
+  assert.ok(usersHtml.includes('id="user-password-box"'), 'Debe incluir caja de gestión de contraseña');
+  assert.ok(usersHtml.includes('id="btn-quick-reset-pwd"'), 'Debe incluir botón de restablecer a Trainerspoint');
+  assert.ok(usersHtml.includes('id="user-password"'), 'Debe incluir campo para nueva contraseña');
+  assert.ok(usersJs.includes('btn-card-reset-pwd'), 'Debe incluir botón de restablecer clave en tarjetas de usuario');
+  assert.ok(usersJs.includes('reset-password'), 'Debe conectar con endpoint reset-password');
+
+  // En gestión de profesionales (professionals.html y professionals.js)
+  assert.ok(profHtml.includes('id="prof-user-account-box"'), 'Debe incluir bloque de cuenta de usuario en ficha de profesional');
+  assert.ok(profHtml.includes('id="prof-btn-reset-pwd"'), 'Debe incluir botón de restablecer contraseña de entrenador');
+  assert.ok(profJs.includes('prof-btn-reset-pwd'), 'Debe incluir manejador para restablecer contraseña del profesional');
+  assert.ok(profJs.includes('reset-password'), 'Debe llamar al endpoint de reseteo de contraseña');
 });
