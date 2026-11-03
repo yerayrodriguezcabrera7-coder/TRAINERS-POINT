@@ -49,8 +49,12 @@ Todas las pantallas usan un unico menu.
 
 - npm start: compilacion y arranque unico.
 - npm run dev: desarrollo con recarga.
-- npm test: pruebas del calendario.
+- npm test: pruebas de reservas, permisos, productos, bonos, cobros, Caja y puesta en marcha.
 - npm run db:test: comprueba la conexión configurada en `DATABASE_URL`.
 - npm run prisma:generate: genera el cliente Prisma.
 
 El directorio `.calendar-dev/` contiene la base local persistente y sus credenciales; no lo borres si quieres conservar los datos locales.
+
+## Puesta en marcha en la empresa
+
+La [guía de puesta en marcha](docs/puesta-en-marcha.md) explica la instalación con HTTPS, la primera cuenta de administración, las copias de seguridad y una jornada de prueba con el tutor. Los cobros actuales registran dinero recibido; los cargos bancarios online necesitan un proveedor y credenciales de la empresa.

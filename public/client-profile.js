@@ -190,12 +190,18 @@ function renderPurchaseHistory(data) {
     amount.textContent = currencyText(pkg.totalAmount, "EUR");
     footer.append(metaLeft, amount);
 
+    if(pkg.sale){const balance=document.createElement('p');balance.textContent=`Cobrado: ${currencyText(pkg.sale.paidAmount)} · Pendiente: ${currencyText(pkg.sale.outstandingAmount)}`;footer.append(balance);}
+    if(currentUserRole!=='TRAINER'&&pkg.paymentStatus!=='PAGADO'){
+      const pay=document.createElement('button');pay.type='button';pay.className='profile-secondary-button';pay.textContent='Registrar pago del bono';
+      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/productos.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
+      footer.append(pay);
+    }
     card.append(header, progressWrap, footer);
     purchaseHistory.append(card);
   });
 
   // Sales (if any)
-  sales.forEach((sale) => {
+  sales.filter(sale=>!packages.some(pkg=>pkg.saleId===sale.id)).forEach((sale) => {
     const item = document.createElement("article");
     item.className = "client-history-item";
     const details = document.createElement("div");
@@ -968,7 +974,9 @@ if (addBonoForm) {
       saveAddBonoBtn.textContent = "Guardando bono…";
     }
 
+    addBonoForm.dataset.requestKey ||= crypto.randomUUID();
     const payload = {
+      requestKey:addBonoForm.dataset.requestKey,
       serviceId: bonoServiceSelect.value,
       sessionsBought: Number(bonoSessionsInput.value),
       totalAmount: Number(bonoAmountInput.value),
@@ -987,6 +995,7 @@ if (addBonoForm) {
       if (!response.ok) {
         throw new Error(data.error || "No se pudo añadir el bono al cliente.");
       }
+      delete addBonoForm.dataset.requestKey;
       addBonoDialog.close();
       showProfileToast("Bono añadido al cliente correctamente.");
       document.querySelector(".client-purchases-section")?.setAttribute("open", "");

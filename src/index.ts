@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { runtimeConfig } from "./runtime-config";
+import { Packages } from "./packages";
 import { CashRegister, cashPermission } from "./cash";
 import { Inventory, inventoryPermission, saleBalance } from "./inventory";
 import { ApiError } from "./calendar/model";
@@ -24,11 +26,11 @@ import { accessMigration, Access, type Identity } from "./calendar/access";
 import { server as createCalendarServer } from "./calendar/http";
 import { progressMigration } from "./progress-migration";
 
-const host = "127.0.0.1";
-const port = Number(process.env.PORT ?? 3000);
+const deployment=runtimeConfig();
+const host=deployment.host,port=deployment.port;
 const maxBodyBytes = 2 * 1024 * 1024;
 const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "INACTIVO", "BAJA"];
-const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "TRANSFERENCIA", "OTRO"];
+const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "BIZUM", "TRANSFERENCIA", "OTRO"];
 const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO", "REEMBOLSADO"];
 const validAttendanceStatuses: AttendanceStatus[] = ["PENDIENTE", "ASISTIO", "NO_ASISTIO", "CANCELADA"];
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
@@ -540,6 +542,7 @@ function parseServicePackageInput(
 }
 
 function isLocalRequest(request: IncomingMessage): boolean {
+  if(deployment.production)return true;
   const address = request.socket.remoteAddress;
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
@@ -550,7 +553,7 @@ function hasTrustedOrigin(request: IncomingMessage, port: number): boolean {
     return true;
   }
 
-  return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}`;
+  return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}` || origin===deployment.publicOrigin;
 }
 
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
@@ -1069,7 +1072,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     if(client.gymId!==(request as any).selectedGym){sendError(response,404,"Cliente desconocido en este centro.");return;}
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
-      include: { service: { select: { id: true, name: true, durationMin: true } } },
+      include: { service: { select: { id: true, name: true, durationMin: true } }, sale:{include:{lines:true,payments:true}} },
       orderBy: { purchasedAt: "desc" },
     });
     const [bookings, bookingCounts, sales, debtSales] = await Promise.all([
@@ -1132,8 +1135,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const debtByCurrency = new Map<string, number>();
     for (const servicePackage of packages) {
       if (
-        servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
-        servicePackage.paymentStatus === PaymentStatus.FALLIDO
+        !servicePackage.saleId && (servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
+        servicePackage.paymentStatus === PaymentStatus.FALLIDO)
       ) {
         debtByCurrency.set("EUR", (debtByCurrency.get("EUR") ?? 0) + Number(servicePackage.totalAmount));
       }
@@ -1164,6 +1167,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           )?._count._all ?? 0;
         return {
         ...servicePackage,
+          sale:servicePackage.sale?saleBalance(servicePackage.sale):null,
           sessionsUsed,
           sessionsScheduled,
           sessionsRemaining: Math.max(0, servicePackage.sessionsBought - sessionsUsed - sessionsScheduled - Number(heldPackages.find(p=>p.packageId===servicePackage.id)?.held||0)),
@@ -1191,24 +1195,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 
     try {
       const requestKey=isRecord(rawPackage)&&rawPackage.requestKey!==undefined?z.string().uuid().parse(rawPackage.requestKey):undefined;
-      const servicePackage = await prisma.$transaction(async tx=>{
-        const gym=(request as any).selectedGym;
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${gym},0))`;
-        const client=await tx.client.findFirst({where:{id:clientPackagesMatch[1],gymId:gym}});
-        if(!client)throw new ApiError(404,'Cliente desconocido en este centro.');
-        if(requestKey){const existing=await tx.clientServicePackage.findUnique({where:{requestKey}});if(existing){if(existing.clientId!==client.id||existing.serviceId!==input.serviceId||existing.sessionsBought!==input.sessionsBought||Number(existing.totalAmount)!==input.totalAmount||existing.paymentStatus!==input.paymentStatus)throw new ApiError(409,'Solicitud de bono ya utilizada con otros datos.');return existing;}}
-        return tx.clientServicePackage.create({
-        data: {requestKey,
-          client: { connect: { id: clientPackagesMatch[1] } },
-          service: { connect: { id: input.serviceId } },
-          sessionsBought: input.sessionsBought,
-          totalAmount: input.totalAmount,
-          paymentMethod: input.paymentMethod,
-          paymentStatus: input.paymentStatus,
-          ...(input.notes ? { notes: input.notes } : {}),
-        },
-      });
-      });
+      const servicePackage=await new Packages(prisma).create((request as any).selectedGym,clientPackagesMatch[1],(request as any).identity.id,{...input,requestKey});
       sendJson(response, 201, { servicePackage });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
@@ -1220,6 +1207,13 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
 
+  const packageBillingMatch=url.pathname.match(/^\/api\/service-packages\/([0-9a-f-]+)\/billing$/i);
+  if(packageBillingMatch&&request.method==='POST'){
+    const actor=(request as any).identity as Identity;
+    inventoryPermission(actor,'sell');
+    const pkg=await new Packages(prisma).billing((request as any).selectedGym,packageBillingMatch[1],actor.id);
+    sendJson(response,200,{servicePackage:pkg,saleId:pkg.saleId});return;
+  }
   const packageBookingsMatch = url.pathname.match(/^\/api\/service-packages\/([0-9a-f-]+)\/bookings$/i);
   if (request.method === "POST" && packageBookingsMatch) {
     if (!hasTrustedOrigin(request, port)) {
@@ -1925,7 +1919,7 @@ const server = createServer(async (request, response) => {
   }
 
   const hostHeader = request.headers.host;
-  if (hostHeader !== `localhost:${port}` && hostHeader !== `127.0.0.1:${port}`) {
+  if (hostHeader !== `localhost:${port}` && hostHeader !== `127.0.0.1:${port}` && hostHeader !== (deployment.publicOrigin?new URL(deployment.publicOrigin).host:undefined)) {
     sendError(response, 403, "Host no permitido.");
     return;
   }
@@ -1946,6 +1940,9 @@ const server = createServer(async (request, response) => {
   response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 
   try {
+    if(url.pathname==='/api/health'){
+      try{await prisma.$queryRaw`SELECT 1`;sendJson(response,200,{status:'ok'});}catch{sendError(response,503,'La base de datos no está disponible.');}return;
+    }
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
       return;
@@ -1969,7 +1966,7 @@ const server = createServer(async (request, response) => {
     });
 
     if (url.pathname === "/runtime.js") {
-      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(calendarBootstrapToken)};`);
+      response.end(`window.CALENDAR_SERVER=true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();window.CALENDAR_DEV_TOKEN=${JSON.stringify(deployment.production?'':calendarBootstrapToken)};`);
       return;
     }
 
@@ -2057,7 +2054,7 @@ async function start(): Promise<void> {
   }
   const token = process.env.CALENDAR_ADMIN_TOKEN || randomBytes(24).toString("hex");
   calendarBootstrapToken = token;
-  const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: true });
+  const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: !deployment.production });
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
   const close = () => {

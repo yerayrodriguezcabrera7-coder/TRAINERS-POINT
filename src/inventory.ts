@@ -58,6 +58,7 @@ export class Inventory {
  async reverse(gym:string,id:string,raw:unknown,cancel=false,actor="system"){const requested=cancel?null:returnInput.parse(raw);return this.transaction(gym,async tx=>{
   const sale=await tx.sale.findFirst({where:{id,gymKey:gym},include:{lines:true,payments:true}});if(!sale)throw new ApiError(404,'Venta desconocida.');
   if((cancel&&sale.status==='CANCELADA')||(!cancel&&sale.returnKeys.includes(requested!.requestKey)))return saleBalance(sale);
+  if(await tx.clientServicePackage.findUnique({where:{saleId:id}}))throw new ApiError(409,'Esta venta corresponde a un bono. No se puede anular desde las devoluciones de productos.');
   if(sale.status!=='COMPLETADA')throw new ApiError(409,'Esta venta ya está anulada o devuelta.');
   const items=cancel?sale.lines.filter(l=>Number(l.quantity)>l.returnedQuantity).map(l=>({lineId:l.id,quantity:Number(l.quantity)-l.returnedQuantity})):requested!.lines;
   if(new Set(items.map(l=>l.lineId)).size!==items.length)throw new ApiError(400,'Líneas de devolución duplicadas.');
@@ -99,7 +100,11 @@ export class Inventory {
    if(cents(v.amount)>cents(saleBalance(sale).outstandingAmount))throw new ApiError(409,'El pago supera el importe pendiente. Actualiza el saldo.');
    const cashSessionId=await cashSessionFor(tx,gym,v.paidAt?new Date(v.paidAt):new Date());
    await tx.payment.create({data:{cashSessionId,saleId:id,requestKey:v.requestKey,actorAccountId:actor,method:v.method,status:'PAGADO',amount:v.amount,paidAt:v.paidAt?new Date(v.paidAt):new Date(),note:v.note}});
-   return saleBalance(await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}}));
+   const updated=await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}});
+   const balance=saleBalance(updated);
+   await tx.clientServicePackage.updateMany({where:{saleId:id},data:{paymentStatus:balance.outstandingAmount===0?'PAGADO':'PENDIENTE',paymentMethod:v.method}});
+   if(balance.outstandingAmount===0)await tx.booking.updateMany({where:{package:{saleId:id}},data:{paymentPending:false}});
+   return balance;
   });
  }
 
@@ -117,7 +122,11 @@ export class Inventory {
    if(sale.paymentTracking||sale.payments.length||sale.status!=='COMPLETADA')throw new ApiError(409,'Esta venta ya está verificada o no admite esta confirmación. Actualiza el historial.');
    if(cents(v.amount)!==cents(saleBalance(sale).netAmount))throw new ApiError(409,'El importe de la venta ha cambiado. Actualiza antes de verificar.');
    await tx.payment.create({data:{saleId:id,requestKey:v.requestKey,actorAccountId:actor,historicalVerification:true,method:v.method,status:'PAGADO',amount:v.amount,paidAt:new Date(v.paidAt!),note:v.note}});
-   return saleBalance(await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}}));
+   const updated=await tx.sale.update({where:{id},data:{paymentTracking:true},include:{lines:true,payments:true}});
+   const balance=saleBalance(updated);
+   await tx.clientServicePackage.updateMany({where:{saleId:id},data:{paymentStatus:balance.outstandingAmount===0?'PAGADO':'PENDIENTE',paymentMethod:v.method}});
+   if(balance.outstandingAmount===0)await tx.booking.updateMany({where:{package:{saleId:id}},data:{paymentPending:false}});
+   return balance;
   });
  }
  async refund(gym:string,actor:string,id:string,raw:unknown){
@@ -141,6 +150,8 @@ export class Inventory {
   const sales=await this.db.sale.findMany({where:{gymKey:gym,clientId:{not:null},OR:[{paymentTracking:true},{payments:{some:{}}}],status:'COMPLETADA'},include:{lines:true,payments:true}});
   const totals:Record<string,number>={};
   for(const sale of sales){const amount=cents(saleBalance(sale).outstandingAmount);if(amount>0)totals[sale.clientId!]=(totals[sale.clientId!]||0)+amount;}
+  const legacy=await this.db.clientServicePackage.findMany({where:{client:{gymId:gym},saleId:null,paymentStatus:{in:['PENDIENTE','FALLIDO']}}});
+  for(const pkg of legacy)totals[pkg.clientId]=(totals[pkg.clientId]||0)+cents(pkg.totalAmount);
   return Object.fromEntries(Object.entries(totals).map(([id,value])=>[id,value/100]));
  }
 

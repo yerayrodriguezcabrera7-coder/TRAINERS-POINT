@@ -672,6 +672,7 @@ async function loadServices(selectedId = "") {
 }
 
 async function addClientServicePackage(clientId, body) {
+  purchaseForm.dataset.requestKey ||= crypto.randomUUID();body.requestKey=purchaseForm.dataset.requestKey;
   const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-packages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -827,6 +828,7 @@ async function openClientHistory(client) {
   document.querySelector("#history-client-subtitle").textContent =
     "Sesiones, pagos y asistencias.";
   purchaseForm.reset();
+  delete purchaseForm.dataset.requestKey;
   purchaseError.hidden = true;
   historyDialog.showModal();
   packageList.replaceChildren();
@@ -1543,6 +1545,7 @@ purchaseForm.addEventListener("submit", async (event) => {
     await addClientServicePackage(historyClientId, body);
 
     purchaseForm.reset();
+  delete purchaseForm.dataset.requestKey;
     await loadServices(body.serviceId);
     await openClientHistory({ id: historyClientId, ...historyDialogClientName() });
     showToast("Sesiones añadidas.");

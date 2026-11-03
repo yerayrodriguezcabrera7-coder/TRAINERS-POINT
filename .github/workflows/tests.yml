@@ -1,0 +1,29 @@
+name: Comprobar la aplicación
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: brew install libpq
+      - run: echo "$(brew --prefix libpq)/bin" >> "$GITHUB_PATH"
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm test
+  container:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp deploy/.env.example deploy/.env
+      - run: docker compose --env-file deploy/.env -f deploy/compose.yaml config --quiet
+      - run: docker build --tag trainers-point:ci .

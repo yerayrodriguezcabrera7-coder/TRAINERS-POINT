@@ -151,6 +151,14 @@ test('API completa: registrar deuda, cobrar en recepción y consultar la ficha d
   await until(()=>cashDoc.getElementById('session-state').textContent==='Cerrada');assert.match(cashDoc.getElementById('closing-result').textContent,/Falta dinero/);
   const closedDrawer=await request('cash/sessions/'+drawer.data.id);assert.equal(Number(closedDrawer.data.difference),-1);assert.equal(closedDrawer.data.closedByName,'Recepción de prueba');
   assert.equal((await request('cash/sessions')).data.sessions[0].collectedAmount,24);
+  const service=await db.service.create({data:{name:'Bono HTTP',price:50,durationMin:60}}),packageInput={requestKey:randomUUID(),serviceId:service.id,sessionsBought:2,totalAmount:50,paymentMethod:'OTRO',paymentStatus:'PENDIENTE'};
+  const createdPackage=await request('clients/'+client.id+'/service-packages','POST',packageInput);assert.equal(createdPackage.status,201,JSON.stringify(createdPackage.data));assert.ok(createdPackage.data.servicePackage.saleId);
+  let packageHistory=await request('clients/'+client.id+'/service-history');assert.equal(packageHistory.data.debt[0].amount,50);
+  const billing=await request('service-packages/'+createdPackage.data.servicePackage.id+'/billing','POST',{});assert.equal(billing.status,200);
+  const packagePayment=await request('inventory/sales/'+billing.data.saleId+'/payments','POST',{requestKey:randomUUID(),amount:50,method:'BIZUM'});assert.equal(packagePayment.status,200);
+  packageHistory=await request('clients/'+client.id+'/service-history');assert.deepEqual(packageHistory.data.debt,[]);assert.equal(packageHistory.data.packages[0].paymentStatus,'PAGADO');
+  assert.equal((await request('cash/sessions/'+drawer.data.id)).data.summary.collections.EFECTIVO,5);
+
   assert.equal((await fetch(base+'/api/inventory/sales/'+sale.data.id+'/payments',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  }finally{dom?.window.close();child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
 });
@@ -284,4 +292,65 @@ test('Bonos: una recuperación conserva la sesión del bono sin duplicar derecho
  const original=await store.save(gym.id,input),credit=await store.deferBooking(gym.id,original.id,{id:'admin',role:'ADMIN',employeeId:null});
  await assert.rejects(store.save(gym.id,{...input,start:'12:00'}),/sesiones disponibles/);
  const recovered=await store.save(gym.id,{...input,start:'14:00',packageId:null,recoveryId:credit.id});assert.equal(recovered.chargeAmount,0);assert.equal((await db.booking.findUnique({where:{id:recovered.id}})).packageId,pkg.id);
+});
+
+test('Bonos y Caja: pagos mixtos y parciales, deuda única, sesión utilizable al completar y cierre estable',async()=>{
+ const {Packages}=require('../dist/packages'),{CashRegister}=require('../dist/cash'),packages=new Packages(db),cash=new CashRegister(db),gym=await db.gym.create({data:{name:randomUUID()}}),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ const client=await db.client.create({data:{gymId:gym.id,firstName:'Cliente',lastName:'Cobro bonos',email:randomUUID()+'@example.com',phone:''}}),service=await db.service.create({data:{name:'Bono prueba cobros',price:100,durationMin:60}});
+ const input={requestKey:randomUUID(),serviceId:service.id,sessionsBought:4,totalAmount:100,paymentMethod:'OTRO',paymentStatus:'PENDIENTE'};
+ const pkg=await packages.create(gym.id,client.id,actor.id,input);assert.ok(pkg.saleId);
+ await packages.create(gym.id,client.id,actor.id,input);assert.equal(await db.sale.count({where:{id:pkg.saleId}}),1);assert.equal(await db.payment.count({where:{saleId:pkg.saleId}}),0);
+ const session=await cash.open(gym.id,actor,{requestKey:randomUUID(),openingAmount:50});
+ const receipt={requestKey:randomUUID(),amount:30,method:'EFECTIVO'};
+ await inventory.pay(gym.id,actor.id,pkg.saleId,receipt);await inventory.pay(gym.id,actor.id,pkg.saleId,receipt);
+ assert.equal((await db.clientServicePackage.findUnique({where:{id:pkg.id}})).paymentStatus,'PENDIENTE');assert.equal((await inventory.debtSummary(gym.id))[client.id],70);
+ await inventory.pay(gym.id,actor.id,pkg.saleId,{requestKey:randomUUID(),amount:70,method:'TARJETA'});
+ assert.equal((await db.clientServicePackage.findUnique({where:{id:pkg.id}})).paymentStatus,'PAGADO');assert.deepEqual(await inventory.debtSummary(gym.id),{});
+ const current=(await cash.current(gym.id)).session;assert.equal(current.summary.expectedCash,80);assert.equal(current.summary.collections.TARJETA,70);assert.equal(current.summary.debtCollections.EFECTIVO,30);assert.equal(current.summary.debtCollections.TARJETA,70);
+ const closed=await cash.close(gym.id,actor,session.id,{requestKey:randomUUID(),revision:current.revision,countedAmount:80});assert.equal(Number(closed.difference),0);
+ const paid=await packages.create(gym.id,client.id,actor.id,{...input,requestKey:randomUUID(),paymentStatus:'PAGADO',paymentMethod:'BIZUM'});assert.equal((await db.payment.findFirst({where:{saleId:paid.saleId}})).method,'BIZUM');assert.deepEqual((await cash.detail(gym.id,closed.id)).summary,closed.summary);
+ await assert.rejects(packages.create(gym.id,client.id,actor.id,{...input,paymentMethod:'TARJETA'}),/ya se utilizó/);
+ await assert.rejects(packages.billing(randomUUID(),pkg.id,actor.id),/desconocido/);
+ await assert.rejects(inventory.reverse(gym.id,pkg.saleId,{},true),/bono/);
+});
+
+test('Bonos anteriores: preparar cobro no duplica deuda ni añade dinero al cajón',async()=>{
+ const {Packages}=require('../dist/packages'),{CashRegister}=require('../dist/cash'),packages=new Packages(db),cash=new CashRegister(db),gym=await db.gym.create({data:{name:randomUUID()}}),actor={id:'desk',name:'Recepción',role:'RECEPTION'},client=await db.client.create({data:{gymId:gym.id,firstName:'Cliente',lastName:'Bono anterior',email:randomUUID()+'@example.com',phone:''}}),service=await db.service.create({data:{name:'Servicio bono anterior',price:40,durationMin:60}});
+ const legacy=await db.clientServicePackage.create({data:{clientId:client.id,serviceId:service.id,sessionsBought:2,totalAmount:40,paymentStatus:'PENDIENTE',paymentMethod:'OTRO'}});
+ await cash.open(gym.id,actor,{requestKey:randomUUID(),openingAmount:100});assert.equal((await inventory.debtSummary(gym.id))[client.id],40);
+ const [a,b]=await Promise.all([packages.billing(gym.id,legacy.id,actor.id),packages.billing(gym.id,legacy.id,actor.id)]);assert.equal(a.saleId,b.saleId);assert.equal((await inventory.debtSummary(gym.id))[client.id],40);assert.equal((await cash.current(gym.id)).session.summary.soldTotal,0);
+ await inventory.pay(gym.id,actor.id,a.saleId,{requestKey:randomUUID(),amount:40,method:'BIZUM'});assert.equal((await cash.current(gym.id)).session.summary.expectedCash,100);assert.equal((await cash.current(gym.id)).session.summary.debtCollections.BIZUM,40);
+});
+
+
+test('Copias: guardar y restaurar PostgreSQL recupera clientes y bonos sin mostrar credenciales',async()=>{
+ const {spawnSync}=require('node:child_process'),fs=require('node:fs'),directory=await mkdtemp(join(tmpdir(),'backup-proof-'));
+ const bin=join(process.cwd(),'node_modules','@embedded-postgres',process.platform+'-'+process.arch,'native','bin'),opts=pool.options,url=`postgresql://postgres:${opts.password}@127.0.0.1:${opts.port}/postgres`;
+ const environment={...process.env,DATABASE_URL:url,BACKUP_DIR:directory,PG_DUMP_BIN:process.env.PG_DUMP_BIN||(fs.existsSync('/opt/homebrew/opt/libpq/bin/pg_dump')?'/opt/homebrew/opt/libpq/bin/pg_dump':'pg_dump'),PG_RESTORE_BIN:process.env.PG_RESTORE_BIN||(fs.existsSync('/opt/homebrew/opt/libpq/bin/pg_restore')?'/opt/homebrew/opt/libpq/bin/pg_restore':'pg_restore')};
+ const saved=spawnSync(process.execPath,['scripts/database-backup.cjs'],{env:environment,encoding:'utf8'});assert.equal(saved.status,0,saved.stderr);assert.doesNotMatch(saved.stdout,new RegExp(opts.password));
+ const dump=join(directory,fs.readdirSync(directory).find(n=>n.endsWith('.dump')));assert.equal(fs.statSync(dump).mode&0o777,0o600);
+ await pool.query('CREATE DATABASE restore_proof');
+ try{const restored=spawnSync(process.execPath,['scripts/database-backup.cjs','restore',dump,'--confirm-restore'],{env:{...environment,DATABASE_URL:(()=>{const target=new URL(url);target.pathname='/restore_proof';return target.href;})()},encoding:'utf8'});assert.equal(restored.status,0,restored.stderr);
+ const target=new Pool({host:'127.0.0.1',port:opts.port,user:'postgres',password:opts.password,database:'restore_proof'});try{assert.equal(Number((await target.query('SELECT count(*) FROM "Client"')).rows[0].count),await db.client.count());assert.equal(Number((await target.query('SELECT count(*) FROM "ClientServicePackage"')).rows[0].count),await db.clientServicePackage.count());}finally{await target.end();}
+ }finally{await pool.query('DROP DATABASE restore_proof');}
+});
+
+test('Servidor en producción: arranca con dominio configurado y nunca publica la clave de administración',async()=>{
+ const {spawn}=require('node:child_process'),net=require('node:net');const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
+ const opts=pool.options,url=`postgresql://postgres:${opts.password}@127.0.0.1:${opts.port}/postgres`,secret=randomUUID()+randomUUID();
+ const child=spawn(process.execPath,['dist/index.js'],{env:{...process.env,NODE_ENV:'production',PUBLIC_ORIGIN:'https://gym.example',HOST:'127.0.0.1',PORT:String(port),DATABASE_URL:url,CALENDAR_DATABASE_URL:url,CALENDAR_ADMIN_TOKEN:secret,TRAINERS_POINT_DEV_ADMIN:'false'},stdio:['ignore','pipe','pipe']});let log='';child.stderr.on('data',b=>log+=b);child.stdout.resume();
+ try{let ready=false;for(let i=0;i<100;i++){if(child.exitCode!==null)throw Error(log);try{ready=(await fetch(`http://127.0.0.1:${port}/api/health`)).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,50));}assert.ok(ready,log);
+ const runtime=await (await fetch(`http://127.0.0.1:${port}/runtime.js`)).text();assert.ok(!runtime.includes(secret));assert.ok(runtime.includes('CALENDAR_DEV_TOKEN=""'));
+ assert.equal((await fetch(`http://127.0.0.1:${port}/api/manage`)).status,401);
+ const hostRequest=host=>new Promise((resolve,reject)=>{require('node:http').get({host:'127.0.0.1',port,path:'/api/health',headers:{Host:host}},r=>{r.resume();resolve(r.statusCode);}).on('error',reject);});
+ assert.equal(await hostRequest('malicious.example'),403);assert.equal(await hostRequest('gym.example'),200);
+ }finally{child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
+});
+
+test('Primera cuenta: el operador crea administración sin imprimir la contraseña y no la sobrescribe',async()=>{
+ const {spawnSync}=require('node:child_process'),{Access}=require('../dist/calendar/access'),gym=await db.gym.create({data:{name:randomUUID()}}),opts=pool.options,url=`postgresql://postgres:${opts.password}@127.0.0.1:${opts.port}/postgres`,password='Secret-test-admin-password-123';
+ const env={...process.env,DATABASE_URL:url,ADMIN_GYM_ID:gym.id,ADMIN_NAME:'Administración de prueba',ADMIN_USERNAME:'manager',ADMIN_PASSWORD:password};
+ const created=spawnSync(process.execPath,['scripts/create-admin.cjs'],{env,encoding:'utf8'});assert.equal(created.status,0,created.stderr);assert.ok(!created.stdout.includes(password));
+ const login=await new Access(pool,db).login(gym.id,{username:'manager',password});assert.equal(login.role,'ADMIN');assert.equal(login.mustChangePassword,true);
+ const repeated=spawnSync(process.execPath,['scripts/create-admin.cjs'],{env,encoding:'utf8'});assert.equal(repeated.status,1);assert.match(repeated.stderr,/ya tiene cuentas/);
 });

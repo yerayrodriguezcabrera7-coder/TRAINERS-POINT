@@ -5,3 +5,7 @@ dist
 *.log
 
 .calendar-dev/
+
+backups/
+deploy/.env
+*.dump

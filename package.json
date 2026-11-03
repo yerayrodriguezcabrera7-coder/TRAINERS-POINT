@@ -12,7 +12,11 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:test": "ts-node src/test-db.ts",
-    "demo": "npm run build && node scripts/demo.cjs"
+    "demo": "npm run build && node scripts/demo.cjs",
+    "start:production": "node dist/index.js",
+    "admin:create": "node scripts/create-admin.cjs",
+    "db:backup": "node scripts/database-backup.cjs",
+    "db:restore": "node scripts/database-backup.cjs restore"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

@@ -374,6 +374,8 @@ model Service {
 }
 
 model ClientServicePackage {
+  saleId String? @unique @db.Uuid
+  sale Sale? @relation(fields: [saleId], references: [id], onDelete: Restrict)
   requestKey String? @unique
   id             String        @id @default(uuid()) @db.Uuid
   clientId       String        @db.Uuid
@@ -483,6 +485,7 @@ model StockMovement {
 }
 
 model Sale {
+  servicePackage ClientServicePackage?
   cashSessionId String? @db.Uuid
   cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
   returnHistory Json @default("[]") @db.JsonB

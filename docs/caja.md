@@ -10,7 +10,7 @@ La caja reutiliza las ventas y recibos de Productos y ventas. Cada nueva venta s
 
 El resumen distingue ventas registradas, productos devueltos, importe neto, efectivo, tarjeta y Bizum. Los cobros de una venta de una caja anterior (o de una venta creada sin caja abierta) aparecen como cobros de deudas anteriores. Son un desglose de los totales por método, nunca una segunda entrada. Una venta de la caja actual que se paga en otro momento de esa misma sesión se incluye en los cobros del turno.
 
-Las ventas pendientes no suman efectivo ni tarjeta. Devolver un producto reduce el importe neto de las ventas pero no saca dinero del cajón hasta que se registra un reembolso en efectivo. Los reembolsos por tarjeta y Bizum se muestran separados y no afectan al efectivo físico. Los bonos de servicios mantienen su sistema de gestión existente: esta integración utiliza las ventas y pagos del módulo de productos.
+Las ventas pendientes no suman efectivo ni tarjeta. Devolver un producto reduce el importe neto de las ventas pero no saca dinero del cajón hasta que se registra un reembolso en efectivo. Los reembolsos por tarjeta y Bizum se muestran separados y no afectan al efectivo físico. Los bonos de servicios también utilizan Sale/Payment: sus cobros se incorporan por método y las deudas anteriores son un desglose del total, sin duplicarlo.
 
 **Efectivo esperado = inicial + cobros en efectivo + entradas manuales − reembolsos en efectivo − retiradas y otras salidas.**
 

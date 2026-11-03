@@ -183,7 +183,7 @@ function debtBadge(b){const amount=upcomingDebt(b);if(b.paymentDue&&amount<=0&&[
 function updateDebtDetail(){
  const box=$('booking-debt');if(!box)return;
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
- box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo total de las compras de productos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
+ box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
 }
 function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}`; }
 
