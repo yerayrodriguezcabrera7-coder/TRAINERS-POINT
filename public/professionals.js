@@ -322,12 +322,12 @@
     if (feedbackEl) { feedbackEl.hidden = true; feedbackEl.textContent = ''; }
     
     if (accountBox) {
-      if (employee) {
-        const linkedUser = (manageData?.users || []).find(u => u.employeeId === employee.id);
+      if (emp) {
+        const linkedUser = (manageData?.users || []).find(u => u.employeeId === emp.id);
         if (linkedUser) {
           accountBox.hidden = false;
           accountBox.dataset.userId = linkedUser.id;
-          accountBox.dataset.userName = employee.name;
+          accountBox.dataset.userName = emp.name;
           if (usernameEl) usernameEl.textContent = `Usuario: ${linkedUser.username} · Rol: ${linkedUser.role}`;
         } else {
           accountBox.hidden = true;
@@ -422,12 +422,6 @@
     $('close-dialog').addEventListener('click', () => $('professional-dialog').close());
     $('cancel-dialog').addEventListener('click', () => $('professional-dialog').close());
 
-    // Submit form
-    $('professional-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const errorEl = $('form-error');
-      const submitBtn = $('submit-professional');
-
     // Restablecer contraseña del entrenador desde la ficha de profesional
     $('prof-btn-reset-pwd')?.addEventListener('click', async () => {
       const accountBox = $('prof-user-account-box');
@@ -465,6 +459,12 @@
         btn.textContent = 'Restablecer contraseña del entrenador';
       }
     });
+
+    // Submit form
+    $('professional-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errorEl = $('form-error');
+      const submitBtn = $('submit-professional');
 
       errorEl.hidden = true;
       errorEl.textContent = '';
