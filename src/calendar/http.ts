@@ -386,6 +386,8 @@ export function server(
         "index.html": "text/html",
         "app.js": "text/javascript",
         "calendar-core.js": "text/javascript",
+        "ayuda.js": "text/javascript",
+        "ayuda.css": "text/css",
         "styles.css": "text/css",
         "menu.css": "text/css",
         "design.css": "text/css",

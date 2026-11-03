@@ -1828,6 +1828,8 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 }
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
+  "/ayuda.js": {file:"web/ayuda.js",contentType:"text/javascript; charset=utf-8"},
+  "/ayuda.css": {file:"web/ayuda.css",contentType:"text/css; charset=utf-8"},
   "/caja.html": {file:"web/caja.html",contentType:"text/html; charset=utf-8"},
   "/caja.js": {file:"web/caja.js",contentType:"text/javascript; charset=utf-8"},
   "/caja.css": {file:"web/caja.css",contentType:"text/css; charset=utf-8"},

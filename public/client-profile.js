@@ -156,7 +156,7 @@ function renderPurchaseHistory(data) {
     badges.className = "bono-history-badges";
     const status = document.createElement("span");
     status.className = `badge-status badge-${String(pkg.paymentStatus).toLowerCase()}`;
-    status.textContent = pkg.paymentStatus;
+    status.textContent = ({PAGADO:'Pagado',PENDIENTE:'Pago pendiente',FALLIDO:'Pago no completado',REEMBOLSADO:'Reembolsado'})[pkg.paymentStatus] || pkg.paymentStatus;
     badges.append(status);
     header.append(titleWrap, badges);
 
