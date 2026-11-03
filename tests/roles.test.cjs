@@ -274,12 +274,11 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     });
     assert.equal(newBookingRes.status, 201, "Recepción crea reserva para e3");
 
-    // Recepción ve el estado de fichaje de todos
+    // REQUISITO: Cada entrenador y recepcionista solo ve su propio fichaje, admin ve todo
     const recAtt = await (await req("attendance", rec)).json();
-    assert.equal(recAtt.employees.length, 4, "Recepción consulta estado de fichaje de toda la plantilla");
-    // e2 está fichado, el resto fuera
-    const e2Record = recAtt.records.find((r) => r.employeeId === "e2");
-    assert.ok(e2Record && !e2Record.clockOut, "Recepción ve que e2 está dentro");
+    assert.equal(recAtt.employees.length, 1, "Recepción solo consulta su propio fichaje");
+    assert.equal(recAtt.employees[0].id, "e4", "Recepción ve a sí misma");
+    assert.ok(recAtt.records.every((r) => r.employeeId === "e4"), "Recepción solo ve sus propios registros");
 
     // ==========================================
     // REQUISITO: Recepción ficha por sí misma, pero 403 si intenta por otro

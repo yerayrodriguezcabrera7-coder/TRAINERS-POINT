@@ -58,7 +58,20 @@ export const serviceSchema = named.extend({
   price: z.number().min(0).max(100000).optional(),
   description: z.string().max(2000).optional(),
   active: z.boolean().optional(),
+  modality: z.enum(["INDIVIDUAL", "DUAL"]).optional(),
+  type: z.enum(["PACK", "SESION_INDIVIDUAL"]).optional(),
+  trainingCount: z.number().int().min(1).max(500).optional(),
+  validityWeeks: z.number().int().min(1).max(104).nullable().optional(),
+  recommendedWeeklyFrequency: z.number().int().min(1).max(14).nullable().optional(),
+  conditions: z.string().max(5000).nullable().optional(),
 });
+export const locationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  radiusMeters: z.number().min(10).max(10000).default(200),
+  address: z.string().optional(),
+}).optional();
+
 export const configSchema = z
   .object({
     timezone: z.string().refine((v) => DateTime.now().setZone(v).isValid),
@@ -67,6 +80,7 @@ export const configSchema = z
     rooms: z.array(named).min(1),
     clients: z.array(clientSchema),
     schedule: week,
+    location: locationSchema,
   })
   .superRefine((c, ctx) => {
     for (const key of ["employees", "services", "rooms", "clients"] as const)
@@ -90,11 +104,34 @@ export const bookingSchema = z.object({
 });
 export type Input = z.infer<typeof bookingSchema>;
 export type Booking = Input & { id: string; end: string; version: number };
+export const attendanceGeoInputSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().min(0).max(100000).optional().nullable(),
+}).optional().nullable();
+
 export const attendanceActionSchema = z.object({
   employeeId: id,
   action: z.enum(["IN", "OUT"]),
+  geo: attendanceGeoInputSchema,
 });
 export type AttendanceAction = z.infer<typeof attendanceActionSchema>;
+
+export function haversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const deltaPhi = toRad(lat2 - lat1);
+  const deltaLambda = toRad(lon2 - lon1);
+
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(R * c);
+}
 export const minutes = (s: string) =>
   Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
 export const label = (n: number) =>
