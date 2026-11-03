@@ -577,7 +577,8 @@ function renderServiceOptions(selectedId = "") {
   for (const service of services) {
     const option = document.createElement("option");
     option.value = service.id;
-    option.textContent = `${service.name} · ${Number(service.price).toFixed(2)} €/sesión`;
+    const modalityText = service.modality === "DUAL" ? " [Dúo]" : " [Individual]";
+    option.textContent = `${service.name}${modalityText} — ${service.trainingCount} ses. · ${formatCurrency(service.price)}`;
     serviceSelect.append(option);
   }
   if (selectedId && services.some((service) => service.id === selectedId)) {
@@ -1646,7 +1647,19 @@ function renderClient(client) {
   center.className = "client-card-center";
   center.textContent = centerName;
   details.append(center);
-  card.append(identity, details);
+  const actions = document.createElement("div");
+  actions.className = "client-card-actions";
+  const bonoButton = document.createElement("button");
+  bonoButton.type = "button";
+  bonoButton.className = "client-card-bono-btn";
+  bonoButton.innerHTML = '<svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>+ Bono</span>';
+  bonoButton.setAttribute("aria-label", `Añadir bono a ${clientName}`);
+  bonoButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openClientHistory(client);
+  });
+  actions.append(bonoButton);
+  card.append(identity, details, actions);
 
   const open = () => { window.location.assign(getClientProfileHref(client.id)); };
   card.addEventListener("click", open);
@@ -1839,3 +1852,47 @@ document.querySelector("#detail-checkin").addEventListener("click", async (event
 syncTimelineTimer();
 syncFilterControls();
 loadGyms().then(loadClients);
+
+
+const purchaseServiceSelect = document.querySelector("#purchase-service");
+const purchaseCalcCallout = document.querySelector("#purchase-calc-callout");
+const purchaseCalcRate = document.querySelector("#purchase-calc-rate");
+const purchaseCalcDuration = document.querySelector("#purchase-calc-duration");
+
+function updatePurchaseCallout() {
+  if (!purchaseServiceSelect || !purchaseCalcCallout) return;
+  const service = services.find((s) => s.id === purchaseServiceSelect.value);
+  const sessions = Number(purchaseForm.elements.namedItem("sessionsBought")?.value || 0);
+  const total = Number(purchaseForm.elements.namedItem("totalAmount")?.value || 0);
+  if (service) {
+    purchaseCalcCallout.hidden = false;
+    if (purchaseCalcDuration) purchaseCalcDuration.textContent = `${service.durationMin || 60} min`;
+    if (purchaseCalcRate) {
+      if (sessions > 0 && !isNaN(total) && total >= 0) {
+        purchaseCalcRate.textContent = `${(total / sessions).toFixed(2)} €/sesión`;
+      } else {
+        purchaseCalcRate.textContent = "—";
+      }
+    }
+  } else {
+    purchaseCalcCallout.hidden = true;
+  }
+}
+
+if (purchaseServiceSelect) {
+  purchaseServiceSelect.addEventListener("change", () => {
+    const service = services.find((s) => s.id === purchaseServiceSelect.value);
+    if (service) {
+      const sessionsInput = purchaseForm.elements.namedItem("sessionsBought");
+      const totalInput = purchaseForm.elements.namedItem("totalAmount");
+      if (sessionsInput) sessionsInput.value = service.trainingCount || 1;
+      if (totalInput) totalInput.value = Number(service.price).toFixed(2);
+    }
+    updatePurchaseCallout();
+  });
+}
+
+const purchaseSessionsInput = purchaseForm?.elements.namedItem("sessionsBought");
+const purchaseTotalInput = purchaseForm?.elements.namedItem("totalAmount");
+if (purchaseSessionsInput) purchaseSessionsInput.addEventListener("input", updatePurchaseCallout);
+if (purchaseTotalInput) purchaseTotalInput.addEventListener("input", updatePurchaseCallout);

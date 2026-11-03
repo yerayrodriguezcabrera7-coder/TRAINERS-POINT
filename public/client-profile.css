@@ -271,3 +271,147 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .details-checks label, .details-consents > label { transition: none; }
 }
+
+
+/* Bono management in client profile */
+.profile-heading-actions { display: flex; align-items: center; gap: 10px; }
+.header-bono-btn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.header-bono-btn:hover {
+  border-color: var(--tp-accent);
+  background: var(--tp-accent);
+  color: var(--tp-black);
+}
+.purchase-section-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.purchase-section-actions .profile-primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.add-bono-dialog {
+  width: min(580px, calc(100% - 28px));
+  max-width: 580px;
+}
+.bono-form-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bono-label-full {
+  display: grid;
+  gap: 6px;
+  color: var(--tp-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.bono-label-full select,
+.bono-label-full textarea {
+  width: 100%;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-sm);
+  padding: 10px 12px;
+  background: var(--tp-surface);
+  color: var(--tp-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.bono-label-full select:focus,
+.bono-label-full textarea:focus,
+.bono-field input:focus,
+.bono-field select:focus {
+  border-color: var(--tp-black);
+  outline: 2px solid var(--tp-black);
+  outline-offset: 1px;
+}
+.bono-calc-callout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--tp-line);
+  border-left: 3px solid var(--tp-accent);
+  border-radius: var(--tp-radius-sm);
+  background: var(--tp-surface-muted);
+}
+.bono-calc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tp-ink);
+}
+.bono-calc-chip-label {
+  color: var(--tp-muted);
+}
+.bono-calc-chip strong {
+  font-family: var(--tp-display);
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-ink);
+}
+.bono-calc-chip-validity strong {
+  color: var(--tp-accent);
+  font-weight: 800;
+}
+.bono-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.bono-field {
+  display: grid;
+  gap: 6px;
+  color: var(--tp-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+.bono-field input,
+.bono-field select {
+  width: 100%;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-sm);
+  padding: 10px 12px;
+  background: var(--tp-surface);
+  color: var(--tp-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.badge-status {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-status.badge-pagado {
+  background: #e7f4eb;
+  color: #2d7750;
+}
+.badge-status.badge-pendiente {
+  background: #fff4df;
+  color: #a97420;
+}
+.badge-status.badge-fallido {
+  background: #fcebea;
+  color: #b15f5a;
+}
+.badge-status.badge-reembolsado {
+  background: #f0eef7;
+  color: #716593;
+}
+
+@media (max-width: 600px) {
+  .profile-heading-actions { flex-direction: column; width: 100%; }
+  .profile-heading-actions button { width: 100%; }
+  .bono-fields-grid { grid-template-columns: 1fr; }
+}

@@ -6,6 +6,8 @@ const { PrismaClient } = require('@prisma/client');
 
 let prisma;
 const createdServiceIds = [];
+const createdClientIds = [];
+const createdPackageIds = [];
 
 before(async () => {
   prisma = new PrismaClient();
@@ -14,6 +16,16 @@ before(async () => {
 
 after(async () => {
   if (prisma) {
+    if (createdPackageIds.length) {
+      await prisma.clientServicePackage.deleteMany({
+        where: { id: { in: createdPackageIds } },
+      });
+    }
+    if (createdClientIds.length) {
+      await prisma.client.deleteMany({
+        where: { id: { in: createdClientIds } },
+      });
+    }
     if (createdServiceIds.length) {
       await prisma.service.deleteMany({
         where: { id: { in: createdServiceIds } },
@@ -336,4 +348,128 @@ test('Backend: Verificación de reglas de validación en parseServiceInput (src/
   assert.ok(src.includes('durationMin < 5'), 'Debe validar duración mínima de 5 minutos');
   assert.ok(src.includes('rawModality !== "INDIVIDUAL" && rawModality !== "DUAL"'), 'Debe validar modalidad individual o dual');
   assert.ok(src.includes('rawType !== "PACK" && rawType !== "SESION_INDIVIDUAL"'), 'Debe validar tipo pack o sesión individual');
+});
+
+
+test('Clientes y Bonos: Asignar bono a cliente vinculado a servicio dinámico activo en base de datos', async () => {
+  // Obtener un gimnasio existente o crear uno de prueba
+  let gym = await prisma.gym.findFirst();
+  if (!gym) {
+    gym = await prisma.gym.create({
+      data: { name: 'Gym Test Bonos', city: 'Madrid', province: 'Madrid' },
+    });
+  }
+
+  // Crear cliente de prueba
+  const client = await prisma.client.create({
+    data: {
+      firstName: 'Marcos',
+      lastName: 'Gómez Bono',
+      phone: `+34 655${Math.floor(100000 + Math.random() * 900000)}`,
+      email: `marcos.bono.${Date.now()}@test.com`,
+      gymId: gym.id,
+    },
+  });
+  createdClientIds.push(client.id);
+
+  // Crear servicio dinámico tipo Pack 8 entrenamientos de 4 semanas
+  const service = await prisma.service.create({
+    data: {
+      name: 'Bono 8 Sesiones Fuerza Test',
+      modality: 'INDIVIDUAL',
+      type: 'PACK',
+      trainingCount: 8,
+      price: 320.00,
+      durationMin: 60,
+      validityWeeks: 4,
+      recommendedWeeklyFrequency: 2,
+      isActive: true,
+    },
+  });
+  createdServiceIds.push(service.id);
+
+  // Asignar bono al cliente (ClientServicePackage)
+  const bono = await prisma.clientServicePackage.create({
+    data: {
+      clientId: client.id,
+      serviceId: service.id,
+      sessionsBought: service.trainingCount,
+      totalAmount: service.price,
+      paymentMethod: 'TARJETA',
+      paymentStatus: 'PAGADO',
+      notes: 'Bono adquirido en recepción',
+    },
+    include: {
+      client: true,
+      service: true,
+    },
+  });
+  createdPackageIds.push(bono.id);
+
+  assert.ok(bono.id, 'Debe generar identificador de bono');
+  assert.equal(bono.clientId, client.id);
+  assert.equal(bono.serviceId, service.id);
+  assert.equal(bono.sessionsBought, 8);
+  assert.equal(Number(bono.totalAmount), 320.00);
+  assert.equal(bono.paymentMethod, 'TARJETA');
+  assert.equal(bono.paymentStatus, 'PAGADO');
+  assert.equal(bono.service.validityWeeks, 4, 'La validez del servicio del bono debe ser de 4 semanas');
+
+  // Comprobar asignación de bono con pago pendiente (genera deuda)
+  const bonoPendiente = await prisma.clientServicePackage.create({
+    data: {
+      clientId: client.id,
+      serviceId: service.id,
+      sessionsBought: service.trainingCount,
+      totalAmount: service.price,
+      paymentMethod: 'TRANSFERENCIA',
+      paymentStatus: 'PENDIENTE',
+      notes: 'Pendiente de justificante',
+    },
+  });
+  createdPackageIds.push(bonoPendiente.id);
+
+  assert.equal(bonoPendiente.paymentStatus, 'PENDIENTE');
+  assert.equal(Number(bonoPendiente.totalAmount), 320.00);
+});
+
+test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica de asignación de bonos', () => {
+  const profileHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.html'), 'utf8');
+  const profileJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.js'), 'utf8');
+  const profileCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.css'), 'utf8');
+
+  // Comprobar elementos HTML en la ficha
+  assert.ok(profileHtml.includes('id="open-add-bono"'), 'Debe existir botón para abrir el modal de añadir bono');
+  assert.ok(profileHtml.includes('id="add-bono-dialog"'), 'Debe existir el diálogo modal de asignación de bono');
+  assert.ok(profileHtml.includes('id="bono-service-select"'), 'Debe existir selector de servicio');
+  assert.ok(profileHtml.includes('id="bono-sessions-bought"'), 'Debe existir campo para sesiones compradas');
+  assert.ok(profileHtml.includes('id="bono-total-amount"'), 'Debe existir campo para importe total');
+  assert.ok(profileHtml.includes('id="bono-calc-callout"'), 'Debe existir callout de cálculo');
+  assert.ok(profileHtml.includes('4 semanas solo'), 'Debe mostrar la regla de validez de 4 semanas');
+
+  // Comprobar lógica en el script JS de la ficha
+  assert.ok(profileJs.includes('/api/services?activeOnly=true') || profileJs.includes('/api/services'), 'Debe cargar el catálogo de servicios');
+  assert.ok(profileJs.includes('/service-packages'), 'Debe enviar POST al endpoint de service-packages');
+  assert.ok(profileJs.includes('updateBonoCalculation'), 'Debe calcular automáticamente el precio por sesión');
+  assert.ok(profileJs.includes('loadPurchaseHistory'), 'Debe recargar el historial de compras tras guardar el bono');
+
+  // Comprobar estilos CSS
+  assert.ok(profileCss.includes('.add-bono-dialog'), 'Debe contener estilos para el diálogo de bonos');
+  assert.ok(profileCss.includes('.bono-calc-callout'), 'Debe contener estilos para el bloque de cálculo de bonos');
+});
+
+test('Clientes y Bonos: Directorio de clientes incluye botón de asignación rápida y auto-completado', () => {
+  const clientsHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.html'), 'utf8');
+  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.js'), 'utf8');
+  const clientsCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.css'), 'utf8');
+
+  // Comprobar botón rápido en la tarjeta de cliente
+  assert.ok(clientsJs.includes('client-card-bono-btn'), 'Debe incluir botón rápido de bono en cada tarjeta de cliente');
+  assert.ok(clientsCss.includes('.client-card-bono-btn'), 'Debe contener estilos para el botón rápido de bono');
+
+  // Comprobar auto-completado al seleccionar servicio en el historial
+  assert.ok(clientsJs.includes('purchaseServiceSelect'), 'Debe escuchar cambios en el selector de servicio');
+  assert.ok(clientsJs.includes('updatePurchaseCallout'), 'Debe recalcular valores y tasa por sesión');
+  assert.ok(clientsHtml.includes('purchase-calc-callout'), 'Debe contener bloque visual con duración y 4 semanas de validez');
+  assert.ok(clientsHtml.includes('4 semanas solo'), 'Debe reflejar la validez fija de 4 semanas');
 });

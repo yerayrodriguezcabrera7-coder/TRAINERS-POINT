@@ -144,6 +144,7 @@ function renderPurchaseHistory(data) {
     const amount = document.createElement("strong");
     amount.textContent = currencyText(purchase.amount, purchase.currency);
     const status = document.createElement("small");
+    status.className = `badge-status badge-${String(purchase.status).toLowerCase()}`;
     status.textContent = purchase.status;
     summary.append(amount, status);
     item.append(details, summary);
@@ -410,6 +411,7 @@ async function loadProfile() {
     renderProgress(data); loading.hidden = true; view.hidden = false;
     void loadAvailableGyms();
     void loadPurchaseHistory();
+    void loadBonoServices();
   } catch (error) {
     showError(error instanceof Error && error.message
       ? error.message
@@ -617,6 +619,172 @@ function getReachedMilestone(previousMeasurements, updatedMeasurements) {
     }
   }
   return "";
+}
+
+// --- Client Bono Management ---
+const addBonoDialog = document.querySelector("#add-bono-dialog");
+const addBonoForm = document.querySelector("#add-bono-form");
+const openAddBonoBtn = document.querySelector("#open-add-bono");
+const openAddBonoTopBtn = document.querySelector("#open-add-bono-top");
+const closeAddBonoBtn = document.querySelector("#close-add-bono");
+const cancelAddBonoBtn = document.querySelector("#cancel-add-bono");
+const bonoServiceSelect = document.querySelector("#bono-service-select");
+const bonoSessionsInput = document.querySelector("#bono-sessions-bought");
+const bonoAmountInput = document.querySelector("#bono-total-amount");
+const bonoPaymentMethod = document.querySelector("#bono-payment-method");
+const bonoPaymentStatus = document.querySelector("#bono-payment-status");
+const bonoNotesInput = document.querySelector("#bono-notes");
+const bonoFormError = document.querySelector("#bono-form-error");
+const saveAddBonoBtn = document.querySelector("#save-add-bono");
+
+const bonoCalcCallout = document.querySelector("#bono-calc-callout");
+const bonoCalcSessions = document.querySelector("#bono-calc-sessions");
+const bonoCalcUnitRate = document.querySelector("#bono-calc-unit-rate");
+const bonoCalcDuration = document.querySelector("#bono-calc-duration");
+
+let activeServicesList = [];
+
+async function loadBonoServices() {
+  try {
+    const response = await fetch("/api/services?activeOnly=true", { headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudieron cargar los servicios.");
+    activeServicesList = data.services || [];
+    renderBonoServices();
+  } catch (error) {
+    if (bonoServiceSelect) {
+      bonoServiceSelect.replaceChildren();
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Error al cargar servicios";
+      bonoServiceSelect.append(opt);
+    }
+  }
+}
+
+function renderBonoServices() {
+  if (!bonoServiceSelect) return;
+  bonoServiceSelect.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = activeServicesList.length ? "Selecciona un servicio…" : "No hay servicios disponibles";
+  bonoServiceSelect.append(placeholder);
+
+  for (const s of activeServicesList) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    const modalityText = s.modality === "DUAL" ? " [Dúo]" : " [Individual]";
+    opt.textContent = `${s.name}${modalityText} — ${s.trainingCount} ses. · ${currencyText(s.price)}`;
+    bonoServiceSelect.append(opt);
+  }
+}
+
+function updateBonoCalculation() {
+  if (!bonoServiceSelect || !bonoCalcCallout) return;
+  const selectedId = bonoServiceSelect.value;
+  const service = activeServicesList.find((s) => s.id === selectedId);
+  const sessions = Number(bonoSessionsInput?.value || 0);
+  const total = Number(bonoAmountInput?.value || 0);
+
+  if (service) {
+    bonoCalcCallout.hidden = false;
+    if (bonoCalcSessions) bonoCalcSessions.textContent = `${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`;
+    if (bonoCalcDuration) bonoCalcDuration.textContent = `${service.durationMin || 60} min`;
+    if (bonoCalcUnitRate) {
+      if (sessions > 0 && !isNaN(total) && total >= 0) {
+        const rate = total / sessions;
+        bonoCalcUnitRate.textContent = `${rate.toFixed(2)} €/sesión`;
+      } else {
+        bonoCalcUnitRate.textContent = "—";
+      }
+    }
+  } else {
+    bonoCalcCallout.hidden = true;
+  }
+}
+
+function openAddBonoModal() {
+  if (!addBonoDialog) return;
+  addBonoForm.reset();
+  if (bonoFormError) bonoFormError.hidden = true;
+  if (bonoCalcCallout) bonoCalcCallout.hidden = true;
+  if (progress?.client) {
+    const fullName = `${progress.client.firstName} ${progress.client.lastName}`.trim();
+    const titleEl = document.querySelector("#add-bono-title");
+    if (titleEl) titleEl.textContent = `Añadir bono a ${fullName}`;
+  }
+  if (!activeServicesList.length) {
+    void loadBonoServices();
+  }
+  addBonoDialog.showModal();
+}
+
+if (openAddBonoBtn) openAddBonoBtn.addEventListener("click", openAddBonoModal);
+if (openAddBonoTopBtn) openAddBonoTopBtn.addEventListener("click", openAddBonoModal);
+if (closeAddBonoBtn) closeAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
+if (cancelAddBonoBtn) cancelAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
+
+if (bonoServiceSelect) {
+  bonoServiceSelect.addEventListener("change", () => {
+    const selectedId = bonoServiceSelect.value;
+    const service = activeServicesList.find((s) => s.id === selectedId);
+    if (service) {
+      if (bonoSessionsInput) bonoSessionsInput.value = service.trainingCount || 1;
+      if (bonoAmountInput) bonoAmountInput.value = Number(service.price).toFixed(2);
+    }
+    updateBonoCalculation();
+  });
+}
+
+if (bonoSessionsInput) bonoSessionsInput.addEventListener("input", updateBonoCalculation);
+if (bonoAmountInput) bonoAmountInput.addEventListener("input", updateBonoCalculation);
+
+if (addBonoForm) {
+  addBonoForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (bonoFormError) bonoFormError.hidden = true;
+    if (!addBonoForm.reportValidity()) return;
+
+    if (saveAddBonoBtn) {
+      saveAddBonoBtn.disabled = true;
+      saveAddBonoBtn.textContent = "Guardando bono…";
+    }
+
+    const payload = {
+      serviceId: bonoServiceSelect.value,
+      sessionsBought: Number(bonoSessionsInput.value),
+      totalAmount: Number(bonoAmountInput.value),
+      paymentMethod: bonoPaymentMethod.value,
+      paymentStatus: bonoPaymentStatus.value,
+      notes: bonoNotesInput?.value.trim() || undefined,
+    };
+
+    try {
+      const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/service-packages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo añadir el bono al cliente.");
+      }
+      addBonoDialog.close();
+      showProfileToast("Bono añadido al cliente correctamente.");
+      document.querySelector(".client-purchases-section")?.setAttribute("open", "");
+      await loadPurchaseHistory();
+    } catch (error) {
+      if (bonoFormError) {
+        bonoFormError.textContent = error instanceof Error ? error.message : "Error al guardar el bono.";
+        bonoFormError.hidden = false;
+      }
+    } finally {
+      if (saveAddBonoBtn) {
+        saveAddBonoBtn.disabled = false;
+        saveAddBonoBtn.textContent = "Guardar bono";
+      }
+    }
+  });
 }
 
 loadProfile();

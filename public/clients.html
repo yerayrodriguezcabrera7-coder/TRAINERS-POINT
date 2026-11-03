@@ -338,7 +338,7 @@
             <p class="history-empty">Cargando historial…</p>
           </div>
           <form id="purchase-form" class="purchase-form">
-            <h3>Añadir sesiones</h3>
+            <h3>Añadir bono / sesiones</h3>
             <div class="form-grid">
               <label class="form-field form-field-wide">
                 <span>Servicio <b>*</b></span>
@@ -346,6 +346,11 @@
                   <option value="">Selecciona un servicio</option>
                 </select>
               </label>
+              <div id="purchase-calc-callout" class="form-field form-field-wide bono-calc-callout" hidden>
+                <div class="bono-calc-chip"><span class="bono-calc-chip-label">Precio/sesión:</span><strong id="purchase-calc-rate">—</strong></div>
+                <div class="bono-calc-chip"><span class="bono-calc-chip-label">Duración:</span><strong id="purchase-calc-duration">—</strong></div>
+                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong>4 semanas solo</strong></div>
+              </div>
               <label class="form-field">
                 <span>Sesiones incluidas <b>*</b></span>
                 <input name="sessionsBought" type="number" min="1" max="500" step="1" required value="1">
