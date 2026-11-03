@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { Inventory, inventoryPermission } from "./inventory";
+import { CashRegister, cashPermission } from "./cash";
+import { Inventory, inventoryPermission, saleBalance } from "./inventory";
 import { ApiError } from "./calendar/model";
 import { ZodError } from "zod";
 import { createReadStream } from "node:fs";
@@ -92,14 +93,41 @@ type GymInput = {
   province?: string;
   address?: string;
   photoData?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  radiusMeters?: number | null;
 };
 
 type ServiceInput = {
   name: string;
-  description?: string;
+  description?: string | null;
   durationMin: number;
   price: number;
+  modality: "INDIVIDUAL" | "DUAL";
+  type: "PACK" | "SESION_INDIVIDUAL";
+  trainingCount: number;
+  validityWeeks: number | null;
+  recommendedWeeklyFrequency: number | null;
+  conditions: string | null;
+  isActive: boolean;
 };
+
+const serviceSelectFields = {
+  id: true,
+  name: true,
+  description: true,
+  durationMin: true,
+  price: true,
+  modality: true,
+  type: true,
+  trainingCount: true,
+  validityWeeks: true,
+  recommendedWeeklyFrequency: true,
+  conditions: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 function sendJson(response: ServerResponse, status: number, data: unknown): void {
   response.writeHead(status, {
@@ -336,15 +364,28 @@ function parseGymInput(value: unknown): GymInput | string {
   const address = typeof value.address === "string" ? value.address.trim() : "";
   const photoData = typeof value.photoData === "string" ? value.photoData.trim() : "";
 
+  const rawLat = value.latitude;
+  const latitude = typeof rawLat === "number" && !isNaN(rawLat) ? rawLat : (typeof rawLat === "string" && rawLat.trim() && !isNaN(Number(rawLat)) ? Number(rawLat) : null);
+  const rawLon = value.longitude;
+  const longitude = typeof rawLon === "number" && !isNaN(rawLon) ? rawLon : (typeof rawLon === "string" && rawLon.trim() && !isNaN(Number(rawLon)) ? Number(rawLon) : null);
+  const rawRadius = value.radiusMeters;
+  const radiusMeters = typeof rawRadius === "number" && !isNaN(rawRadius) ? Math.round(rawRadius) : (typeof rawRadius === "string" && rawRadius.trim() && !isNaN(Number(rawRadius)) ? Math.round(Number(rawRadius)) : 200);
+
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
   }
   if (city.length > 100 || province.length > 100 || address.length > 200) {
     return "La ubicación supera la longitud permitida.";
   }
+  if (latitude !== null && (latitude < -90 || latitude > 90)) {
+    return "La latitud debe estar comprendida entre -90 y 90.";
+  }
+  if (longitude !== null && (longitude < -180 || longitude > 180)) {
+    return "La longitud debe estar comprendida entre -180 y 180.";
+  }
 
   if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
-    return "La imagen no es vÃ¡lida o supera el tamaÃ±o permitido.";
+    return "La imagen no es válida o supera el tamaño permitido.";
   }
 
   return {
@@ -353,6 +394,9 @@ function parseGymInput(value: unknown): GymInput | string {
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
     ...(photoData ? { photoData } : {}),
+    latitude: latitude ?? null,
+    longitude: longitude ?? null,
+    radiusMeters: radiusMeters ?? 200,
   };
 }
 
@@ -371,19 +415,80 @@ function parseServiceInput(value: unknown): ServiceInput | string {
   const price = typeof value.price === "number" ? value.price : Number(value.price);
 
   if (!name || name.length > 120) {
-    return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
+    return "El nombre del servicio es obligatorio y debe tener como máximo 120 caracteres.";
   }
-  if (!Number.isInteger(durationMin) || durationMin < 1 || durationMin > 1440) {
-    return "La duración debe estar entre 1 y 1440 minutos.";
+  if (value.durationMin === undefined || value.durationMin === null || value.durationMin === "" || !Number.isInteger(durationMin) || durationMin < 5 || durationMin > 1440) {
+    return "La duración por sesión es obligatoria y debe estar entre 5 y 1440 minutos.";
   }
-  if (!Number.isFinite(price) || price < 0 || price > 99999999.99) {
-    return "Introduce un precio válido.";
+  if (value.price === undefined || value.price === null || value.price === "" || !Number.isFinite(price) || price < 0 || price > 99999999.99) {
+    return "El precio total es obligatorio, no puede ser negativo y debe tener un valor válido (hasta 99.999.999,99 €).";
   }
-  if (description.length > 1000) {
-    return "La descripción debe tener como máximo 1000 caracteres.";
+  if (description.length > 2000) {
+    return "La descripción debe tener como máximo 2000 caracteres.";
   }
 
-  return { name, durationMin, price, ...(description ? { description } : {}) };
+  const rawModality = String(value.modality ?? "INDIVIDUAL").trim().toUpperCase();
+  if (rawModality !== "INDIVIDUAL" && rawModality !== "DUAL") {
+    return "La modalidad debe ser individual o dual.";
+  }
+  const modality: "INDIVIDUAL" | "DUAL" = rawModality as "INDIVIDUAL" | "DUAL";
+
+  const rawType = String(value.type ?? "SESION_INDIVIDUAL").trim().toUpperCase();
+  if (rawType !== "PACK" && rawType !== "SESION_INDIVIDUAL") {
+    return "El tipo de servicio debe ser pack o sesión individual.";
+  }
+  const type: "PACK" | "SESION_INDIVIDUAL" = rawType as "PACK" | "SESION_INDIVIDUAL";
+
+  if (value.trainingCount === undefined || value.trainingCount === null || value.trainingCount === "") {
+    return "Indica el número de sesiones del servicio.";
+  }
+  const rawTrainingCount = Number(value.trainingCount);
+  if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) {
+    return "El número de sesiones debe ser un entero entre 1 y 500.";
+  }
+  const trainingCount = rawTrainingCount;
+
+  let validityWeeks: number = 4;
+  if (value.validityWeeks != null && value.validityWeeks !== "") {
+    const parsedWeeks = Number(value.validityWeeks);
+    if (!Number.isInteger(parsedWeeks) || parsedWeeks !== 4) {
+      return "La duración/validez del servicio debe ser de 4 semanas solo.";
+    }
+    validityWeeks = 4;
+  }
+
+  let recommendedWeeklyFrequency: number | null = null;
+  if (value.recommendedWeeklyFrequency != null && value.recommendedWeeklyFrequency !== "") {
+    const parsedFreq = Number(value.recommendedWeeklyFrequency);
+    if (!Number.isInteger(parsedFreq) || parsedFreq < 1 || parsedFreq > 14) {
+      return "La frecuencia semanal recomendada debe ser un número entero entre 1 y 14.";
+    }
+    recommendedWeeklyFrequency = parsedFreq;
+  }
+
+  const rawConditions = typeof value.conditions === "string" ? value.conditions.trim() : "";
+  if (rawConditions.length > 5000) {
+    return "Las condiciones deben tener como máximo 5000 caracteres.";
+  }
+  const conditions = rawConditions || null;
+
+  const isActive = typeof value.isActive === "boolean"
+    ? value.isActive
+    : value.isActive === "true" || value.isActive === 1 || value.isActive === undefined || value.isActive === null;
+
+  return {
+    name,
+    durationMin,
+    price,
+    modality,
+    type,
+    trainingCount,
+    validityWeeks,
+    recommendedWeeklyFrequency,
+    conditions,
+    isActive,
+    description: description || null,
+  };
 }
 
 function parseServicePackageInput(
@@ -518,21 +623,45 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     (request as any).identity = identity;
     (request as any).selectedGym = selectedGym;
   }
+  if (url.pathname.startsWith("/api/cash/")) {
+    try {
+      const actor=(request as any).identity as Identity | undefined;
+      cashPermission(actor);
+      const gym=(request as any).selectedGym as string,cash=new CashRegister(prisma);
+      const session=url.pathname.match(/^\/api\/cash\/sessions\/([0-9a-f-]+)(?:\/(movements|close))?$/i);
+      if(url.pathname==='/api/cash/current'&&request.method==='GET')sendJson(response,200,await cash.current(gym));
+      else if(url.pathname==='/api/cash/sessions'&&request.method==='GET')sendJson(response,200,await cash.history(gym,url.searchParams));
+      else if(url.pathname==='/api/cash/sessions'&&request.method==='POST')sendJson(response,201,await cash.open(gym,actor!,await readJsonBody(request)));
+      else if(session&&request.method==='GET'&&!session[2])sendJson(response,200,await cash.detail(gym,session[1]));
+      else if(session&&request.method==='POST'&&session[2]==='movements')sendJson(response,201,await cash.movement(gym,actor!,session[1],await readJsonBody(request)));
+      else if(session&&request.method==='POST'&&session[2]==='close')sendJson(response,200,await cash.close(gym,actor!,session[1],await readJsonBody(request)));
+      else sendError(response,404,'Operación de caja desconocida.');
+    }catch(error){
+      if(error instanceof ApiError)sendError(response,error.status,error.message);
+      else if(error instanceof ZodError)sendError(response,400,'Revisa los importes, las fechas y el motivo del movimiento.');
+      else throw error;
+    }
+    return;
+  }
   if (url.pathname.startsWith("/api/inventory/")) {
     try {
       const actor=(request as any).identity as Identity | undefined;
       const gym=(request as any).selectedGym as string;
       const inventory=new Inventory(prisma);
       const product=url.pathname.match(/^\/api\/inventory\/products(?:\/([0-9a-f-]+))?$/i);
+      const payment=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/payments$/i);
+      const receiptAction=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(refunds|verify-payment)$/i);
       const reversal=url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
-      inventoryPermission(actor,request.method==='GET'?'read':url.pathname==='/api/inventory/sales'?'sell':'admin');
+      inventoryPermission(actor,request.method==='GET'?'read':url.pathname==='/api/inventory/sales'||payment||receiptAction?.[2]==='verify-payment'?'sell':reversal?.[2]==='return'||receiptAction?.[2]==='refunds'?'return':'admin');
       if(product && request.method==='GET'&&!product[1])sendJson(response,200,{products:await inventory.products(gym)});
       else if(product&&request.method==='POST'&&!product[1])sendJson(response,201,await inventory.saveProduct(gym,await readJsonBody(request)));
       else if(product&&request.method==='PUT'&&product[1])sendJson(response,200,await inventory.saveProduct(gym,await readJsonBody(request),product[1]));
       else if(product&&request.method==='DELETE'&&product[1])sendJson(response,200,await inventory.removeProduct(gym,product[1]));
       else if(url.pathname==='/api/inventory/sales'&&request.method==='GET')sendJson(response,200,await inventory.salesPage(gym,url.searchParams));
       else if(url.pathname==='/api/inventory/sales'&&request.method==='POST')sendJson(response,201,await inventory.sell(gym,actor!.id,await readJsonBody(request)));
-      else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel'));
+      else if(payment&&request.method==='POST')sendJson(response,200,await inventory.pay(gym,actor!.id,payment[1],await readJsonBody(request)));
+      else if(receiptAction&&request.method==='POST')sendJson(response,200,await (receiptAction[2]==='refunds'?inventory.refund(gym,actor!.id,receiptAction[1],await readJsonBody(request)):inventory.verifyPaid(gym,actor!.id,receiptAction[1],await readJsonBody(request))));
+      else if(reversal&&request.method==='POST')sendJson(response,200,await inventory.reverse(gym,reversal[1],reversal[2]==='cancel'?{}:await readJsonBody(request),reversal[2]==='cancel',actor!.id));
       else sendError(response,404,"Operación desconocida.");
     } catch(error) {
       if(error instanceof ApiError)sendError(response,error.status,error.message);
@@ -542,9 +671,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
   if (request.method === "GET" && url.pathname === "/api/services") {
+    const includeAll = url.searchParams.get("all") === "true" || url.searchParams.get("includeInactive") === "true";
     const services = await prisma.service.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      where: includeAll ? undefined : { isActive: true },
+      select: serviceSelectFields,
       orderBy: { name: "asc" },
     });
     sendJson(response, 200, { services });
@@ -604,9 +734,98 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 
     const service = await prisma.service.create({
       data: input,
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      select: serviceSelectFields,
     });
     sendJson(response, 201, { service });
+    return;
+  }
+
+  const serviceItemMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)$/i);
+  if (request.method === "PUT" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const input = parseServiceInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: input,
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  const serviceStatusMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)\/status$/i);
+  if (request.method === "PATCH" && serviceStatusMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceStatusMatch[1];
+    const body = await readJsonBody(request);
+    if (!isRecord(body) || typeof body.isActive !== "boolean") {
+      sendError(response, 400, "Indica si el servicio debe estar activo (true o false).");
+      return;
+    }
+
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: { isActive: body.isActive },
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  if (request.method === "DELETE" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { bookings: true, packages: true } } },
+    });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    if (existing._count.bookings > 0 || existing._count.packages > 0) {
+      const service = await prisma.service.update({
+        where: { id },
+        data: { isActive: false },
+        select: serviceSelectFields,
+      });
+      sendJson(response, 200, { service, deactivated: true, message: "El servicio tiene historial y ha sido desactivado en lugar de eliminado." });
+      return;
+    }
+
+    await prisma.service.delete({ where: { id } });
+    sendJson(response, 200, { deleted: true, id });
     return;
   }
 
@@ -827,7 +1046,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true },
+      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true, gymId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");
@@ -847,6 +1066,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
 */ }
+    if(client.gymId!==(request as any).selectedGym){sendError(response,404,"Cliente desconocido en este centro.");return;}
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
       include: { service: { select: { id: true, name: true, durationMin: true } } },
@@ -878,9 +1098,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         _count: { _all: true },
       }),
       prisma.sale.findMany({
-        where: { clientId },
+        where: { clientId, gymKey: (request as any).selectedGym },
         select: {
           id: true,
+          paymentTracking: true,
           status: true,
           currency: true,
           subtotal: true,
@@ -888,20 +1109,21 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           totalAmount: true,
           soldAt: true,
           createdAt: true,
-          lines: { select: { description: true, quantity: true, unitPrice: true, lineTotal: true, type: true } },
-          payments: { select: { method: true, status: true, amount: true, paidAt: true } },
+          lines: { select: { description: true, quantity: true, returnedQuantity: true, unitPrice: true, lineTotal: true, type: true } },
+          payments: { select: { method: true, kind: true, note: true, status: true, amount: true, paidAt: true } },
         },
         orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
         take: 100,
       }),
       prisma.sale.findMany({
-        where: { clientId, status: SaleStatus.COMPLETADA },
+        where: { clientId, gymKey:(request as any).selectedGym, status: SaleStatus.COMPLETADA },
         select: {
+          status: true, paymentTracking: true, lines: true,
           currency: true,
           totalAmount: true,
           payments: {
             where: { status: PaymentStatus.PAGADO },
-            select: { amount: true },
+            select: { amount: true, status: true, kind: true },
           },
         },
       }),
@@ -917,8 +1139,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       }
     }
     for (const sale of debtSales) {
-      const paid = sale.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-      const outstanding = Math.max(0, Number(sale.totalAmount) - paid);
+      const outstanding = saleBalance(sale).outstandingAmount;
       if (outstanding > 0) {
         debtByCurrency.set(sale.currency, (debtByCurrency.get(sale.currency) ?? 0) + outstanding);
       }
@@ -948,7 +1169,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         };
       }),
       bookings,
-      sales,
+      sales: sales.map(saleBalance),
       debt,
     });
     return;
@@ -1118,9 +1339,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
       orderBy: { name: "asc" },
     });
-    const photos = await prisma.$queryRaw<Array<{ id: string; photoData: string | null }>>(Prisma.sql`SELECT "id", "photoData" FROM "Gym" WHERE "isActive" = true`);
-    const photoById = new Map(photos.map((photo) => [photo.id, photo.photoData]));
-    sendJson(response, 200, { gyms: gyms.map((gym) => ({ ...gym, photoData: photoById.get(gym.id) ?? null })) });
+    const extraRows = await prisma.$queryRaw<Array<{ id: string; photoData: string | null; latitude: number | null; longitude: number | null; radiusMeters: number | null }>>(
+      Prisma.sql`SELECT "id", "photoData", "latitude", "longitude", "radiusMeters" FROM "Gym" WHERE "isActive" = true`
+    ).catch(() => []);
+    const extraById = new Map(extraRows.map((e) => [e.id, e]));
+
+    sendJson(response, 200, {
+      gyms: gyms.map((gym) => {
+        const extra = extraById.get(gym.id);
+        return {
+          ...gym,
+          photoData: extra?.photoData ?? null,
+          latitude: extra?.latitude ?? null,
+          longitude: extra?.longitude ?? null,
+          radiusMeters: extra?.radiusMeters ?? 200,
+        };
+      }),
+    });
     return;
   }
 
@@ -1137,15 +1372,99 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
     try {
-      const { photoData, ...gymData } = input;
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
       const gym = await prisma.gym.create({
         data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      if (photoData) {
-        await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = ${photoData} WHERE "id" = ${gym.id}::uuid`);
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gym.id}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [gym.address, gym.city, gym.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gym.id, JSON.stringify(locationObj), gym.name]
+          ).catch(() => {});
+        }
       }
-      sendJson(response, 201, { gym: { ...gym, photoData: photoData ?? null } });
+
+      sendJson(response, 201, {
+        gym: {
+          ...gym,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
+        return;
+      }
+      throw error;
+    }
+    return;
+  }
+
+  const gymPatchMatch = url.pathname.match(/^\/api\/gyms\/([0-9a-f-]+)$/i);
+  if (request.method === "PATCH" && gymPatchMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+    const gymId = gymPatchMatch[1];
+    const input = parseGymInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    try {
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
+      const updated = await prisma.gym.update({
+        where: { id: gymId },
+        data: gymData,
+        select: { id: true, name: true, city: true, province: true, address: true },
+      });
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gymId}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [updated.address, updated.city, updated.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gymId, JSON.stringify(locationObj), updated.name]
+          ).catch(() => {});
+        }
+      }
+
+      sendJson(response, 200, {
+        gym: {
+          ...updated,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
@@ -1509,11 +1828,16 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 }
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
+  "/caja.html": {file:"web/caja.html",contentType:"text/html; charset=utf-8"},
+  "/caja.js": {file:"web/caja.js",contentType:"text/javascript; charset=utf-8"},
+  "/caja.css": {file:"web/caja.css",contentType:"text/css; charset=utf-8"},
   "/": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
   "/index.html": { file: "web/index.html", contentType: "text/html; charset=utf-8" },
   "/inicio.html": { file: "web/inicio.html", contentType: "text/html; charset=utf-8" },
   "/inicio.css": { file: "web/inicio.css", contentType: "text/css; charset=utf-8" },
   "/inicio.js": { file: "web/inicio.js", contentType: "text/javascript; charset=utf-8" },
+  "/fichajes": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
+  "/fichaje": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
   "/fichajes.html": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
   "/fichajes.css": { file: "web/fichajes.css", contentType: "text/css; charset=utf-8" },
   "/fichajes.js": { file: "web/fichajes.js", contentType: "text/javascript; charset=utf-8" },
@@ -1560,6 +1884,14 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/usuarios": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/usuarios.html": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/users.js": { file: "public/users.js", contentType: "text/javascript; charset=utf-8" },
+  "/profesionales": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/profesionales.html": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/professionals.js": { file: "public/professionals.js", contentType: "text/javascript; charset=utf-8" },
+  "/servicios": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/servicios.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.css": { file: "public/services.css", contentType: "text/css; charset=utf-8" },
+  "/services.js": { file: "public/services.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
@@ -1670,6 +2002,12 @@ async function start(): Promise<void> {
     ],
     rooms: [{ id: "r1", name: "Sala principal" }],
     clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
+    location: {
+      latitude: 43.2630,
+      longitude: -2.9350,
+      radiusMeters: 200,
+      address: "Trainers Point · Bizkaia",
+    },
   };
   await store.seed(gym, initialCalendarConfig);
   if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {

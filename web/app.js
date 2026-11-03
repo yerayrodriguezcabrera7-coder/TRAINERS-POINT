@@ -118,12 +118,13 @@ async function refreshServer(force=false) {
   polling=true;
   try {
     const next=await api('state');
-    if(force||next.revision!==data.revision) {
+    if(force||next.revision!==data.revision||JSON.stringify(next.clientDebts||{})!==JSON.stringify(data.clientDebts||{})) {
       data={...next,bookings:next.bookings.map(fromServer)};
       await loadBookingClients();
       // Do not change form values or the version captured when a dialog was opened.
       if(!document.querySelector('dialog[open]')) setupSelects();
       render();
+      updateDebtDetail();
     }
     $('storage-warning').hidden=true;
   } finally {polling=false;}
@@ -176,7 +177,15 @@ function titleForPeriod(dates) {
   const start = dates[0], end = dates.at(-1);
   return start.slice(0, 7) === end.slice(0, 7) ? `${C.parseDate(start).getDate()} – ${prettyDate(end, { day: 'numeric', month: 'long', year: 'numeric' })}` : `${prettyDate(start, { day: 'numeric', month: 'short', ...(start.slice(0,4) !== end.slice(0,4) ? {year:'numeric'} : {}) })} – ${prettyDate(end, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
-function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}`; }
+const debtMoney=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));
+function upcomingDebt(b){return ['pending','confirmed'].includes(b.status)&&b.date>=todayKey()?Number(data.clientDebts?.[b.clientId]||0):0;}
+function debtBadge(b){const amount=upcomingDebt(b);return amount>0?`<span class="booking-debt-badge">⚠ Pago pendiente · ${escapeHTML(debtMoney(amount))}</span>`:'';}
+function updateDebtDetail(){
+ const box=$('booking-debt');if(!box)return;
+ const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
+ box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo total de las compras de productos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
+}
+function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}`; }
 
 function renderTimeGrid(dates, bookings, employees) {
   const columns = dates.length * employees.length;
@@ -216,7 +225,7 @@ function renderTimeGrid(dates, bookings, employees) {
       const clientName = lookup('clients', b.clientId).name;
       const serviceName = lookup('services', b.serviceId).name;
       const roomName = lookup('rooms', b.roomId).name;
-      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}"><div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
+      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
     });
     if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
     html += '</div>';
@@ -236,7 +245,7 @@ function renderMonth(bookings) {
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
       const color = lookup('services', b.serviceId).color || '#317b9b';
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
@@ -286,6 +295,7 @@ function renderClientResults() {
   $('client-results').hidden = false;
 }
 function syncClientPicker() {
+  updateDebtDetail();
   const value = $('booking-client').value;
   if (value === 'new') { updateClientFields(); return; }
   const client = availableClients().find(item => item.id === value);
@@ -328,6 +338,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   $('booking-center-info').textContent=b?.centerAddress||'';
   $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)} · ${escapeHTML(h.previous.centerName||'')}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
   syncClientPicker();
+  updateDebtDetail();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
 

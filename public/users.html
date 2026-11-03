@@ -25,11 +25,11 @@
 
         <section class="page-content">
           <header class="page-heading">
-            <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="Trainers Point">
+            <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
             <div class="page-heading-copy">
               <p class="eyebrow">ADMINISTRACIÓN · USUARIOS</p>
               <h1>Usuarios <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Gestiona los accesos del equipo y clientes, sus perfiles y vinculaciones.</p>
+              <p class="page-description">Consulta los accesos del equipo y clientes, sus perfiles y vinculaciones.</p>
             </div>
           </header>
 
@@ -98,65 +98,90 @@
     <!-- Modal Dialog para editar usuarios existentes -->
     <dialog id="user-dialog" class="client-dialog" aria-labelledby="dialog-title">
       <form id="user-form" novalidate>
-        <div class="intake-header">
+        <div class="dialog-heading">
           <div>
             <p class="eyebrow" id="dialog-eyebrow">CUENTA DE USUARIO</p>
             <h2 id="dialog-title">Editar usuario</h2>
+            <p id="dialog-subtitle">Actualiza los datos de acceso o el estado de la cuenta.</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
-        <div class="intake-content" style="padding-top: 10px;">
-          <div class="form-grid intake-fields">
-            <label class="form-field form-field-wide" id="role-field">
-              <span>Categoría de seguridad / Rol <b>*</b></span>
-              <select name="role" id="user-role" required>
-                <option value="ADMIN">Administración</option>
-                <option value="RECEPTION">Recepción</option>
-                <option value="TRAINER" selected>Entrenador</option>
-                <option value="CLIENT">Cliente</option>
-              </select>
-            </label>
+        <div class="form-grid">
+          <label class="form-field form-field-wide" id="role-field">
+            <span>Categoría de seguridad / Rol <b>*</b></span>
+            <select name="role" id="user-role" required>
+              <option value="ADMIN">Administración</option>
+              <option value="RECEPTION">Recepción</option>
+              <option value="TRAINER" selected>Entrenador</option>
+              <option value="CLIENT">Cliente</option>
+            </select>
+          </label>
 
-            <!-- Campo Nombre de la persona: donde el usuario escribe el nombre -->
-            <label class="form-field form-field-wide" id="employee-field">
-              <span id="employee-label">Nombre de la persona <b>*</b></span>
-              <input name="name" id="user-name" type="text" list="employee-suggestions" required maxlength="200" placeholder="Escribe el nombre de la persona" autocomplete="name">
-              <datalist id="employee-suggestions"></datalist>
-              <input type="hidden" name="employeeId" id="user-employee-id">
-              <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Nombre completo para su perfil, turnos y fichajes.</small>
-            </label>
+          <!-- Campo Nombre de la persona: donde el usuario escribe el nombre -->
+          <label class="form-field form-field-wide" id="employee-field">
+            <span id="employee-label">Nombre de la persona <b>*</b></span>
+            <input name="name" id="user-name" type="text" list="employee-suggestions" required maxlength="200" placeholder="Escribe el nombre de la persona" autocomplete="name">
+            <datalist id="employee-suggestions"></datalist>
+            <input type="hidden" name="employeeId" id="user-employee-id">
+            <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Nombre completo para su perfil, turnos y fichajes.</small>
+          </label>
 
-            <!-- Campo Cliente (solo para rol === CLIENT) -->
-            <label class="form-field form-field-wide" id="client-field" hidden>
-              <span>Cliente <b>*</b></span>
-              <select name="clientId" id="user-client">
-                <!-- Opciones dinámicas con nombre del cliente -->
-              </select>
-              <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Selecciona la ficha de cliente vinculada a esta cuenta.</small>
-            </label>
+          <!-- Campo Cliente (solo para rol === CLIENT) -->
+          <label class="form-field form-field-wide" id="client-field" hidden>
+            <span>Cliente <b>*</b></span>
+            <select name="clientId" id="user-client">
+              <!-- Opciones dinámicas con nombre del cliente -->
+            </select>
+            <small class="field-hint" style="color: var(--tp-muted); font-size: 11px; margin-top: 4px;">Selecciona la ficha de cliente vinculada a esta cuenta.</small>
+          </label>
 
-            <label class="form-field form-field-wide">
-              <span>Usuario de acceso <b>*</b></span>
-              <input name="username" id="user-username" type="text" required maxlength="254" autocomplete="username" placeholder="Ejemplo: ana.garcia">
-            </label>
+          <label class="form-field form-field-wide">
+            <span>Usuario de acceso <b>*</b></span>
+            <input name="username" id="user-username" type="text" required maxlength="254" autocomplete="username" placeholder="Ejemplo: ana.garcia">
+          </label>
 
-            <label class="form-field form-field-wide">
-              <span>Estado de la cuenta <b>*</b></span>
-              <select name="enabled" id="user-enabled">
-                <option value="true" selected>Habilitada (acceso permitido)</option>
-                <option value="false">Deshabilitada (acceso bloqueado)</option>
-              </select>
-            </label>
+          <label class="form-field form-field-wide">
+            <span>Estado de la cuenta <b>*</b></span>
+            <select name="enabled" id="user-enabled">
+              <option value="true" selected>Habilitada (acceso permitido)</option>
+              <option value="false">Deshabilitada (acceso bloqueado)</option>
+            </select>
+          </label>
 
-            <p class="field-hint form-field-wide">La contraseña temporal será <strong>Trainerspoint</strong>. El usuario tendrá que cambiarla al iniciar sesión.</p>
+                    <div class="user-password-section form-field-wide" id="user-password-box" style="margin-top:4px; padding:12px 14px; border:1px solid var(--tp-line); border-radius:var(--tp-radius-md); background:var(--tp-surface-muted);">
+            <div class="password-box-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+              <div>
+                <strong style="display:block; font-size:12px; color:var(--tp-ink);">Contraseña de acceso</strong>
+                <small style="color:var(--tp-muted); font-size:11px;">En caso de que el entrenador o usuario no se acuerde de su contraseña.</small>
+              </div>
+              <button type="button" class="button button-outline button-small" id="btn-quick-reset-pwd" style="padding:5px 11px; font-size:11px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Restablecer a Trainerspoint
+              </button>
+            </div>
+
+            <div class="password-fields-row" style="display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap:12px; align-items:start;">
+              <label class="form-field" style="margin:0;">
+                <span style="font-size:11px;">Nueva contraseña (opcional)</span>
+                <input name="password" id="user-password" type="text" maxlength="128" placeholder="Dejar en blanco para no cambiarla" autocomplete="new-password">
+              </label>
+
+              <label class="form-field" style="margin:0; padding-top:20px;">
+                <span style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:11px; font-weight:normal; color:var(--tp-ink);">
+                  <input type="checkbox" id="user-must-change-password" name="mustChangePassword" checked style="width:16px; height:16px; accent-color:var(--tp-accent);">
+                  <span>Exigir cambio en próximo inicio</span>
+                </span>
+              </label>
+            </div>
+            <p id="password-feedback" class="field-hint" style="color:var(--tp-ok); font-size:11px; margin:6px 0 0;" hidden></p>
           </div>
+        </div>
 
-          <p id="form-error" class="form-error" role="alert" hidden style="margin-top: 14px;"></p>
+        <p id="form-error" class="form-error" role="alert" hidden style="margin-top: 14px;"></p>
 
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-            <button class="button button-outline" id="cancel-dialog" type="button">Cancelar</button>
-            <button class="button button-primary" id="submit-user" type="submit">Guardar usuario</button>
-          </div>
+        <div class="dialog-actions">
+          <button class="button button-outline" id="cancel-dialog" type="button">Cancelar</button>
+          <button class="button button-primary" id="submit-user" type="submit">Guardar usuario</button>
         </div>
       </form>
     </dialog>

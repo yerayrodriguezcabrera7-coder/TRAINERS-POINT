@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { timingSafeEqual, randomUUID } from "node:crypto";
 import { ZodError, z } from "zod";
 import { Store } from "./store";
+import { Inventory } from "../inventory";
 import { ApiError } from "./model";
 import { Access, Identity, initialPassword } from "./access";
 async function body(req: IncomingMessage) {
@@ -150,6 +151,15 @@ export function server(
               users: admin ? await access.list(gym,s.clients) : [],
             }); return;
           }
+                    const resetMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/reset-password$/);
+          if (resetMatch && req.method === "POST") {
+            if (!admin) throw new ApiError(403, "Solo administración puede restablecer contraseñas.");
+            const userId = decodeURIComponent(resetMatch[1]);
+            const raw = await body(req).catch(() => ({}));
+            const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined);
+            send(res, 200, result);
+            return;
+          }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
             if (management[1] === "users" && !admin) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
@@ -207,7 +217,8 @@ export function server(
             });
             return;
           }
-          send(res, 200, s);
+          const clientDebts = store.clientsDb ? await new Inventory(store.clientsDb).debtSummary(gym) : {};
+          send(res, 200, {...s,clientDebts});
           return;
         }
         if (req.method === "GET" && path === "/api/attendance") {
@@ -392,6 +403,7 @@ export function server(
         "ausencias.css": "text/css",
         "pendientes.html": "text/html",
         "pendientes.js": "text/javascript",
+        "clients.css": "text/css",
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",

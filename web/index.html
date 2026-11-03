@@ -55,7 +55,7 @@
         <label>Inicio<input type="time" id="booking-start" step="900" required></label><label>Fin<input type="time" id="booking-end" step="900" required></label>
         <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de pago / confirmar</option><option value="completed">Finalizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select></label>
         <label class="full">Notas (opcional)<textarea id="booking-notes" rows="3" maxlength="1000" placeholder="Indicaciones para esta sesión…"></textarea></label>
-      </div><p class="form-hint" id="booking-hours"></p><p id="booking-center-info"></p><div id="booking-history"></div><p class="form-error" id="booking-error" role="alert" hidden></p></div>
+      </div><p class="form-hint" id="booking-hours"></p><p id="booking-center-info"></p><div id="booking-debt" role="status" hidden></div><div id="booking-history"></div><p class="form-error" id="booking-error" role="alert" hidden></p></div>
       <footer class="modal-footer"><button type="button" class="button secondary" id="reschedule-booking" hidden>Pendiente de reprogramar</button><button type="button" class="button secondary" id="worker-complete" hidden>Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden>Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden>Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
     </form>
   </dialog>
