@@ -278,6 +278,15 @@ async function deleteGym(gym, button) {
 
 async function load() {
   try {
+    const token = sessionStorage.getItem("calendar-user-token") || sessionStorage.getItem("calendar-admin-token") || window.CALENDAR_DEV_TOKEN || "";
+    const meRes = await fetch("/api/me", { headers: { Authorization: "Bearer " + token } }).catch(() => null);
+    if (meRes && meRes.ok) {
+      const me = await meRes.json();
+      if (me.role !== "ADMIN") {
+        location.replace("/index.html");
+        return;
+      }
+    }
     const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudieron cargar las sedes.");

@@ -1,3 +1,23 @@
+let currentUserRole = null;
+async function fetchUserRole() {
+  try {
+    const res = await fetch("/api/me");
+    if (res.ok) {
+      const me = await res.json();
+      currentUserRole = me.role;
+      if (currentUserRole === 'TRAINER') {
+        document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
+        document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
+        document.querySelector("#profile-gym-form")?.setAttribute("hidden", "");
+        const detailsForm = document.querySelector("#client-details-form");
+        if (detailsForm) {
+          detailsForm.querySelectorAll("button[type=submit], input, select").forEach(el => el.disabled = true);
+        }
+      }
+    }
+  } catch (_) {}
+}
+fetchUserRole();
 const metrics = [
   ["weight", "Peso", "kg"],
   ["hip", "Cadera", "cm"],
@@ -443,6 +463,7 @@ function renderChart(measurements, previousMeasurements = []) {
 function renderProgress(data, previousMeasurements = []) { progress = data; renderHeader(data.client); renderClientDetails(data.client); renderSummary(data.measurements, previousMeasurements); renderHistory(data.measurements); renderChart(data.measurements, previousMeasurements); }
 
 async function loadProfile() {
+  if (!currentUserRole) await fetchUserRole();
   if (!clientId) { showError("No encontramos esta ficha. Vuelve a clientes y elige una persona."); return; }
   try {
     const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/progress`, { headers: { Accept: "application/json" } });
@@ -925,6 +946,7 @@ if (bonoAmountInput) bonoAmountInput.addEventListener("input", updateBonoCalcula
 if (addBonoForm) {
   addBonoForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (currentUserRole === "TRAINER") return;
     if (bonoFormError) bonoFormError.hidden = true;
     if (!addBonoForm.reportValidity()) return;
 

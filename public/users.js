@@ -289,8 +289,7 @@
     try {
       manageData = await api('manage');
       if (manageData.role !== 'ADMIN') {
-        listEl.innerHTML = '<p class="list-message">Solo administración puede gestionar los usuarios.</p>';
-        showToast('Solo administración puede gestionar los usuarios.', true);
+        location.replace('/index.html');
         return;
       }
       updateStats();

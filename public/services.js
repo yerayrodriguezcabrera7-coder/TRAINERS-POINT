@@ -51,6 +51,15 @@
 
   async function loadServices() {
     try {
+      const me = await api('me');
+      if (me.role === 'TRAINER' || me.role === 'CLIENT') {
+        location.replace('/index.html');
+        return;
+      }
+      if (me.role !== 'ADMIN') {
+        const createBtn = $('open-service-create');
+        if (createBtn) createBtn.hidden = true;
+      }
       const data = await api('services?all=true');
       services = Array.isArray(data.services) ? data.services : [];
       updateStats();

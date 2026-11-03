@@ -31,7 +31,7 @@
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
-  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/')) ? '/clientes' : (location.pathname === '/usuarios' || location.pathname === '/usuarios.html') ? '/usuarios' : (location.pathname === '/profesionales' || location.pathname === '/profesionales.html') ? '/profesionales' : location.pathname === '/gimnasios' ? '/gimnasios' : (location.pathname === '/servicios' || location.pathname === '/servicios.html' || location.pathname === '/services.html') ? '/servicios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : (location.pathname === '/fichajes' || location.pathname === '/fichaje' || location.pathname.endsWith('fichajes.html')) ? '/fichajes.html' : '/index.html';
+  const current = (location.pathname === '/clientes' || location.pathname.startsWith('/clientes/') || location.pathname.includes('client-profile')) ? '/clientes' : (location.pathname === '/usuarios' || location.pathname === '/usuarios.html') ? '/usuarios' : (location.pathname === '/profesionales' || location.pathname === '/profesionales.html') ? '/profesionales' : (location.pathname === '/gimnasios' || location.pathname === '/gyms.html' || location.pathname === '/gimnasios.html') ? '/gimnasios' : (location.pathname === '/servicios' || location.pathname === '/servicios.html' || location.pathname === '/services.html') ? '/servicios' : location.pathname.endsWith('gestion.html') ? '/gestion.html'+location.search : location.pathname.endsWith('inicio.html') ? '/inicio.html' : (location.pathname === '/fichajes' || location.pathname === '/fichaje' || location.pathname.endsWith('fichajes.html')) ? '/fichajes.html' : '/index.html';
   host.className = 'app-menu';
   function entry([label, icon, href]) {
       const content = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[icon]+'</svg><span class="app-menu-label">'+label+'</span>';
@@ -39,22 +39,18 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(href===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Tu centro',['Inicio','Calendario','Clientes','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
-  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong>Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
-  const firstGroup = host.querySelector('.menu-group');
+  const groups=[['Tu centro',['Inicio','Calendario','Clientes','Gimnasios','Servicios']],['Equipo',['Profesionales','Fichajes','Turnos']],['Administración',['Usuarios','Permisos']]];
+  host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+items.filter(x=>names.includes(x[0])).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const brand = host.querySelector('.app-menu-brand');
   if (brand) brand.innerHTML = '<img class="app-menu-logo" src="/assets/trainers-point-logo.png" alt="Trainers Point">';
-  if (firstGroup) {
-    const gymLink = document.createElement('a');
-    gymLink.className = 'app-menu-item'; gymLink.href = '/gimnasios'; gymLink.title = 'Gimnasios';
-    gymLink.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons.globe+'</svg><span class="app-menu-label">Gimnasios</span>';
-    if (location.pathname === '/gimnasios') gymLink.setAttribute('aria-current','page');
-    firstGroup.append(gymLink);
-  }
   const center = host.querySelector('.app-menu-center');
-  center.querySelector('strong')?.replaceWith(Object.assign(document.createElement('select'), { id: 'gym-switcher', ariaLabel: 'Cambiar de gimnasio' }));
-  const gymSwitcher = center.querySelector('#gym-switcher');
-  async function loadGyms() {
+  async function loadGyms(isAdmin) {
+    if (!isAdmin) return;
+    const label = center.querySelector('#gym-workspace-label');
+    if (!label) return;
+    label.replaceWith(Object.assign(document.createElement('select'), { id: 'gym-switcher', ariaLabel: 'Cambiar de gimnasio' }));
+    const gymSwitcher = center.querySelector('#gym-switcher');
+    if (!gymSwitcher) return;
     try {
       const response = await fetch('/api/gyms'); if (!response.ok) return;
       const data = await response.json();
@@ -66,7 +62,6 @@
       gymSwitcher.addEventListener('change', () => { localStorage.setItem('calendar-selected-gym', gymSwitcher.value); location.reload(); });
     } catch (_) {}
   }
-  loadGyms();
   const main=document.querySelector('main');
   if(main){main.id ||= 'main';const skip=document.createElement('a');skip.href='#'+main.id;skip.className='skip-content';skip.textContent='Ir al contenido';document.body.prepend(skip);}
   const toggle = host.querySelector('.app-menu-toggle');
@@ -91,6 +86,9 @@
         location.replace('/change-password.html');
         return;
       }
+      if (me.role === 'ADMIN') {
+        loadGyms(true);
+      }
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
@@ -100,14 +98,31 @@
       };
       const allowed = allowedByRole[me.role];
       if (allowed !== null) {
+        // Redirigir si la página actual no está permitida para este rol
+        const normCurrent = normalize(current);
+        const isAllowed = allowed.some(a => {
+          const normA = normalize(a);
+          return normCurrent === normA || normCurrent.startsWith(normA + '?') || (normA === 'clientes' && (normCurrent.includes('client-profile') || normCurrent.startsWith('clientes/')));
+        });
+        if (!isAllowed && location.pathname !== '/login.html' && location.pathname !== '/change-password.html') {
+          location.replace('/index.html');
+          return;
+        }
+
         host.querySelectorAll('a.app-menu-item').forEach(a => {
           const href = normalize(a.getAttribute('href'));
-          if (!allowed.includes(href)) a.hidden = true;
+          const ok = allowed.some(al => href === al || href.startsWith(al + '?'));
+          if (!ok) {
+            a.hidden = true;
+            a.style.display = 'none';
+          }
         });
         host.querySelector('.menu-future')?.setAttribute('hidden', '');
       }
       host.querySelectorAll('.menu-group').forEach(group => {
-        group.hidden = ![...group.querySelectorAll('a')].some(a => !a.hidden);
+        const visibleItems = [...group.querySelectorAll('a.app-menu-item')].filter(a => !a.hidden && a.style.display !== 'none');
+        group.hidden = visibleItems.length === 0;
+        if (group.hidden) group.style.display = 'none';
       });
       if (me.role === 'TRAINER') {
         const brandLink = host.querySelector('.app-menu-brand');

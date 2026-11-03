@@ -348,9 +348,7 @@
     try {
       manageData = await api('manage');
       if (manageData.role !== 'ADMIN' && manageData.role !== 'RECEPTION') {
-        listEl.innerHTML = '<p class="list-message">Solo el equipo del centro puede gestionar los profesionales.</p>';
-        $('open-create').hidden = true;
-        showToast('Solo el equipo del centro puede gestionar los profesionales.', true);
+        location.replace('/index.html');
         return;
       }
       updateStats();

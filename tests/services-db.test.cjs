@@ -573,3 +573,32 @@ test('Interfaz de Usuarios y Profesionales: Elementos para cambio y restablecimi
   assert.ok(profJs.includes('prof-btn-reset-pwd'), 'Debe incluir manejador para restablecer contraseña del profesional');
   assert.ok(profJs.includes('reset-password'), 'Debe llamar al endpoint de reseteo de contraseña');
 });
+
+test('Control de acceso y navegación para perfil Entrenador: Restricción de ventanas y rutas privadas', () => {
+  const menuJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'menu.js'), 'utf8');
+  const menuCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'menu.css'), 'utf8');
+  const gymsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'gyms.js'), 'utf8');
+  const servicesJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'services.js'), 'utf8');
+  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.js'), 'utf8');
+  const profJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.js'), 'utf8');
+  const gestionJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'gestion.js'), 'utf8');
+  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.js'), 'utf8');
+  const clientProfileJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.js'), 'utf8');
+
+  // Menú lateral y redirección global
+  assert.ok(menuJs.includes("location.replace('/index.html')"), 'menu.js debe redirigir si se intenta acceder a una ruta no autorizada');
+  assert.ok(menuCss.includes('[hidden]'), 'menu.css debe forzar display: none !important para elementos ocultos');
+
+  // Páginas protegidas contra acceso directo de entrenadores
+  assert.ok(gymsJs.includes('location.replace("/index.html")'), 'gyms.js debe expulsar perfiles que no sean ADMIN');
+  assert.ok(servicesJs.includes("location.replace('/index.html')"), 'services.js debe expulsar perfiles TRAINER');
+  assert.ok(usersJs.includes("location.replace('/index.html')"), 'users.js debe expulsar perfiles no ADMIN');
+  assert.ok(profJs.includes("location.replace('/index.html')"), 'professionals.js debe expulsar perfiles no autorizados');
+
+  // Gestión de turnos sin redirección accidental
+  assert.ok(gestionJs.includes("section = 'shifts'"), 'gestion.js debe fijar la sección de turnos para entrenadores');
+
+  // Ficha de clientes
+  assert.ok(clientsJs.includes("currentUserRole !== 'TRAINER'"), 'clients.js no debe renderizar acción de añadir bono a entrenadores');
+  assert.ok(clientProfileJs.includes("currentUserRole === 'TRAINER'"), 'client-profile.js debe ocultar asignación de bonos y cambios de sede a entrenadores');
+});

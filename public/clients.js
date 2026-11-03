@@ -1,3 +1,18 @@
+let currentUserRole = null;
+async function fetchUserRole() {
+  try {
+    const res = await fetch("/api/me");
+    if (res.ok) {
+      const me = await res.json();
+      currentUserRole = me.role;
+      if (currentUserRole === 'TRAINER') {
+        const createBtn = document.querySelector("#open-create");
+        if (createBtn) createBtn.hidden = true;
+      }
+    }
+  } catch (_) {}
+}
+fetchUserRole();
 const statusLabels = {
   LEAD: "Nuevo interesado",
   ACTIVO: "Activo",
@@ -408,6 +423,7 @@ function setActiveFilter(filter, focusButton = false) {
 }
 
 async function loadClients() {
+  if (!currentUserRole) await fetchUserRole();
   refreshController?.abort();
   refreshController = new AbortController();
   rows.replaceChildren();
@@ -1514,6 +1530,7 @@ createForm.addEventListener("submit", async (event) => {
 
 purchaseForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (currentUserRole === "TRAINER") return;
   purchaseError.hidden = true;
   if (!purchaseForm.reportValidity() || !historyClientId) return;
 
@@ -1710,7 +1727,8 @@ function renderClient(client) {
   details.append(center);
   const actions = document.createElement("div");
   actions.className = "client-card-actions";
-  const bonoButton = document.createElement("button");
+  if (currentUserRole !== 'TRAINER') {
+    const bonoButton = document.createElement("button");
   bonoButton.type = "button";
   bonoButton.className = "client-card-bono-btn";
   bonoButton.innerHTML = '<svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>+ Bono</span>';
@@ -1720,6 +1738,7 @@ function renderClient(client) {
     openClientHistory(client);
   });
   actions.append(bonoButton);
+  }
   card.append(identity, details, actions);
 
   const open = () => { window.location.assign(getClientProfileHref(client.id)); };

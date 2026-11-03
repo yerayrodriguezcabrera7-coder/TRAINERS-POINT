@@ -43,6 +43,6 @@
   document.querySelectorAll('[data-agenda]').forEach(button=>button.addEventListener('click',()=>{
     filter=button.dataset.agenda;document.querySelectorAll('[data-agenda]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));if(state&&attendance)render();
   }));
-  try{me=await api('me');if(me.role==='TRAINER'){location.href='fichajes.html';return;}await refresh();setInterval(()=>{if(!document.hidden)void refresh();},20000);}
+  try{me=await api('me');if(me.role==='TRAINER'){location.replace('/index.html');return;}await refresh();setInterval(()=>{if(!document.hidden)void refresh();},20000);}
   catch(e){$('overview-error').textContent=e.message;$('overview-error').hidden=false;}
 })();
