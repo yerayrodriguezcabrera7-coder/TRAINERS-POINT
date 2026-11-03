@@ -23,8 +23,8 @@
   };
   const items = [
     ['Mis reservas','calendar','/mis-reservas.html'], ['Inicio','home','/inicio.html'],
-    ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/gestion.html?section=services'],
-    ['Profesionales','staff','/gestion.html?section=employees'], ['Fichajes','clock','/fichajes.html'], ['Ausencias','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
+    ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/servicios'],
+    ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
     ['Turnos','calendar','/gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','/gestion.html?section=roles'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Caja','cash'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings'],
@@ -38,6 +38,9 @@
     if (path === '/clientes' || path.startsWith('/clientes/') || path === '/client-profile.html') return '/clientes';
     if (path === '/usuarios.html') return '/usuarios';
     if (path === '/gyms.html') return '/gimnasios';
+    if (['/services.html', '/servicios.html'].includes(path)) return '/servicios';
+    if (['/professionals.html', '/profesionales.html'].includes(path)) return '/profesionales';
+    if (['/fichajes', '/fichaje'].includes(path)) return '/fichajes.html';
     if (path === '/gestion.html') return path + '?section=' + (url.searchParams.get('section') || 'services');
     return path;
   }
@@ -104,7 +107,7 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+        RECEPTION: ['servicios', 'profesionales', 'pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
         CLIENT: ['mis-reservas.html'],
       };

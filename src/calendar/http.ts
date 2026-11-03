@@ -392,6 +392,7 @@ export function server(
         "ausencias.css": "text/css",
         "pendientes.html": "text/html",
         "pendientes.js": "text/javascript",
+        "clients.css": "text/css",
         "gestion.html": "text/html",
         "gestion.js": "text/javascript",
         "gestion.css": "text/css",

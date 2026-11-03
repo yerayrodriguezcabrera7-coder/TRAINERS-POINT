@@ -16,6 +16,14 @@
     window.location.replace('/usuarios');
     return;
   }
+  if (requestedSection === 'employees' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+    window.location.replace('/profesionales');
+    return;
+  }
+  if (requestedSection === 'services' && typeof window !== 'undefined' && !window.navigator.userAgent.includes('jsdom')) {
+    window.location.replace('/servicios');
+    return;
+  }
   let section = requestedSection || 'services';
   if (!labels[section] && section !== 'clients') section='services';
   let data, editing, revision, shifts=[];
@@ -49,7 +57,7 @@
     $('stats').innerHTML=[['TOTAL',items.length],['ACTIVOS',active],['INACTIVOS / BLOQUEADOS',items.length-active]].map(([label,value])=>`<article><div><small>${label}</small><strong>${value}</strong></div></article>`).join('');
     const roles=section==='roles';
     $('stats').hidden=roles;$('table-wrap').hidden=roles;$('permissions').hidden=!roles;$('search').hidden=roles;$('status-filter').hidden=roles;
-    if(roles){$('empty').hidden=true;$('permissions').innerHTML=`<div class="role-grid"><article><h3>Administración</h3>Gestiona clientes, servicios, plantilla, turnos y cuentas. Puede consultar y registrar los fichajes de toda la plantilla.</article><article><h3>Recepción</h3>Gestiona clientes, reservas y turnos. Consulta servicios y turnos de todos los empleados. Registra solo sus propios fichajes y ve el estado de fichaje de los demás.</article><article><h3>Entrenador</h3>Consulta sus reservas, sus clientes y sus turnos. Registra exclusivamente su propia entrada y salida.</article><article><h3>Cliente</h3>Rol reservado para reservas del cliente. Sin acceso a las herramientas de gestión interna.</article></div><p class="hint">Asigna estos perfiles desde Usuarios. Los permisos se comprueban también en el servidor. Cambiar el puesto laboral no cambia los permisos automáticamente.</p>`;return;}
+    if(roles){$('empty').hidden=true;$('permissions').innerHTML=`<div class="role-grid"><article><h3>Administración</h3>Gestiona clientes, servicios, plantilla, turnos y cuentas. Puede consultar y registrar los fichajes de toda la plantilla.</article><article><h3>Recepción</h3>Gestiona clientes, reservas y turnos. Consulta servicios y turnos de todos los empleados. Registra y consulta exclusivamente sus propios fichajes.</article><article><h3>Entrenador</h3>Consulta sus reservas, sus clientes y sus turnos. Registra exclusivamente su propia entrada y salida.</article><article><h3>Cliente</h3>Rol reservado para reservas del cliente. Sin acceso a las herramientas de gestión interna.</article></div><p class="hint">Asigna estos perfiles desde Usuarios. Los permisos se comprueban también en el servidor. Cambiar el puesto laboral no cambia los permisos automáticamente.</p>`;return;}
     const query=$('search').value.toLocaleLowerCase('es');
     const filtered=items.filter(x=>[x.name,x.username,x.email,x.phone,x.jobTitle,nameFor('employees',x.employeeId),nameFor('clients',x.clientId)].join(' ').toLocaleLowerCase('es').includes(query)).filter(x=>$('status-filter').value==='all'||isActive(x)===($('status-filter').value==='active'));
     const heads=section==='clients'?['Cliente','Contacto','Estado','Reservas','Ficha']:section==='services'?['Servicio','Duración / aforo','Precio','Estado','Ficha']:section==='users'?['Usuario','Empleado','Permisos','Estado','Acceso']:['Empleado','Puesto','Horario semanal','Estado',section==='shifts'?'Turnos':'Ficha'];

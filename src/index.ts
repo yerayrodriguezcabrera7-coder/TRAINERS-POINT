@@ -92,6 +92,9 @@ type GymInput = {
   province?: string;
   address?: string;
   photoData?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  radiusMeters?: number | null;
 };
 
 type ServiceInput = {
@@ -99,7 +102,31 @@ type ServiceInput = {
   description?: string;
   durationMin: number;
   price: number;
+  modality?: "INDIVIDUAL" | "DUAL";
+  type?: "PACK" | "SESION_INDIVIDUAL";
+  trainingCount?: number;
+  validityWeeks?: number | null;
+  recommendedWeeklyFrequency?: number | null;
+  conditions?: string | null;
+  isActive?: boolean;
 };
+
+const serviceSelectFields = {
+  id: true,
+  name: true,
+  description: true,
+  durationMin: true,
+  price: true,
+  modality: true,
+  type: true,
+  trainingCount: true,
+  validityWeeks: true,
+  recommendedWeeklyFrequency: true,
+  conditions: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 function sendJson(response: ServerResponse, status: number, data: unknown): void {
   response.writeHead(status, {
@@ -336,15 +363,28 @@ function parseGymInput(value: unknown): GymInput | string {
   const address = typeof value.address === "string" ? value.address.trim() : "";
   const photoData = typeof value.photoData === "string" ? value.photoData.trim() : "";
 
+  const rawLat = value.latitude;
+  const latitude = typeof rawLat === "number" && !isNaN(rawLat) ? rawLat : (typeof rawLat === "string" && rawLat.trim() && !isNaN(Number(rawLat)) ? Number(rawLat) : null);
+  const rawLon = value.longitude;
+  const longitude = typeof rawLon === "number" && !isNaN(rawLon) ? rawLon : (typeof rawLon === "string" && rawLon.trim() && !isNaN(Number(rawLon)) ? Number(rawLon) : null);
+  const rawRadius = value.radiusMeters;
+  const radiusMeters = typeof rawRadius === "number" && !isNaN(rawRadius) ? Math.round(rawRadius) : (typeof rawRadius === "string" && rawRadius.trim() && !isNaN(Number(rawRadius)) ? Math.round(Number(rawRadius)) : 200);
+
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
   }
   if (city.length > 100 || province.length > 100 || address.length > 200) {
     return "La ubicación supera la longitud permitida.";
   }
+  if (latitude !== null && (latitude < -90 || latitude > 90)) {
+    return "La latitud debe estar comprendida entre -90 y 90.";
+  }
+  if (longitude !== null && (longitude < -180 || longitude > 180)) {
+    return "La longitud debe estar comprendida entre -180 y 180.";
+  }
 
   if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
-    return "La imagen no es vÃ¡lida o supera el tamaÃ±o permitido.";
+    return "La imagen no es válida o supera el tamaño permitido.";
   }
 
   return {
@@ -353,6 +393,9 @@ function parseGymInput(value: unknown): GymInput | string {
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
     ...(photoData ? { photoData } : {}),
+    latitude: latitude ?? null,
+    longitude: longitude ?? null,
+    radiusMeters: radiusMeters ?? 200,
   };
 }
 
@@ -379,11 +422,71 @@ function parseServiceInput(value: unknown): ServiceInput | string {
   if (!Number.isFinite(price) || price < 0 || price > 99999999.99) {
     return "Introduce un precio válido.";
   }
-  if (description.length > 1000) {
-    return "La descripción debe tener como máximo 1000 caracteres.";
+  if (description.length > 2000) {
+    return "La descripción debe tener como máximo 2000 caracteres.";
   }
 
-  return { name, durationMin, price, ...(description ? { description } : {}) };
+  const rawModality = String(value.modality ?? "INDIVIDUAL").trim().toUpperCase();
+  if (rawModality !== "INDIVIDUAL" && rawModality !== "DUAL") {
+    return "La modalidad debe ser individual o dual.";
+  }
+  const modality: "INDIVIDUAL" | "DUAL" = rawModality as "INDIVIDUAL" | "DUAL";
+
+  const rawType = String(value.type ?? "SESION_INDIVIDUAL").trim().toUpperCase();
+  if (rawType !== "PACK" && rawType !== "SESION_INDIVIDUAL") {
+    return "El tipo debe ser pack o sesión individual.";
+  }
+  const type: "PACK" | "SESION_INDIVIDUAL" = rawType as "PACK" | "SESION_INDIVIDUAL";
+
+  const rawTrainingCount = value.trainingCount != null && value.trainingCount !== ""
+    ? Number(value.trainingCount)
+    : (type === "PACK" ? 10 : 1);
+  if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) {
+    return "El número de entrenamientos debe ser un entero entre 1 y 500.";
+  }
+  const trainingCount = rawTrainingCount;
+
+  let validityWeeks: number | null = null;
+  if (value.validityWeeks != null && value.validityWeeks !== "") {
+    const parsedWeeks = Number(value.validityWeeks);
+    if (!Number.isInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 104) {
+      return "La validez en semanas debe ser un número entre 1 y 104.";
+    }
+    validityWeeks = parsedWeeks;
+  }
+
+  let recommendedWeeklyFrequency: number | null = null;
+  if (value.recommendedWeeklyFrequency != null && value.recommendedWeeklyFrequency !== "") {
+    const parsedFreq = Number(value.recommendedWeeklyFrequency);
+    if (!Number.isInteger(parsedFreq) || parsedFreq < 1 || parsedFreq > 14) {
+      return "La frecuencia semanal recomendada debe ser un número entre 1 y 14.";
+    }
+    recommendedWeeklyFrequency = parsedFreq;
+  }
+
+  const rawConditions = typeof value.conditions === "string" ? value.conditions.trim() : "";
+  if (rawConditions.length > 5000) {
+    return "Las condiciones deben tener como máximo 5000 caracteres.";
+  }
+  const conditions = rawConditions || null;
+
+  const isActive = typeof value.isActive === "boolean"
+    ? value.isActive
+    : value.isActive === "true" || value.isActive === 1 || value.isActive === undefined || value.isActive === null;
+
+  return {
+    name,
+    durationMin,
+    price,
+    modality,
+    type,
+    trainingCount,
+    validityWeeks,
+    recommendedWeeklyFrequency,
+    conditions,
+    isActive,
+    ...(description ? { description } : {}),
+  };
 }
 
 function parseServicePackageInput(
@@ -542,9 +645,10 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     return;
   }
   if (request.method === "GET" && url.pathname === "/api/services") {
+    const includeAll = url.searchParams.get("all") === "true" || url.searchParams.get("includeInactive") === "true";
     const services = await prisma.service.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      where: includeAll ? undefined : { isActive: true },
+      select: serviceSelectFields,
       orderBy: { name: "asc" },
     });
     sendJson(response, 200, { services });
@@ -604,9 +708,98 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 
     const service = await prisma.service.create({
       data: input,
-      select: { id: true, name: true, description: true, durationMin: true, price: true },
+      select: serviceSelectFields,
     });
     sendJson(response, 201, { service });
+    return;
+  }
+
+  const serviceItemMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)$/i);
+  if (request.method === "PUT" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const input = parseServiceInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: input,
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  const serviceStatusMatch = url.pathname.match(/^\/api\/services\/([0-9a-f-]+)\/status$/i);
+  if (request.method === "PATCH" && serviceStatusMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceStatusMatch[1];
+    const body = await readJsonBody(request);
+    if (!isRecord(body) || typeof body.isActive !== "boolean") {
+      sendError(response, 400, "Indica si el servicio debe estar activo (true o false).");
+      return;
+    }
+
+    const existing = await prisma.service.findUnique({ where: { id } });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    const service = await prisma.service.update({
+      where: { id },
+      data: { isActive: body.isActive },
+      select: serviceSelectFields,
+    });
+    sendJson(response, 200, { service });
+    return;
+  }
+
+  if (request.method === "DELETE" && serviceItemMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+
+    const id = serviceItemMatch[1];
+    const existing = await prisma.service.findUnique({
+      where: { id },
+      include: { _count: { select: { bookings: true, packages: true } } },
+    });
+    if (!existing) {
+      sendError(response, 404, "No se encontró el servicio.");
+      return;
+    }
+
+    if (existing._count.bookings > 0 || existing._count.packages > 0) {
+      const service = await prisma.service.update({
+        where: { id },
+        data: { isActive: false },
+        select: serviceSelectFields,
+      });
+      sendJson(response, 200, { service, deactivated: true, message: "El servicio tiene historial y ha sido desactivado en lugar de eliminado." });
+      return;
+    }
+
+    await prisma.service.delete({ where: { id } });
+    sendJson(response, 200, { deleted: true, id });
     return;
   }
 
@@ -1118,9 +1311,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       },
       orderBy: { name: "asc" },
     });
-    const photos = await prisma.$queryRaw<Array<{ id: string; photoData: string | null }>>(Prisma.sql`SELECT "id", "photoData" FROM "Gym" WHERE "isActive" = true`);
-    const photoById = new Map(photos.map((photo) => [photo.id, photo.photoData]));
-    sendJson(response, 200, { gyms: gyms.map((gym) => ({ ...gym, photoData: photoById.get(gym.id) ?? null })) });
+    const extraRows = await prisma.$queryRaw<Array<{ id: string; photoData: string | null; latitude: number | null; longitude: number | null; radiusMeters: number | null }>>(
+      Prisma.sql`SELECT "id", "photoData", "latitude", "longitude", "radiusMeters" FROM "Gym" WHERE "isActive" = true`
+    ).catch(() => []);
+    const extraById = new Map(extraRows.map((e) => [e.id, e]));
+
+    sendJson(response, 200, {
+      gyms: gyms.map((gym) => {
+        const extra = extraById.get(gym.id);
+        return {
+          ...gym,
+          photoData: extra?.photoData ?? null,
+          latitude: extra?.latitude ?? null,
+          longitude: extra?.longitude ?? null,
+          radiusMeters: extra?.radiusMeters ?? 200,
+        };
+      }),
+    });
     return;
   }
 
@@ -1137,15 +1344,99 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
     }
 
     try {
-      const { photoData, ...gymData } = input;
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
       const gym = await prisma.gym.create({
         data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      if (photoData) {
-        await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = ${photoData} WHERE "id" = ${gym.id}::uuid`);
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gym.id}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [gym.address, gym.city, gym.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gym.id, JSON.stringify(locationObj), gym.name]
+          ).catch(() => {});
+        }
       }
-      sendJson(response, 201, { gym: { ...gym, photoData: photoData ?? null } });
+
+      sendJson(response, 201, {
+        gym: {
+          ...gym,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
+        return;
+      }
+      throw error;
+    }
+    return;
+  }
+
+  const gymPatchMatch = url.pathname.match(/^\/api\/gyms\/([0-9a-f-]+)$/i);
+  if (request.method === "PATCH" && gymPatchMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return;
+    }
+    const gymId = gymPatchMatch[1];
+    const input = parseGymInput(await readJsonBody(request));
+    if (typeof input === "string") {
+      sendError(response, 400, input);
+      return;
+    }
+
+    try {
+      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
+      const updated = await prisma.gym.update({
+        where: { id: gymId },
+        data: gymData,
+        select: { id: true, name: true, city: true, province: true, address: true },
+      });
+
+      await prisma.$executeRaw(
+        Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gymId}::uuid`
+      ).catch(() => {});
+
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          address: [updated.address, updated.city, updated.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(
+            `UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`,
+            [gymId, JSON.stringify(locationObj), updated.name]
+          ).catch(() => {});
+        }
+      }
+
+      sendJson(response, 200, {
+        gym: {
+          ...updated,
+          photoData: photoData ?? null,
+          latitude: latitude ?? null,
+          longitude: longitude ?? null,
+          radiusMeters: radiusMeters ?? 200,
+        },
+      });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         sendError(response, 409, "Ya existe un gimnasio con ese nombre.");
@@ -1514,6 +1805,8 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/inicio.html": { file: "web/inicio.html", contentType: "text/html; charset=utf-8" },
   "/inicio.css": { file: "web/inicio.css", contentType: "text/css; charset=utf-8" },
   "/inicio.js": { file: "web/inicio.js", contentType: "text/javascript; charset=utf-8" },
+  "/fichajes": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
+  "/fichaje": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
   "/fichajes.html": { file: "web/fichajes.html", contentType: "text/html; charset=utf-8" },
   "/fichajes.css": { file: "web/fichajes.css", contentType: "text/css; charset=utf-8" },
   "/fichajes.js": { file: "web/fichajes.js", contentType: "text/javascript; charset=utf-8" },
@@ -1560,6 +1853,14 @@ const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/usuarios": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/usuarios.html": { file: "public/users.html", contentType: "text/html; charset=utf-8" },
   "/users.js": { file: "public/users.js", contentType: "text/javascript; charset=utf-8" },
+  "/profesionales": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/profesionales.html": { file: "public/professionals.html", contentType: "text/html; charset=utf-8" },
+  "/professionals.js": { file: "public/professionals.js", contentType: "text/javascript; charset=utf-8" },
+  "/servicios": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/servicios.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.html": { file: "public/services.html", contentType: "text/html; charset=utf-8" },
+  "/services.css": { file: "public/services.css", contentType: "text/css; charset=utf-8" },
+  "/services.js": { file: "public/services.js", contentType: "text/javascript; charset=utf-8" },
 };
 
 const server = createServer(async (request, response) => {
@@ -1670,6 +1971,12 @@ async function start(): Promise<void> {
     ],
     rooms: [{ id: "r1", name: "Sala principal" }],
     clients: [{ id: "c1", name: "Cliente de prueba", email: "cliente@example.com", phone: "", notes: "" }],
+    location: {
+      latitude: 43.2630,
+      longitude: -2.9350,
+      radiusMeters: 200,
+      address: "Trainers Point · Bizkaia",
+    },
   };
   await store.seed(gym, initialCalendarConfig);
   if (process.env.TRAINERS_POINT_DEV_ADMIN === "true") {

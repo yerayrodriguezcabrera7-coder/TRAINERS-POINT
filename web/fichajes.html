@@ -1,77 +1,180 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#ef493d">
-  <title>Fichajes · Trainers Point</title>
-  <link rel="stylesheet" href="fichajes.css">
-  <link rel="stylesheet" href="menu.css">
-  <link rel="stylesheet" href="design.css">
-  <script src="menu.js" defer></script>
-  <script src="runtime.js" defer></script>
-  <script src="fichajes.js" defer></script>
+  <meta name="theme-color" content="#111111">
+  <title>Fichajes | Trainers Point</title>
+  <link rel="stylesheet" href="/clients.css">
+  <link rel="stylesheet" href="/menu.css">
+  <link rel="stylesheet" href="/fichajes.css">
+  <script src="/runtime.js" defer></script>
+  <script src="/fichajes.js" defer></script>
+  <script src="/menu.js" defer></script>
 </head>
 <body>
-  <aside data-app-menu aria-label="Navegación del centro"></aside>
-  <main class="attendance-shell">
-    <header class="attendance-header">
-      <div>
-        <p class="eyebrow">CONTROL HORARIO</p>
-        <h1>La jornada, al día<span style="color:var(--red)">.</span></h1>
-        <p id="current-date" class="header-date"></p>
-      </div>
-      <div class="center-card" aria-label="Centro actual">
-        <span class="center-mark" aria-hidden="true">C</span>
-        <span><small>Centro actual</small><strong>TRAINERS POINT · BIZKAIA</strong></span>
-      </div>
-    </header>
+  <div class="app-shell">
+    <aside data-app-menu aria-label="Navegación principal"></aside>
 
-    <div id="attendance-warning" class="warning" role="alert" hidden></div>
-
-    <section class="summary" aria-label="Resumen de fichajes">
-      <article><span class="summary-icon working" aria-hidden="true">●</span><div><small>TRABAJANDO AHORA</small><strong id="working-count">0</strong></div></article>
-      <article><span class="summary-icon away" aria-hidden="true">●</span><div><small>FUERA</small><strong id="away-count">0</strong></div></article>
-      <article><span class="summary-icon total" aria-hidden="true">◷</span><div><small>PLANTILLA ACTIVA</small><strong id="employee-count">0</strong></div></article>
-      <article><span class="summary-icon hours" aria-hidden="true">∑</span><div><small>HORAS REGISTRADAS HOY</small><strong id="today-total">00:00</strong></div></article>
-    </section>
-
-    <section class="attendance-card">
-      <nav class="tabs" aria-label="Secciones de fichajes">
-        <button id="clocking-tab" class="active" aria-controls="clocking-panel" aria-selected="true"><span aria-hidden="true">◷</span> Fichajes</button>
-        <button id="history-tab" aria-controls="history-panel" aria-selected="false"><span aria-hidden="true">☷</span> Historial</button>
-      </nav>
-
-      <section id="clocking-panel" class="tab-panel" aria-labelledby="clocking-tab">
-        <div class="panel-toolbar">
-          <label class="search-field"><span aria-hidden="true">⌕</span><span class="sr-only">Buscar empleado</span><input id="employee-search" type="search" placeholder="Buscar empleado…" autocomplete="off"></label>
-          <p id="last-update" aria-live="polite"></p>
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumb"><span>Equipo</span><span class="crumb-separator">/</span><strong>Fichajes</strong></div>
+        <div class="topbar-right">
+          <div class="profile-avatar" id="topbar-user-avatar" aria-hidden="true">TP</div>
         </div>
-        <div class="employee-table" role="table" aria-label="Estado de los empleados">
-          <div class="employee-head" role="row"><span role="columnheader">Empleado</span><span role="columnheader">Estado</span><span role="columnheader">Tiempo de la jornada</span><span role="columnheader">Acción</span></div>
-          <div id="employee-list" role="rowgroup"></div>
-        </div>
-        <div id="employee-empty" class="empty-state" hidden>No hay empleados que coincidan con la búsqueda.</div>
+      </header>
+
+      <section class="page-content">
+        <header class="page-heading">
+          <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
+          <div class="page-heading-copy">
+            <p class="eyebrow" id="page-eyebrow">EQUIPO · CONTROL HORARIO</p>
+            <h1>Fichajes <span id="heading-count" class="heading-count"></span></h1>
+            <p class="page-description" id="page-description">Control de jornada en tiempo real, registro de entradas y salidas e historial.</p>
+          </div>
+          <div class="page-heading-actions" id="header-action-container">
+            <!-- Botón de acción rápida para el usuario activo (fichar entrada / salida) -->
+            <button class="button button-primary" id="quick-clock-btn" type="button" hidden>
+              <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
+              <span id="quick-clock-label">Registrar entrada</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Aviso informativo legal obligatorio (Art. 34.9 ET / Art. 90 LOPDGDD / RGPD) -->
+        <aside class="legal-notice" aria-label="Información legal y protección de datos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+          <p>
+            <strong>Registro legal de jornada (Art. 34.9 ET y Art. 90 LOPDGDD):</strong>
+            La geolocalización se captura exclusivamente en el instante exacto de pulsar entrada o salida para verificar la presencia en el centro. Conforme a la normativa laboral y de protección de datos, no se realiza ningún rastreo continuo ni fuera del registro.
+          </p>
+        </aside>
+
+        <div id="attendance-warning" class="form-error" role="alert" hidden style="margin-bottom: 20px;"></div>
+
+        <!-- 4 Stat Cards con el estilo visual de clientes -->
+        <section class="stats-grid" aria-label="Filtros rápidos de fichajes">
+          <button class="stat-card stat-card-primary" id="card-working" type="button" data-filter="working" aria-pressed="false">
+            <span class="stat-label" id="label-working">Trabajando ahora</span>
+            <strong class="stat-value" id="working-count">0</strong>
+            <span class="stat-foot" id="foot-working">Jornadas abiertas hoy</span>
+          </button>
+          <button class="stat-card" id="card-away" type="button" data-filter="away" aria-pressed="false">
+            <span class="stat-label" id="label-away">Fuera de turno</span>
+            <strong class="stat-value" id="away-count">0</strong>
+            <span class="stat-foot" id="foot-away">Sin jornada abierta</span>
+          </button>
+          <button class="stat-card" id="card-total" type="button" data-filter="all" aria-pressed="true">
+            <span class="stat-label" id="label-total">Plantilla visible</span>
+            <strong class="stat-value" id="employee-count">0</strong>
+            <span class="stat-foot" id="foot-total">Trabajadores</span>
+          </button>
+          <button class="stat-card" id="card-hours" type="button" data-filter="hours" aria-pressed="false">
+            <span class="stat-label" id="label-hours">Horas hoy</span>
+            <strong class="stat-value" id="today-total">00:00</strong>
+            <span class="stat-foot" id="foot-hours">Tiempo acumulado hoy</span>
+          </button>
+        </section>
+
+        <!-- Panel principal -->
+        <section class="client-panel" aria-labelledby="attendance-list-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="attendance-list-title">Control de jornada</h2>
+              <p id="panel-date-sub">Lunes, 2 de noviembre de 2026 · Tiempo real</p>
+            </div>
+            <span class="results-count" id="results-count"></span>
+          </div>
+
+          <!-- Pestañas de sección -->
+          <div class="client-filter-chips" role="group" aria-label="Secciones de fichajes">
+            <button class="filter-chip" id="clocking-tab" type="button" data-tab="clocking" aria-pressed="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg>
+              En directo (Hoy)
+            </button>
+            <button class="filter-chip" id="history-tab" type="button" data-tab="history" aria-pressed="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Historial de fichajes
+            </button>
+          </div>
+
+          <!-- Barra de herramientas para EN DIRECTO -->
+          <div class="toolbar" id="clocking-toolbar">
+            <div class="search-box" id="search-box-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+              <label class="sr-only" for="employee-search">Buscar empleado por nombre</label>
+              <input id="employee-search" type="search" placeholder="Buscar por nombre..." autocomplete="off">
+              <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </div>
+            <button class="button button-outline refresh-button" id="refresh-button" type="button" aria-label="Actualizar fichajes" title="Actualizar fichajes">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"/></svg>
+            </button>
+          </div>
+
+          <!-- Barra de herramientas para HISTORIAL -->
+          <div class="toolbar" id="history-toolbar" hidden>
+            <div class="history-controls">
+              <label class="form-field-inline">
+                <span>Desde</span>
+                <input id="history-from" type="date">
+              </label>
+              <label class="form-field-inline">
+                <span>Hasta</span>
+                <input id="history-to" type="date">
+              </label>
+              <label class="form-field-inline" id="history-employee-select-wrap">
+                <span>Empleado</span>
+                <select id="history-employee">
+                  <option value="all">Todos los empleados</option>
+                </select>
+              </label>
+              <button id="refresh-history" class="button button-primary" type="button">
+                Consultar
+              </button>
+            </div>
+          </div>
+
+          <!-- PANEL EN DIRECTO -->
+          <div id="clocking-panel" class="attendance-panel-body">
+            <div class="client-list" id="employee-list" aria-live="polite">
+              <p class="list-message">Cargando fichajes...</p>
+            </div>
+            <div id="employee-empty" class="list-message" hidden>No hay empleados que coincidan con la búsqueda.</div>
+          </div>
+
+          <!-- PANEL HISTORIAL -->
+          <div id="history-panel" class="attendance-panel-body" hidden>
+            <div class="history-scroll-wrap">
+              <table class="attendance-table">
+                <thead>
+                  <tr>
+                    <th>Empleado</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Duración</th>
+                    <th>Ubicación</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="history-list">
+                  <!-- Filas de historial -->
+                </tbody>
+              </table>
+            </div>
+            <div id="history-empty" class="list-message" hidden>No hay fichajes registrados en este período.</div>
+          </div>
+
+          <div class="table-footer">
+            <span id="table-summary">—</span>
+            <span id="last-update" class="last-update">—</span>
+          </div>
+        </section>
       </section>
+    </main>
+  </div>
 
-      <section id="history-panel" class="tab-panel" aria-labelledby="history-tab" hidden>
-        <div class="history-filters">
-          <label>Desde<input id="history-from" type="date"></label>
-          <label>Hasta<input id="history-to" type="date"></label>
-          <label>Empleado<select id="history-employee"><option value="all">Todos los empleados</option></select></label>
-          <button id="refresh-history" class="outline-button">Actualizar</button>
-        </div>
-        <div class="history-scroll">
-          <table>
-            <thead><tr><th>Empleado</th><th>Entrada</th><th>Salida</th><th>Duración</th><th>Estado</th></tr></thead>
-            <tbody id="history-list"></tbody>
-          </table>
-        </div>
-        <div id="history-empty" class="empty-state" hidden>No hay fichajes en este período.</div>
-      </section>
-    </section>
-    <p class="page-note">Cada entrada y salida, en su sitio.</p>
-  </main>
-  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
