@@ -1,19 +1,17 @@
-<!doctype html>
-<html lang="es">
-  <head>
+<!DOCTYPE html><html lang="es"><head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#111111">
     <title>Ficha de cliente | Trainers Point</title>
     <link rel="stylesheet" href="/client-profile.css">
     <link rel="stylesheet" href="/menu.css">
-    <script src="/runtime.js" defer></script>
-    <script src="/client-profile.js" defer></script>
-    <script src="/menu.js" defer></script>
-  <link rel="stylesheet" href="/ayuda.css"><script src="/ayuda.js" defer></script></head>
+    <script src="/runtime.js" defer=""></script>
+    <script src="/client-profile.js" defer=""></script>
+    <script src="/menu.js" defer=""></script>
+  <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script></head>
   <body>
-    <aside data-app-menu aria-label="Navegación principal"></aside>
-    <main class="profile-page" id="main">
+
+    <div class="app-shell"><aside data-app-menu="" aria-label="Navegación principal"></aside><main class="profile-page main-content" id="main">
       <header class="profile-topbar">
         <div class="profile-breadcrumb"><a href="/clientes">Clientes</a><span>/</span><strong>Ficha</strong></div>
       </header>
@@ -21,16 +19,16 @@
       <section class="profile-content" aria-live="polite">
         <p class="profile-eyebrow">FICHA DEL CLIENTE</p>
         <div id="profile-loading" class="profile-loading">Cargando ficha…</div>
-        <div id="profile-error" class="profile-error" hidden></div>
-        <div id="profile-view" hidden>
+        <div id="profile-error" class="profile-error" hidden=""></div>
+        <div id="profile-view" hidden="">
           <div class="profile-heading">
             <div class="profile-heading-main">
-              <a class="back-link" href="/clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg>Volver a clientes</a>
+              <a class="back-link" href="/clientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"></path></svg>Volver a clientes</a>
               <div class="profile-title-row"><img class="profile-heading-logo" src="/assets/trainers-point-logo.png" alt=""><div id="profile-avatar" class="profile-avatar-large"></div><div><h1 id="profile-name">Cliente</h1><p id="profile-status">Activo</p></div></div>
             </div>
             <div class="profile-heading-actions">
-              <button class="profile-secondary-button header-bono-btn" id="open-add-bono-top" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Añadir bono</button>
-              <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar medidas</button>
+              <button class="profile-secondary-button header-bono-btn" id="open-add-bono-top" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Añadir bono</button>
+              <button class="profile-primary-button" id="open-measurement" type="button"><svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Registrar medidas</button>
             </div>
           </div>
 
@@ -41,9 +39,9 @@
             </article>
             <article class="profile-info-card profile-gym-card">
               <span>CENTRO</span><strong id="profile-gym">—</strong><small id="profile-location">—</small>
-              <form id="profile-gym-form" class="profile-gym-form" hidden>
+              <form id="profile-gym-form" class="profile-gym-form" hidden="">
                 <label for="profile-gym-select">Cambiar centro</label>
-                <div><select id="profile-gym-select" name="gymId" required></select><button class="profile-secondary-button" type="submit">Guardar</button></div>
+                <div><select id="profile-gym-select" name="gymId" required=""></select><button class="profile-secondary-button" type="submit">Guardar</button></div>
                 <small id="profile-gym-feedback" class="profile-feedback" role="status" aria-live="polite"></small>
               </form>
             </article>
@@ -138,7 +136,7 @@
           <details class="profile-card profile-accordion client-purchases-section">
             <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">ACTIVIDAD DEL CLIENTE</span><span class="profile-accordion-title">Historial de compras y bonos</span></span></summary>
             <div class="purchase-section-actions">
-              <button class="profile-primary-button" id="open-add-bono" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;"><path d="M12 5v14M5 12h14"/></svg>Añadir bono</button>
+              <button class="profile-primary-button" id="open-add-bono" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px;"><path d="M12 5v14M5 12h14"></path></svg>Añadir bono</button>
             </div>
             <div id="purchase-history" class="client-history-list"><p class="profile-empty">Cargando compras…</p></div>
           </details>
@@ -148,12 +146,12 @@
           </details>
         </div>
       </section>
-    </main>
+    </main></div>
 
     <dialog id="measurement-dialog" class="measurement-dialog">
       <form id="measurement-form">
-        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Registrar medidas</h2><p>Anota las medidas para compararlas más adelante.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-        <div class="measurement-date-row"><label>Fecha<input id="measurement-date" name="measuredAt" type="date" required></label></div>
+        <div class="dialog-heading-profile"><div><p class="profile-eyebrow">NUEVO REGISTRO</p><h2>Registrar medidas</h2><p>Anota las medidas para compararlas más adelante.</p></div><button id="close-measurement" class="dialog-close" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></div>
+        <div class="measurement-date-row"><label>Fecha<input id="measurement-date" name="measuredAt" type="date" required=""></label></div>
         <div class="measurement-fields-profile">
           <div class="measurement-field"><label for="measurement-weight">Peso (kg)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="weight" aria-label="Restar 0,1 kg al peso">−</button><input id="measurement-weight" name="weight" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="weight" aria-label="Sumar 0,1 kg al peso">+</button></div><small class="measurement-delta" data-delta-for="weight"></small></div>
           <div class="measurement-field"><label for="measurement-hip">Cadera (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="hip" aria-label="Restar 0,1 cm a la cadera">−</button><input id="measurement-hip" name="hip" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="hip" aria-label="Sumar 0,1 cm a la cadera">+</button></div><small class="measurement-delta" data-delta-for="hip"></small></div>
@@ -162,9 +160,9 @@
           <div class="measurement-field"><label for="measurement-chest">Pecho (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="chest" aria-label="Restar 0,1 cm al pecho">−</button><input id="measurement-chest" name="chest" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="chest" aria-label="Sumar 0,1 cm al pecho">+</button></div><small class="measurement-delta" data-delta-for="chest"></small></div>
           <div class="measurement-field"><label for="measurement-arm">Brazo (cm)</label><div class="measurement-stepper"><button type="button" data-step="-1" data-metric="arm" aria-label="Restar 0,1 cm al brazo">−</button><input id="measurement-arm" name="arm" type="number" inputmode="decimal" min="0.1" max="1000" step="0.1"><button type="button" data-step="1" data-metric="arm" aria-label="Sumar 0,1 cm al brazo">+</button></div><small class="measurement-delta" data-delta-for="arm"></small></div>
         </div>
-        <p id="measurement-warning" class="measurement-warning" role="status" hidden></p>
+        <p id="measurement-warning" class="measurement-warning" role="status" hidden=""></p>
         <label class="measurement-notes">Notas<textarea name="notes" rows="3" maxlength="1000" placeholder="Opcional"></textarea></label>
-        <p id="measurement-error" class="profile-error" role="alert" hidden></p>
+        <p id="measurement-error" class="profile-error" role="alert" hidden=""></p>
         <div class="dialog-actions-profile"><button class="profile-secondary-button" id="cancel-measurement" type="button">Cancelar</button><button id="save-measurement" class="profile-primary-button" type="submit">Guardar medidas</button></div>
       </form>
     </dialog>
@@ -178,7 +176,7 @@
             <p id="add-bono-subtitle">Selecciona un pack o servicio para asignar sus sesiones y precio.</p>
           </div>
           <button id="close-add-bono" class="dialog-close" type="button" aria-label="Cerrar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
           </button>
         </div>
 
@@ -194,13 +192,13 @@
           <!-- Keep standard select for full accessibility & form binding -->
           <label class="bono-label-full" style="display:none">
             <span>Servicio / Pack <b>*</b></span>
-            <select id="bono-service-select" name="serviceId" required>
+            <select id="bono-service-select" name="serviceId" required="">
               <option value="">Selecciona un servicio…</option>
             </select>
           </label>
 
           <!-- 2. Calculation callout with 4 weeks validity badge -->
-          <div id="bono-calc-callout" class="bono-calc-callout" hidden>
+          <div id="bono-calc-callout" class="bono-calc-callout" hidden="">
             <div class="bono-calc-chip">
               <span class="bono-calc-chip-label">Sesiones:</span>
               <strong id="bono-calc-sessions">—</strong>
@@ -225,14 +223,14 @@
               <span>Sesiones contratadas <b>*</b></span>
               <div class="bono-stepper">
                 <button type="button" class="bono-step-btn" data-step="-1" aria-label="Restar una sesión">−</button>
-                <input id="bono-sessions-bought" name="sessionsBought" type="number" min="1" max="500" step="1" required value="1">
+                <input id="bono-sessions-bought" name="sessionsBought" type="number" min="1" max="500" step="1" required="" value="1">
                 <button type="button" class="bono-step-btn" data-step="1" aria-label="Sumar una sesión">+</button>
               </div>
             </label>
 
             <label class="bono-field">
               <span>Importe total (€) <b>*</b></span>
-              <input id="bono-total-amount" name="totalAmount" type="number" min="0" max="9999999999.99" step="0.01" required placeholder="0.00">
+              <input id="bono-total-amount" name="totalAmount" type="number" min="0" max="9999999999.99" step="0.01" required="" placeholder="0.00">
             </label>
           </div>
 
@@ -245,8 +243,8 @@
               <button type="button" class="payment-chip" data-value="TRANSFERENCIA">🏦 Transferencia</button>
               <button type="button" class="payment-chip" data-value="OTRO">⋯ Otro</button>
             </div>
-            <select id="bono-payment-method" name="paymentMethod" required style="display:none">
-              <option value="TARJETA" selected>Tarjeta</option>
+            <select id="bono-payment-method" name="paymentMethod" required="" style="display:none">
+              <option value="TARJETA" selected="">Tarjeta</option>
               <option value="EFECTIVO">Efectivo</option>
               <option value="TRANSFERENCIA">Transferencia</option>
               <option value="OTRO">Otro</option>
@@ -260,8 +258,8 @@
               <button type="button" class="payment-chip is-selected status-pagado" data-value="PAGADO"><span class="chip-dot dot-pagado"></span>Cobrado / Pagado</button>
               <button type="button" class="payment-chip status-pendiente" data-value="PENDIENTE"><span class="chip-dot dot-pendiente"></span>Pendiente (Añadir a deuda)</button>
             </div>
-            <select id="bono-payment-status" name="paymentStatus" required style="display:none">
-              <option value="PAGADO" selected>Pagado</option>
+            <select id="bono-payment-status" name="paymentStatus" required="" style="display:none">
+              <option value="PAGADO" selected="">Pagado</option>
               <option value="PENDIENTE">Pendiente</option>
               <option value="FALLIDO">Fallido</option>
               <option value="REEMBOLSADO">Reembolsado</option>
@@ -269,7 +267,7 @@
           </div>
 
           <!-- 6. Visual Live Ticket Preview -->
-          <div id="bono-ticket-preview" class="bono-ticket-preview" hidden>
+          <div id="bono-ticket-preview" class="bono-ticket-preview" hidden="">
             <div class="ticket-left">
               <span class="ticket-eyebrow">RESUMEN DEL BONO</span>
               <h3 id="ticket-service-name" class="ticket-title">Selecciona un pack</h3>
@@ -295,7 +293,7 @@
           </label>
         </div>
 
-        <p id="bono-form-error" class="profile-error" role="alert" hidden></p>
+        <p id="bono-form-error" class="profile-error" role="alert" hidden=""></p>
 
         <div class="dialog-actions-profile">
           <button class="profile-secondary-button" id="cancel-add-bono" type="button">Cancelar</button>
@@ -304,5 +302,6 @@
       </form>
     </dialog>
     <div id="toast" class="profile-toast" role="status" aria-live="polite"></div>
-  </body>
-</html>
+
+
+</body></html>

@@ -2,7 +2,7 @@ import "dotenv/config";
 import { CashRegister, cashPermission } from "./cash";
 import { Inventory, inventoryPermission, saleBalance } from "./inventory";
 import { ApiError } from "./calendar/model";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
@@ -1148,6 +1148,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
       .filter(({ amount }) => amount > 0);
 
+    const heldPackages=calendarPool?(await calendarPool.query(`SELECT original."packageId",count(*) AS held FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE r.gym_id=$1 AND original."clientId"=$2::uuid AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING') GROUP BY original."packageId"`,[(request as any).selectedGym,clientId])).rows:[];
     sendJson(response, 200, {
       client,
       packages: packages.map((servicePackage) => {
@@ -1165,7 +1166,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         ...servicePackage,
           sessionsUsed,
           sessionsScheduled,
-          sessionsRemaining: Math.max(0, servicePackage.sessionsBought - sessionsUsed - sessionsScheduled),
+          sessionsRemaining: Math.max(0, servicePackage.sessionsBought - sessionsUsed - sessionsScheduled - Number(heldPackages.find(p=>p.packageId===servicePackage.id)?.held||0)),
         };
       }),
       bookings,
@@ -1181,15 +1182,23 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       sendError(response, 403, "Origen de la solicitud no permitido.");
       return;
     }
-    const input = parseServicePackageInput(await readJsonBody(request));
+    const rawPackage = await readJsonBody(request);
+    const input = parseServicePackageInput(rawPackage);
     if (typeof input === "string") {
       sendError(response, 400, input);
       return;
     }
 
     try {
-      const servicePackage = await prisma.clientServicePackage.create({
-        data: {
+      const requestKey=isRecord(rawPackage)&&rawPackage.requestKey!==undefined?z.string().uuid().parse(rawPackage.requestKey):undefined;
+      const servicePackage = await prisma.$transaction(async tx=>{
+        const gym=(request as any).selectedGym;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${gym},0))`;
+        const client=await tx.client.findFirst({where:{id:clientPackagesMatch[1],gymId:gym}});
+        if(!client)throw new ApiError(404,'Cliente desconocido en este centro.');
+        if(requestKey){const existing=await tx.clientServicePackage.findUnique({where:{requestKey}});if(existing){if(existing.clientId!==client.id||existing.serviceId!==input.serviceId||existing.sessionsBought!==input.sessionsBought||Number(existing.totalAmount)!==input.totalAmount||existing.paymentStatus!==input.paymentStatus)throw new ApiError(409,'Solicitud de bono ya utilizada con otros datos.');return existing;}}
+        return tx.clientServicePackage.create({
+        data: {requestKey,
           client: { connect: { id: clientPackagesMatch[1] } },
           service: { connect: { id: input.serviceId } },
           sessionsBought: input.sessionsBought,
@@ -1198,6 +1207,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
           paymentStatus: input.paymentStatus,
           ...(input.notes ? { notes: input.notes } : {}),
         },
+      });
       });
       sendJson(response, 201, { servicePackage });
     } catch (error) {
@@ -1238,19 +1248,20 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
       return;
     }
 
-    const sessionsCommitted = await prisma.booking.count({
+    const booking = await prisma.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM "ClientServicePackage" WHERE id=${servicePackage.id}::uuid FOR UPDATE`;
+    const sessionsCommitted = await tx.booking.count({
       where: {
         packageId: servicePackage.id,
         attendance: { in: [AttendanceStatus.ASISTIO, AttendanceStatus.PENDIENTE] },
       },
     });
     if (sessionsCommitted >= servicePackage.sessionsBought) {
-      sendError(response, 409, "El bono ya no tiene sesiones disponibles.");
-      return;
+      throw new ApiError(409,"El bono ya no tiene sesiones disponibles.");
     }
 
     const endTime = new Date(startTime.getTime() + servicePackage.service.durationMin * 60_000);
-    const booking = await prisma.booking.create({
+    return tx.booking.create({
       data: {
         clientId: servicePackage.clientId,
         serviceId: servicePackage.serviceId,
@@ -1266,6 +1277,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         attendance: true,
         service: { select: { name: true } },
       },
+    });
     });
     sendJson(response, 201, { booking });
     return;
@@ -1301,6 +1313,15 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
         }
       }
 
+      const mirror=await prisma.booking.findUnique({where:{id:attendanceMatch[1]},select:{calendarGymId:true}});
+      if(mirror?.calendarGymId&&calendarPool){
+        if(mirror.calendarGymId!==(request as any).selectedGym)throw new ApiError(404,'Reserva desconocida en este centro.');
+        const store=new Store(calendarPool,prisma),state=await store.state(mirror.calendarGymId),previous=state.bookings.find((b:any)=>b.id===attendanceMatch[1]);
+        if(!previous)throw new ApiError(404,'Reserva desconocida.');
+        const nextStatus=attendance==='ASISTIO'?'COMPLETED':attendance==='NO_ASISTIO'?'NO_SHOW':attendance==='CANCELADA'?'CANCELLED':'CONFIRMED';
+        await store.save(mirror.calendarGymId,{...previous,status:nextStatus},previous.id,undefined,(request as any).identity.id);
+        sendJson(response,200,{booking:await prisma.booking.findUnique({where:{id:previous.id}})});return;
+      }
       const booking = await prisma.booking.update({
         where: { id: attendanceMatch[1] },
         data: {
@@ -1829,6 +1850,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
 
 const staticFiles: Record<string, { file: string; contentType: string }> = {
   "/ayuda.js": {file:"web/ayuda.js",contentType:"text/javascript; charset=utf-8"},
+  "/orden.css": {file:"web/orden.css",contentType:"text/css; charset=utf-8"},
   "/ayuda.css": {file:"web/ayuda.css",contentType:"text/css; charset=utf-8"},
   "/caja.html": {file:"web/caja.html",contentType:"text/html; charset=utf-8"},
   "/caja.js": {file:"web/caja.js",contentType:"text/javascript; charset=utf-8"},
@@ -1958,6 +1980,8 @@ const server = createServer(async (request, response) => {
 
     await pipeline(createReadStream(join(process.cwd(), asset.file)), response);
   } catch (error) {
+    if(error instanceof ApiError){sendError(response,error.status,error.message);return;}
+    if(error instanceof ZodError){sendError(response,400,"Revisa los datos enviados.");return;}
     if (error instanceof RangeError) {
       sendError(response, 413, "La solicitud supera el tamaño permitido.");
       return;

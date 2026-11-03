@@ -112,13 +112,13 @@ if(serverMode) {
   try {data=await api('state');data.bookings=data.bookings.map(fromServer);await loadBookingClients();sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
-let polling=false;
+let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,pendingPackageKey=null,newPendingPackageId=null;
 async function refreshServer(force=false) {
   if(polling)return;
   polling=true;
   try {
     const next=await api('state');
-    if(force||next.revision!==data.revision||JSON.stringify(next.clientDebts||{})!==JSON.stringify(data.clientDebts||{})) {
+    if(force||next.revision!==data.revision||JSON.stringify(next.clientDebts||{})!==JSON.stringify(data.clientDebts||{})||JSON.stringify(next.bookings.map(b=>[b.id,b.paymentDue]))!==JSON.stringify(data.bookings.map(b=>[b.id,b.paymentDue]))) {
       data={...next,bookings:next.bookings.map(fromServer)};
       await loadBookingClients();
       // Do not change form values or the version captured when a dialog was opened.
@@ -179,7 +179,7 @@ function titleForPeriod(dates) {
 }
 const debtMoney=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));
 function upcomingDebt(b){return ['pending','confirmed'].includes(b.status)&&b.date>=todayKey()?Number(data.clientDebts?.[b.clientId]||0):0;}
-function debtBadge(b){const amount=upcomingDebt(b);return amount>0?`<span class="booking-debt-badge">⚠ Pago pendiente · ${escapeHTML(debtMoney(amount))}</span>`:'';}
+function debtBadge(b){const amount=upcomingDebt(b);if(b.paymentDue&&amount<=0&&['pending','confirmed'].includes(b.status))return '<span class="booking-debt-badge">⚠ Sesión pendiente de cobro</span>';return amount>0?`<span class="booking-debt-badge">⚠ Pago pendiente · ${escapeHTML(debtMoney(amount))}</span>`:'';}
 function updateDebtDetail(){
  const box=$('booking-debt');if(!box)return;
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
@@ -220,7 +220,7 @@ function renderTimeGrid(dates, bookings, employees) {
       const width = 100 / count;
       const left = lane * width;
       const currentEmployee = lookup('employees', b.employeeId);
-      const color = lookup('services',b.serviceId).color || '#317b9b';
+      const color = lookup('employees',b.employeeId).color || '#7b858d';
       const soft = `${color}18`;
       const clientName = lookup('clients', b.clientId).name;
       const serviceName = lookup('services', b.serviceId).name;
@@ -295,6 +295,7 @@ function renderClientResults() {
   $('client-results').hidden = false;
 }
 function syncClientPicker() {
+  if($('booking-client').value!==state.packagesClientId)loadClientPackages();
   updateDebtDetail();
   const value = $('booking-client').value;
   if (value === 'new') { updateClientFields(); return; }
@@ -303,6 +304,7 @@ function syncClientPicker() {
   $('client-results').hidden = true;
 }
 function updateHoursHint() {
+  loadAvailableSlots();
   const date = $('booking-date').value;
   if(!$('booking-employee').value){$('booking-hours').textContent='Pendiente de asignación: se guarda sin confirmar. La disponibilidad se comprobará al asignar un trabajador.';return;}
   if (!C.validDate(date)) { $('booking-hours').textContent = ''; return; }
@@ -338,6 +340,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   $('booking-center-info').textContent=b?.centerAddress||'';
   $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)} · ${escapeHTML(h.previous.centerName||'')}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
   syncClientPicker();
+  loadClientPackages(b?.packageId||null);
   updateDebtDetail();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
@@ -357,11 +360,58 @@ function showBooking(id, date = state.date, minute, employeeId) {
   updateClientFields(); updateHoursHint();
   $('booking-dialog').showModal();
 }
+let slotsRequest=0;
+async function loadAvailableSlots(){
+ if(!serverMode)return;
+ const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,roomId:$('booking-room').value,centerId:$('booking-center').value};
+ const select=$('booking-available-slot'),request=++slotsRequest;
+ if(!query.employeeId||!C.validDate(query.date)){select.innerHTML='<option value="">Selecciona trabajador, servicio y fecha</option>';return;}
+ if(state.editing)query.excludeId=state.editing;
+ try{const slots=await api('slots?'+new URLSearchParams(query));if(request!==slotsRequest)return;const list=Array.isArray(slots)?slots:[];select.innerHTML='<option value="">'+(list.length?'Elige un horario libre ('+list.length+' opciones)':'No hay horarios libres con estos filtros')+'</option>'+list.map(s=>`<option value="${escapeHTML(s.start)}">${escapeHTML(s.start)} – ${escapeHTML(s.end)}</option>`).join('');}catch(e){if(request===slotsRequest)select.innerHTML='<option value="">No se pudo consultar la disponibilidad. Se comprobará al guardar.</option>';}
+}
+$('booking-available-slot').onchange=()=>{if(!$('booking-available-slot').value)return;$('booking-start').value=$('booking-available-slot').value;$('booking-start').dispatchEvent(new Event('change'));};
+$('booking-room').addEventListener('change',loadAvailableSlots);$('booking-center').addEventListener('change',loadAvailableSlots);
+async function loadClientPackages(selected=null){
+  if(!serverMode||!data.packagesEnabled){$('booking-package-panel').hidden=true;return;}
+  const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
+  $('package-create-result').textContent='';
+  if(!clientId||clientId==='new'){packageBusy=false;renderPackages();return;}
+  packageBusy=true;$('booking-package-message').textContent='Consultando los bonos del cliente…';
+  try{const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if(request!==packageRequest)return;clientPackages=result.packages||[];renderPackages(selected);}
+  catch(e){if(request===packageRequest){$('booking-package-message').textContent='No se pudieron consultar los bonos: '+e.message;$('booking-package').innerHTML='<option value="">Reservar sin bono · pago pendiente</option>';}}
+  finally{if(request===packageRequest)packageBusy=false;}
+}
+function renderPackages(selected){
+  if(!serverMode)return;
+  const select=$('booking-package'),old=selected??select.value;
+  const list=clientPackages.filter(p=>p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
+  select.innerHTML='<option value="">Reservar sin bono · pago pendiente</option>'+list.map(p=>`<option value="${escapeHTML(p.id)}">${escapeHTML(p.service.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`).join('');
+  select.value=list.some(p=>p.id===old)?old:'';
+  select.disabled=currentUser?.role==='TRAINER';
+  const chosen=clientPackages.find(p=>p.id===select.value),service=lookup('services',$('booking-service').value);
+  $('booking-package-message').textContent=chosen?(chosen.paymentStatus==='PAGADO'?'La sesión se descontará de este bono al guardar la reserva.':'Este bono queda pendiente de pago y la reserva mostrará el aviso de cobro.'):list.length?'Selecciona un bono o continúa sin bono; en ese caso la sesión quedará pendiente de cobro.':'Este cliente no tiene bonos pagados disponibles. Puedes reservar sin bono y dejar la sesión pendiente de cobro.';
+  $('create-pending-package').hidden=currentUser?.role==='TRAINER'||!!chosen||!state.packagesClientId||state.packagesClientId==='new'||!/^[0-9a-f-]{36}$/i.test(service.id||'');
+}
+$('booking-package').onchange=()=>{
+ const p=clientPackages.find(p=>p.id===$('booking-package').value);
+ if(p){$('booking-service').value=p.service.id;const service=lookup('services',p.service.id);if($('booking-start').value)$('booking-end').value=C.timeLabel(C.minutes($('booking-start').value)+service.duration);}
+ renderPackages();updateHoursHint();
+};
+$('create-pending-package').onclick=async()=>{
+ const button=$('create-pending-package'),service=lookup('services',$('booking-service').value),clientId=$('booking-client').value;
+ if(packageBusy||!clientId||clientId==='new')return;
+ button.disabled=true;packageBusy=true;
+ try{
+  const result=await api('clients/'+encodeURIComponent(clientId)+'/service-packages','POST',{requestKey:pendingPackageKey,serviceId:service.id,sessionsBought:service.trainingCount||1,totalAmount:service.price||0,paymentMethod:'OTRO',paymentStatus:'PENDIENTE',notes:'Creado desde el calendario. Pendiente de cobro.'});
+  const history=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if($('booking-client').value!==clientId)return;clientPackages=history.packages||[];newPendingPackageId=result.servicePackage.id;renderPackages(newPendingPackageId);$('package-create-result').textContent='Bono pendiente guardado en la ficha. Ahora confirma la reserva.';
+ }catch(e){$('package-create-result').textContent=e.message;}finally{button.disabled=false;packageBusy=false;}
+};
 function formError(id,message) { $(id).textContent = message; $(id).hidden = false; }
 $('booking-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (currentUser?.role === 'TRAINER') return;
   const clientId = $('booking-client').value;
+  if(packageBusy){formError('booking-error','Espera a que termine la consulta de bonos del cliente.');return;}
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
   const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:$('booking-center').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
   if(serverMode) {
@@ -373,7 +423,8 @@ $('booking-form').addEventListener('submit', async event => {
       booking.version=state.editingVersion;
       booking.sessionId=state.editingSnapshot?.sessionId||null;
       booking.recoveryId=state.editingSnapshot?.recoveryId||null;
-      if (!state.editing) {
+      booking.packageId=$('booking-package').value||null;
+      if (!state.editing && !booking.packageId) {
         const credits=(await api('recoveries')).filter(r=>r.clientId===booking.clientId && r.status==='PENDING');
         const compatible=credits.find(r=>r.serviceId===booking.serviceId);
         if(compatible && window.confirm(`Este cliente tiene ${credits.length} sesiones pendientes. ¿Quieres utilizar una compatible sin generar otro cobro?`)) {
@@ -420,6 +471,9 @@ document.addEventListener('click', event => {
 });
 $('booking-service').addEventListener('change', () => {
   const service = lookup('services', $('booking-service').value);
+  const selectedPackage=clientPackages.find(p=>p.id===$('booking-package').value);
+  if(selectedPackage&&selectedPackage.service.id!==service.id)$('booking-package').value='';
+  renderPackages();
   if (service.duration && $('booking-start').value) {
     const end = Math.min(C.minutes($('booking-start').value) + service.duration, 1439);
     $('booking-end').value = C.timeLabel(end);

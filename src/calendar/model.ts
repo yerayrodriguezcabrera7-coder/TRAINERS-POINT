@@ -132,6 +132,8 @@ export const bookingSchema = z.object({
   centerId: id.optional(),
   needsReschedule: z.boolean().default(false),
   serviceId: id,
+  packageId: z.string().uuid().nullable().optional(),
+  paymentDue: z.boolean().optional(),
   roomId: id,
   date,
   start: time,
@@ -293,6 +295,7 @@ export function assertTransition(old: Booking, next: Booking, c: Config) {
         "needsReschedule",
         "notes",
         "sessionId",
+        "packageId",
       ] as const
     ).some((k) => old[k] !== next[k])
   )

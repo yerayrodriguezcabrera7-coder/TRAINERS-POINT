@@ -59,9 +59,9 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell { min-height: 100vh; }
-.app-shell > .main-content { margin-left: var(--rail, 236px); }
+.app-shell > .main-content { margin-left: var(--rail); }
 
-.main-content { min-height: 100vh; margin-left: 244px; }
+.main-content { min-height: 100vh; margin-left: var(--rail); }
 .topbar { display: flex; height: 69px; align-items: center; justify-content: space-between; padding: 0 43px; border-bottom: 1px solid #e9ede8; background: rgba(255,255,255,.82); }
 .breadcrumb { display: flex; align-items: center; gap: 11px; color: #929c95; font-size: 12px; }
 .breadcrumb strong { color: #435149; font-weight: 600; }
@@ -242,7 +242,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 1050px) {
-  .main-content { margin-left: 215px; }
+  .main-content { margin-left: var(--rail); }
   .topbar { padding: 0 28px; }
   .page-content { padding: 32px 28px; }
   .stats-grid { gap: 10px; }
@@ -251,7 +251,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 760px) {
   .brand { margin: 0; }
-  .main-content { margin-left: 0; }
+  .main-content { margin-left: var(--rail); }
   .topbar { height: 51px; padding: 0 17px; }
   .topbar-right { gap: 10px; }
   .profile-avatar { width: 29px; height: 29px; }
@@ -399,7 +399,7 @@ h1, h2, h3, .stat-value, .heading-count, .gym-card-count { font-family: var(--tp
 body { background: var(--tp-paper); color: var(--tp-ink); font-family: var(--tp-body); }
 body, button, input, select, textarea { font-variant-numeric: tabular-nums; }
 h1, h2, h3, .stat-value, .heading-count, .gym-card-count { font-family: var(--tp-display); font-variant-numeric: tabular-nums; }
-.main-content { min-height: 100vh; margin-left: var(--rail, 236px); }
+.main-content { min-height: 100vh; margin-left: var(--rail); }
 .topbar { background: var(--tp-paper); border-color: var(--tp-line); }
 .breadcrumb { color: var(--tp-muted); }
 .breadcrumb strong { color: var(--tp-ink); }

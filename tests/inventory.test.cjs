@@ -257,3 +257,31 @@ test('Caja: operaciones sin caja se conservan sin atribuirlas después a una ape
  assert.equal((await cash.current(gym)).session.summary.expectedCash,105);
  assert.equal((await cash.current(gym)).session.summary.collections.EFECTIVO,0);
 });
+
+test('Calendario y bonos: consumo atómico, cancelación libera sesión y reservas sin bono quedan pendientes',async()=>{
+ const {Store}=require('../dist/calendar/store'),gym=await db.gym.create({data:{name:randomUUID()}}),client=await db.client.create({data:{gymId:gym.id,firstName:'Cliente',lastName:'Bonos',email:randomUUID()+'@example.com',phone:''}}),other=await db.client.create({data:{gymId:gym.id,firstName:'Otra',lastName:'Persona',email:randomUUID()+'@example.com',phone:''}});
+ const service=await db.service.create({data:{name:'Servicio bono',price:50,durationMin:45}}),pkg=await db.clientServicePackage.create({data:{clientId:client.id,serviceId:service.id,sessionsBought:1,totalAmount:50,paymentMethod:'EFECTIVO',paymentStatus:'PAGADO'}});
+ const store=new Store(pool,db),hours=Array.from({length:7},()=>({open:'09:00',close:'21:00',closed:false}));
+ await store.seed(gym.id,{timezone:'Europe/Madrid',schedule:hours,employees:[{id:'e1',name:'Entrenador',color:'#123456',schedule:hours}],rooms:[{id:'r1',name:'Sala'}],clients:[],services:[{id:service.id,name:service.name,duration:45,capacity:1}]});
+ const input={clientId:client.id,employeeId:'e1',serviceId:service.id,packageId:pkg.id,roomId:'r1',date:'2030-12-02',start:'10:00',status:'CONFIRMED'};
+ const results=await Promise.allSettled([store.save(gym.id,input),store.save(gym.id,{...input,start:'12:00'})]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);const booked=results.find(r=>r.status==='fulfilled').value;
+ const mirror=await db.booking.findUnique({where:{id:booked.id}});assert.equal(mirror.packageId,pkg.id);assert.equal(mirror.calendarGymId,gym.id);assert.equal(mirror.paymentPending,false);assert.equal(booked.end,booked.start==='10:00'?'10:45':'12:45');
+ assert.equal(await db.booking.count({where:{packageId:pkg.id,attendance:'PENDIENTE'}}),1);
+ await store.save(gym.id,{...booked,status:'CANCELLED'},booked.id);assert.equal((await db.booking.findUnique({where:{id:booked.id}})).attendance,'CANCELADA');
+ const next=await store.save(gym.id,{...input,start:'14:00'});assert.equal(next.paymentDue,false);
+ await assert.rejects(store.save(gym.id,{...input,clientId:other.id,start:'16:00'}),/compatible/);
+ const unpaid=await store.save(gym.id,{...input,packageId:null,start:'17:00'});assert.equal(unpaid.paymentDue,true);assert.equal(unpaid.status,'CONFIRMED');assert.equal((await db.booking.findUnique({where:{id:unpaid.id}})).paymentPending,true);
+ const pending=await db.clientServicePackage.create({data:{clientId:client.id,serviceId:service.id,sessionsBought:1,totalAmount:50,paymentMethod:'OTRO',paymentStatus:'PENDIENTE'}});
+ const reserve=await store.save(gym.id,{...input,packageId:pending.id,start:'18:00'});assert.equal(reserve.paymentDue,true);
+ await db.clientServicePackage.update({where:{id:pending.id},data:{paymentStatus:'PAGADO'}});assert.equal((await store.state(gym.id)).bookings.find(b=>b.id===reserve.id).paymentDue,false);
+});
+
+test('Bonos: una recuperación conserva la sesión del bono sin duplicar derechos',async()=>{
+ const {Store}=require('../dist/calendar/store'),gym=await db.gym.create({data:{name:randomUUID()}}),client=await db.client.create({data:{gymId:gym.id,firstName:'Cliente',lastName:'Recuperación',email:randomUUID()+'@example.com',phone:''}}),service=await db.service.create({data:{name:'Servicio recuperación',price:30,durationMin:60}});
+ const pkg=await db.clientServicePackage.create({data:{clientId:client.id,serviceId:service.id,sessionsBought:1,totalAmount:30,paymentMethod:'TARJETA',paymentStatus:'PAGADO'}}),store=new Store(pool,db),schedule=Array.from({length:7},()=>({open:'09:00',close:'21:00',closed:false}));
+ await store.seed(gym.id,{timezone:'Europe/Madrid',schedule,employees:[{id:'e1',name:'Entrenador',color:'#123456',schedule}],rooms:[{id:'r1',name:'Sala'}],services:[{id:service.id,name:service.name,duration:60,capacity:1}],clients:[]});
+ const input={clientId:client.id,employeeId:'e1',serviceId:service.id,packageId:pkg.id,roomId:'r1',date:'2030-12-02',start:'10:00',status:'CONFIRMED'};
+ const original=await store.save(gym.id,input),credit=await store.deferBooking(gym.id,original.id,{id:'admin',role:'ADMIN',employeeId:null});
+ await assert.rejects(store.save(gym.id,{...input,start:'12:00'}),/sesiones disponibles/);
+ const recovered=await store.save(gym.id,{...input,start:'14:00',packageId:null,recoveryId:credit.id});assert.equal(recovered.chargeAmount,0);assert.equal((await db.booking.findUnique({where:{id:recovered.id}})).packageId,pkg.id);
+});

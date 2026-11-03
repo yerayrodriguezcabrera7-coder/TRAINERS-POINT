@@ -374,6 +374,7 @@ model Service {
 }
 
 model ClientServicePackage {
+  requestKey String? @unique
   id             String        @id @default(uuid()) @db.Uuid
   clientId       String        @db.Uuid
   serviceId      String        @db.Uuid
@@ -393,6 +394,8 @@ model ClientServicePackage {
 }
 
 model Booking {
+  calendarGymId String?
+  paymentPending Boolean @default(false)
   id         String                @id @default(uuid()) @db.Uuid
   clientId   String                @db.Uuid
   serviceId  String                @db.Uuid
@@ -410,6 +413,7 @@ model Booking {
   package    ClientServicePackage? @relation(fields: [packageId], references: [id], onDelete: Restrict)
   employee   Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
+  @@index([calendarGymId])
   @@index([startTime, endTime, status])
   @@index([packageId, attendance])
   @@index([employeeId, startTime])

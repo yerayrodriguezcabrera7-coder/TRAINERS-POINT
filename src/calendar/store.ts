@@ -199,13 +199,48 @@ export class Store {
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
     const centers=await this.centers();
+    const paidPackages=this.clientsDb?(await this.pool.query('SELECT b.id,p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym])).rows:[];
     return {
-      gymId:gym, centers,
+      gymId:gym, centers, packagesEnabled:!!this.clientsDb,
       ...await this.externalConfig(gym, rows[0].config),
-      bookings: rows[0].bookings.map((b:Booking)=>{const center=centers.find(g=>g.id===(b.centerId||gym));return {...b,centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
+      bookings: rows[0].bookings.map((b:Booking)=>{const center=centers.find(g=>g.id===(b.centerId||gym));const linked=paidPackages.find(p=>p.id===b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&linked.paymentStatus!=='PAGADO'}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };
+  }
+  // The mirror and calendar JSON are written on the same PostgreSQL connection/transaction.
+  private async syncPackageBooking(db:PoolClient,gym:string,b:Booking,c:Config){
+    if(!this.clientsDb)return;
+    if(!/^[0-9a-f-]{36}$/i.test(b.clientId)||!/^[0-9a-f-]{36}$/i.test(b.serviceId)){
+      if(b.packageId)throw new ApiError(400,"Selecciona un cliente y servicio del catálogo para utilizar un bono.");
+      return;
+    }
+    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid AND c."gymId"=$3::uuid',[b.clientId,b.serviceId,gym])).rowCount;
+    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo de este centro.");
+    if(b.packageId&&b.recoveryId)throw new ApiError(400,"Selecciona un bono o una recuperación, sin utilizar ambos para la misma sesión.");
+    let effectivePackageId=b.packageId;
+    if(b.recoveryId){
+      effectivePackageId=(await db.query('SELECT p."packageId" FROM calendar.recoveries r JOIN "Booking" p ON p.id::text=r.original_id WHERE r.gym_id=$1 AND r.id=$2',[gym,b.recoveryId])).rows[0]?.packageId||null;
+    }
+    let paid=false;
+    if(effectivePackageId){
+      const pkg=(await db.query('SELECT * FROM "ClientServicePackage" WHERE id=$1::uuid FOR UPDATE',[effectivePackageId])).rows[0];
+      if(!pkg||pkg.clientId!==b.clientId||pkg.serviceId!==b.serviceId||!['PAGADO','PENDIENTE'].includes(pkg.paymentStatus))throw new ApiError(409,"El bono no es compatible con este cliente o servicio.");
+      const count=Number((await db.query(`SELECT count(*) FROM "Booking" WHERE "packageId"=$1::uuid AND id<>$2::uuid AND attendance IN ('PENDIENTE','ASISTIO') AND status<>'CANCELADA'`,[pkg.id,b.id])).rows[0].count);
+      const held=Number((await db.query(`SELECT count(*) FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE original."packageId"=$1::uuid AND r.gym_id=$2 AND r.id<>COALESCE($3,'') AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING')`,[pkg.id,gym,b.recoveryId||null])).rows[0].count);
+      if(!['CANCELLED','NO_SHOW'].includes(b.status)&&count+held>=pkg.sessionsBought)throw new ApiError(409,"Este bono ya no tiene sesiones disponibles. Actualiza los bonos del cliente.");
+      paid=pkg.paymentStatus==='PAGADO';
+    }
+    b.paymentDue=!paid&&!b.recoveryId;
+    if(paid||b.recoveryId)b.chargeAmount=0;
+    const start=DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toJSDate(),end=DateTime.fromISO(`${b.date}T${b.end}`,{zone:c.timezone}).toJSDate();
+    const status=({PENDING:'PENDIENTE',CONFIRMED:'CONFIRMADA',COMPLETED:'COMPLETADA',CANCELLED:'CANCELADA',NO_SHOW:'COMPLETADA'})[b.status];
+    const attendance=({PENDING:'PENDIENTE',CONFIRMED:'PENDIENTE',COMPLETED:'ASISTIO',CANCELLED:'CANCELADA',NO_SHOW:'NO_ASISTIO'})[b.status];
+    // Calendar employee IDs may be workspace identities rather than Prisma employees.
+    const employee=b.employeeId&&/^[0-9a-f-]{36}$/i.test(b.employeeId)?(await db.query('SELECT id FROM "Employee" WHERE id=$1::uuid',[b.employeeId])).rows[0]?.id:null;
+    await db.query(`INSERT INTO "Booking" (id,"clientId","serviceId","packageId","employeeId","startTime","endTime",status,attendance,"updatedAt","calendarGymId","paymentPending")
+      VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8::"BookingStatus",$9::"AttendanceStatus",now(),$10,$11)
+      ON CONFLICT(id) DO UPDATE SET "clientId"=EXCLUDED."clientId","serviceId"=EXCLUDED."serviceId","packageId"=EXCLUDED."packageId","employeeId"=EXCLUDED."employeeId","startTime"=EXCLUDED."startTime","endTime"=EXCLUDED."endTime",status=EXCLUDED.status,attendance=EXCLUDED.attendance,"updatedAt"=now(),"paymentPending"=EXCLUDED."paymentPending"`,[b.id,b.clientId,b.serviceId,effectivePackageId||null,employee,start,end,status,attendance,gym,b.paymentDue]);
   }
   async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string) {
     const input = bookingSchema.parse(raw);
@@ -264,6 +299,7 @@ export class Store {
         }
         await db.query("UPDATE calendar.recoveries SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId,credit]);
       } else b.chargeAmount = old?.chargeAmount ?? c.services.find(s=>s.id===b.serviceId)?.price ?? 0;
+      await this.syncPackageBooking(db,gym,b,c);
       if (old) b.version++;
       await db.query(
         "INSERT INTO calendar.bookings(id,gym_id,data) VALUES($1,$2,$3) ON CONFLICT(gym_id,id) DO UPDATE SET data=EXCLUDED.data",
@@ -307,6 +343,7 @@ export class Store {
       const credit = {id:randomUUID(), originalId:b.id, clientId:b.clientId, serviceId:b.serviceId, employeeId:b.employeeId, status:"PENDING", bookingId:null, createdAt:new Date().toISOString(), actorId:actor.id, exception:remaining<2*3600000};
       await db.query("INSERT INTO calendar.recoveries(gym_id,id,original_id,data) VALUES($1,$2,$3,$4)",[gym,credit.id,b.id,credit]);
       b.status="CANCELLED"; b.version++;
+      await this.syncPackageBooking(db,gym,b,c);
       await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.id,b]);
       return credit;
     });

@@ -49,7 +49,7 @@ body > main { margin-left: var(--rail); }
 .menu-collapsed .app-menu-account a { font-size: 9px; }
 .skip-content { position: fixed; top: -70px; left: 16px; z-index: 100; background: #fff; color: #1c292e; padding: 12px; border: 2px solid #bd3329; border-radius: 8px; }
 .skip-content:focus { top: 12px; }
-@media(max-width:600px) { body.menu-collapsed { --rail: 58px; }.menu-collapsed .app-menu { padding: 14px 5px; }body:not(.menu-collapsed)>main { margin-left: 58px; }.app-menu { box-shadow: 6px 0 25px #10181f24; } }
+@media(max-width:600px) { body.menu-collapsed { --rail: 58px; }.menu-collapsed .app-menu { padding: 14px 5px; }body:not(.menu-collapsed)>main { margin-left: var(--rail); }.app-menu { box-shadow: 6px 0 25px #10181f24; } }
 
 /* Shared identity: the logo orange is the only accent in the navigation. */
 .app-menu { background: var(--tp-black); color: var(--tp-surface); font-family: var(--tp-body); scrollbar-color: #4d463d transparent; }
