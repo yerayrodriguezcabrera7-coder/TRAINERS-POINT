@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
 import { randomUUID } from "node:crypto";
 import { Pool,PoolClient } from "pg";
@@ -108,6 +108,12 @@ export class Store {
       }));
       config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
+    const allCenters = await this.centers();
+    config.centers = allCenters;
+    const currentCenter = allCenters.find(item => item.id === externalGym.id || item.name === externalGym.name);
+    if (currentCenter?.maxBookingsPerHour != null) {
+      config.maxBookingsPerHour = currentCenter.maxBookingsPerHour;
+    }
     return config;
   }
   async migrate() {
@@ -121,8 +127,12 @@ export class Store {
     );
   }
   async listGyms() {
-    return (await this.pool.query("SELECT id,name FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
-      .map((row) => ({ id: row.id as string, name: (row.name || row.id) as string }));
+    return (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
+      .map((row) => ({
+        id: row.id as string,
+        name: (row.name || row.id) as string,
+        maxBookingsPerHour: row.config?.maxBookingsPerHour != null ? Number(row.config.maxBookingsPerHour) : null,
+      }));
   }
   async gymExists(gym: string) {
     return Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
@@ -190,7 +200,28 @@ export class Store {
     }
   }
   async centers() {
-    if(this.clientsDb)return this.clientsDb.gym.findMany({where:{isActive:true},select:{id:true,name:true,address:true,city:true,province:true},orderBy:{name:'asc'}});
+    if (this.clientsDb) {
+      try {
+        const rows = await this.clientsDb.$queryRaw<Array<{
+          id: string;
+          name: string;
+          address: string | null;
+          city: string | null;
+          province: string | null;
+          maxBookingsPerHour: number | null;
+        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+        return rows.map((r) => ({
+          ...r,
+          maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
+        }));
+      } catch {
+        return this.clientsDb.gym.findMany({
+          where: { isActive: true },
+          select: { id: true, name: true, address: true, city: true, province: true },
+          orderBy: { name: "asc" },
+        }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null })));
+      }
+    }
     return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:''}));
   }
   async state(gym: string) {
@@ -271,7 +302,9 @@ export class Store {
         c,
       );
       b.centerId=input.centerId || old?.centerId || gym;
-      const center=(await this.centers()).find(x=>x.id===b.centerId);
+      const allCenters = await this.centers();
+      c.centers = allCenters;
+      const center = allCenters.find(x => x.id === b.centerId);
       if(!center && b.centerId!==gym)throw new ApiError(400,"Centro desconocido o inactivo.");
       b.centerName=center?.name || gym;
       b.centerAddress=[center?.address,center?.city,center?.province].filter(Boolean).join(', ');
@@ -381,6 +414,7 @@ export class Store {
   private async validateConfig(db: PoolClient, gym: string, config: Config, bookings: Booking[]) {
     configSchema.parse(config);
     const today = DateTime.now().setZone(config.timezone).toISODate()!;
+    config.centers = await this.centers();
     for (const b of bookings) {
       for (const [list,key] of [["clients","clientId"],["services","serviceId"],["employees","employeeId"],["rooms","roomId"]] as const)
         if (b[key] !== null && !config[list].some(x => x.id === b[key])) throw new ApiError(409, "No se pueden eliminar fichas con historial. Usa el estado inactivo.");
@@ -475,6 +509,7 @@ export class Store {
     )
       throw new ApiError(400, "Recursos desconocidos.");
     if (service.active === false || c.employees.find(e => e.id === query.employeeId)?.active === false) return [];
+    c.centers = await this.centers();
     const slots = [];
     for (let start = 0; start + service.duration < 1440; start += 15) {
       try {

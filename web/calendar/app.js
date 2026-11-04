@@ -448,7 +448,7 @@ $('booking-form').addEventListener('submit', async event => {
     return;
   }
   if(booking.status!=='cancelled' && !C.employeeAvailable(lookup('employees',booking.employeeId),booking.date,C.minutes(booking.start),C.minutes(booking.end),data.schedule)){formError('booking-error','La reserva debe quedar dentro del turno del empleado.');return;}
-  const error = C.validateBooking(booking,data.bookings,data.schedule);
+  const error = C.validateBooking(booking,data.bookings,data.schedule,data.centers);
   if (error) { formError('booking-error',error); return; }
   if (clientId === 'new') data.clients.push({id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''});
   const index = data.bookings.findIndex(b => b.id === booking.id);
