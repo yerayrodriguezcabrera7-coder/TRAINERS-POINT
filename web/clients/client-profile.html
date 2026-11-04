@@ -137,7 +137,29 @@
             </details>
 
             <details class="profile-card profile-accordion measurements-section">
-              <summary class="profile-accordion-summary"><span><span class="profile-eyebrow">MEDIDAS</span><span class="profile-accordion-title">Medidas actuales</span></span><span id="last-measurement" class="section-status">Sin medidas</span></summary>
+              <summary class="profile-accordion-summary">
+                <span class="profile-accordion-heading">
+                  <span class="profile-eyebrow">MEDIDAS</span>
+                  <span class="profile-accordion-title-row">
+                    <span class="profile-accordion-title">Medidas actuales</span>
+                    <span id="measurements-header-evolution" class="measurements-header-evolution" hidden></span>
+                  </span>
+                </span>
+                <span id="last-measurement" class="section-status">Sin medidas</span>
+              </summary>
+              <div id="measurements-evolution-banner" class="measurements-evolution-banner" hidden>
+                <div class="measurements-evolution-banner-top">
+                  <div class="measurements-evolution-banner-title">
+                    <span class="measurements-evolution-banner-icon" aria-hidden="true">📈</span>
+                    <div>
+                      <strong id="measurements-evolution-headline">Progreso global desde el inicio</strong>
+                      <p id="measurements-evolution-phrase" class="measurements-evolution-phrase"></p>
+                    </div>
+                  </div>
+                  <span id="measurements-evolution-time" class="measurements-evolution-time"></span>
+                </div>
+                <div id="measurements-evolution-chips" class="measurements-evolution-chips"></div>
+              </div>
               <div id="measurement-summary" class="measurement-summary-profile"></div>
             </details>
 

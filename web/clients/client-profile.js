@@ -27,6 +27,75 @@ const metrics = [
   ["chest", "Pecho", "cm"],
   ["arm", "Brazo", "cm"],
 ];
+const metricSuffixes = {
+  weight: "de peso",
+  waist: "de cintura",
+  hip: "de cadera",
+  leg: "de pierna",
+  chest: "de pecho",
+  arm: "de brazo",
+};
+
+function getGlobalEvolution(measurements) {
+  if (!measurements || measurements.length < 2) return null;
+
+  const order = ["weight", "waist", "hip", "leg", "chest", "arm"];
+  const metricMap = new Map(metrics.map(([key, label, unit]) => [key, { label, unit, suffix: metricSuffixes[key] || `de ${label.toLowerCase()}` }]));
+
+  const diffItems = [];
+  let earliestDate = null;
+  let latestDate = null;
+
+  for (const key of order) {
+    const info = metricMap.get(key);
+    if (!info) continue;
+    const values = metricMeasurements(measurements, key);
+    if (values.length < 2) continue;
+
+    const first = values[0];
+    const latest = values.at(-1);
+
+    if (!earliestDate || new Date(first.measuredAt) < new Date(earliestDate)) {
+      earliestDate = first.measuredAt;
+    }
+    if (!latestDate || new Date(latest.measuredAt) > new Date(latestDate)) {
+      latestDate = latest.measuredAt;
+    }
+
+    const firstVal = Number(first[key]);
+    const latestVal = Number(latest[key]);
+    const diff = Math.round((latestVal - firstVal) * 100) / 100;
+    const diffFormatted = `${diff > 0 ? "+" : ""}${diff.toLocaleString("es-ES", { maximumFractionDigits: 1 })} ${info.unit}`;
+
+    diffItems.push({
+      key,
+      label: info.label,
+      unit: info.unit,
+      suffix: info.suffix,
+      firstVal,
+      latestVal,
+      diff,
+      diffFormatted,
+      summaryFragment: `${diffFormatted} ${info.suffix}`,
+    });
+  }
+
+  if (diffItems.length === 0) return null;
+
+  const elapsedDays = (earliestDate && latestDate) ? Math.max(0, Math.round(
+    (Date.parse(`${latestDate.slice(0, 10)}T00:00:00Z`) - Date.parse(`${earliestDate.slice(0, 10)}T00:00:00Z`)) / 86400000,
+  )) : 0;
+
+  const summaryPhrase = `Desde su inicio: ${diffItems.map(d => d.summaryFragment).join(" | ")}`;
+
+  return {
+    diffItems,
+    summaryPhrase,
+    earliestDate,
+    latestDate,
+    elapsedDays,
+  };
+}
 
 const clientId = window.location.pathname.match(/^\/clientes\/([0-9a-f-]+)\/ficha$/i)?.[1];
 const returnFilter = new URLSearchParams(window.location.search).get("filtro");
@@ -380,9 +449,73 @@ function renderSummary(measurements, previousMeasurements = []) {
   document.querySelector("#measurement-count").textContent = measurements.length ? `${measurements.length} ${measurements.length === 1 ? "registro" : "registros"}` : "Sin registros";
   const latest = measurements.at(-1);
   document.querySelector("#last-measurement").textContent = latest ? `Última · ${dateText(latest.measuredAt)}` : "Sin medidas";
-  if (!latest) { const empty = document.createElement("p"); empty.className = "profile-empty"; empty.textContent = "Aún no hay medidas. Añade la primera para empezar a comparar."; measurementSummary.append(empty); return; }
+
+  // Global Evolution in Header & Banner
+  const headerEvolution = document.querySelector("#measurements-header-evolution");
+  const bannerEvolution = document.querySelector("#measurements-evolution-banner");
+  const phraseEvolution = document.querySelector("#measurements-evolution-phrase");
+  const timeEvolution = document.querySelector("#measurements-evolution-time");
+  const chipsEvolution = document.querySelector("#measurements-evolution-chips");
+
+  const evolution = getGlobalEvolution(measurements);
+
+  if (evolution && evolution.diffItems.length > 0) {
+    if (headerEvolution) {
+      headerEvolution.hidden = false;
+      headerEvolution.classList.remove("is-baseline");
+      const headerText = evolution.diffItems.length <= 3
+        ? evolution.summaryPhrase
+        : `Desde su inicio: ${evolution.diffItems.slice(0, 3).map(d => d.summaryFragment).join(" | ")} (+${evolution.diffItems.length - 3} más)`;
+      headerEvolution.textContent = headerText;
+      headerEvolution.title = evolution.summaryPhrase;
+    }
+    if (bannerEvolution) {
+      bannerEvolution.hidden = false;
+      if (phraseEvolution) phraseEvolution.textContent = evolution.summaryPhrase;
+      if (timeEvolution) {
+        timeEvolution.textContent = `${evolution.elapsedDays} ${evolution.elapsedDays === 1 ? "día" : "días"} · Desde ${shortDateText(evolution.earliestDate)}`;
+      }
+      if (chipsEvolution) {
+        chipsEvolution.replaceChildren();
+        for (const item of evolution.diffItems) {
+          const chip = document.createElement("div");
+          const trendClass = item.diff < 0 ? "is-down" : item.diff > 0 ? "is-up" : "is-neutral";
+          chip.className = `measurements-evolution-chip ${trendClass}`;
+          const arrow = item.diff < 0 ? "↓" : item.diff > 0 ? "↑" : "=";
+          chip.innerHTML = `
+            <span class="chip-metric">${item.label}</span>
+            <strong class="chip-diff">${arrow} ${item.diffFormatted}</strong>
+            <small class="chip-range">${item.firstVal.toLocaleString("es-ES", { maximumFractionDigits: 1 })} → ${item.latestVal.toLocaleString("es-ES", { maximumFractionDigits: 1 })} ${item.unit}</small>
+          `;
+          chipsEvolution.append(chip);
+        }
+      }
+    }
+  } else {
+    if (measurements.length === 1) {
+      if (headerEvolution) {
+        headerEvolution.hidden = false;
+        headerEvolution.classList.add("is-baseline");
+        headerEvolution.textContent = "1.ª medición registrada";
+        headerEvolution.title = "Línea base registrada. Con la próxima medición verás la evolución.";
+      }
+    } else {
+      if (headerEvolution) headerEvolution.hidden = true;
+    }
+    if (bannerEvolution) bannerEvolution.hidden = true;
+  }
+
+  if (!latest) {
+    const empty = document.createElement("p");
+    empty.className = "profile-empty";
+    empty.textContent = "Aún no hay medidas. Añade la primera para empezar a comparar.";
+    measurementSummary.append(empty);
+    return;
+  }
+
   for (const [key, label, unit] of metrics) {
-    const card = document.createElement("div"); card.className = "measurement-card-profile";
+    const card = document.createElement("div");
+    card.className = "measurement-card-profile";
     const values = metricMeasurements(measurements, key);
     const oldValues = metricMeasurements(previousMeasurements, key);
     const previousValue = oldValues.at(-1)?.[key];
