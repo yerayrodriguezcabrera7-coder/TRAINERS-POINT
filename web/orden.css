@@ -9,12 +9,31 @@ body>main:not(.login-card){padding:32px clamp(18px,3vw,44px) 40px;max-width:1800
 :where(.heading-count){font-size:14px!important;vertical-align:middle;border-radius:20px;background:#edf0f4;padding:4px 10px;color:var(--ui-muted)!important;letter-spacing:0}
 :where(.attendance-card,.client-panel,.gym-panel,.overview-card,.profile-card){background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:12px;box-shadow:0 2px 8px #20304004;overflow:clip}
 :where(.management-card){padding:24px}.attendance-shell>section+section{margin-top:24px}
-:where(.stats,.summary,.stats-grid,.overview-metrics){gap:16px;margin-bottom:24px}
+/* Summary cards need a layout of their own; several screens do not load clients.css. */
+.stats,.summary,.stats-grid,.overview-metrics{gap:16px;margin-bottom:24px}
+.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.summary.leave-summary{max-width:none}
+.summary>article{display:flex;align-items:center;min-width:0;min-height:112px;padding:20px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-panel)}
+.summary>article>div{display:grid;gap:10px;min-width:0}
+.summary small{display:block;color:var(--ui-muted);font-size:11px;line-height:1.5;letter-spacing:.5px}
+.summary strong{display:block;margin:0;color:var(--ui-text);font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));border:0;align-items:stretch}
+.stats-grid>.stat-card{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:8px;min-width:0;min-height:112px;padding:20px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-panel);color:var(--ui-text);text-align:left;box-shadow:none}
+.stats-grid>.stat-card .stat-label,.stats-grid>.stat-card .stat-foot{color:var(--ui-muted);white-space:normal}
+.stats-grid>.stat-card .stat-value{display:block;margin:0;color:var(--ui-text);font-size:30px;line-height:1.15;font-variant-numeric:tabular-nums}
+.stats-grid>.stat-card:is(.is-active,[aria-pressed=true]){border-color:var(--tp-accent);background:#fff5e8}
+.stats-grid>.stat-card:is(.is-active,[aria-pressed=true]) .stat-value{color:#a64d00}
+.page-content>#leave-scope{margin:0 0 24px;padding:16px 20px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-panel);font-size:13px;line-height:1.7}
+#leave-scope a{color:#874100;text-underline-offset:3px}
 :where(.summary article,.stat,.stat-card){border:1px solid var(--ui-line);border-radius:10px;background:#fff;padding:18px 20px;box-shadow:none}
 :where(.summary small,.stat>span,.stat-label){font-size:11px;letter-spacing:.5px;color:var(--ui-muted);line-height:1.5}
 :where(.stat strong,.summary strong,.stat-value){font-family:inherit;font-size:30px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
 :where(.panel-heading){padding:22px 24px 14px}.panel-heading h2,.cash-heading h2{font-size:19px;letter-spacing:-.25px;margin:0 0 5px}
-:where(.toolbar,.panel-toolbar){gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:18px}
+.panel-toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.management-card>.panel-toolbar{gap:12px}
+.panel-toolbar .search-field{display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--ui-line);border-radius:7px;background:var(--ui-panel)}
+.panel-toolbar .search-field:has(>input[hidden]){display:none}
+:where(.toolbar){gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:18px}
 .client-panel>.toolbar{padding:16px 24px;background:#fafbfc;border-top:1px solid var(--ui-line);border-bottom:1px solid var(--ui-line);margin-bottom:0}
 :where(.toolbar label,.panel-toolbar label){font-size:12px;font-weight:650;color:#415766;display:grid;gap:7px;min-width:0}
 :where(.toolbar .search-field,.panel-toolbar .search-field){flex:1 1 260px;min-width:180px}.management-card .panel-toolbar>input[type=search]{flex:1 1 240px;min-width:180px}
@@ -54,6 +73,7 @@ body{background:var(--ui-bg);color:var(--ui-text)}.app-shell{min-height:100vh}.a
 .page-content>.page-heading:has(>.page-heading-copy){padding:24px;min-height:0}
 .page-content>.attendance-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px}
 .page-heading-copy,.page-heading>div,.attendance-header>div,.overview-header>div{min-width:0}
+.overview-header,.overview-tools{flex-wrap:wrap}
 .page-heading-actions,.heading-actions{display:flex;flex-wrap:wrap;gap:12px}
 .main-content>.page-content>:is(.usage-guide,.stats,.summary,.stats-grid,.section-links){margin-bottom:24px}
 .form-grid label>.field-guidance{margin:0;font-weight:400}
@@ -87,3 +107,13 @@ body .login-card .usage-guide{display:block;padding:16px;margin:0;font-size:13px
   .login-card>h1{font-size:26px}
   .usage-guide-copy{flex-basis:100%}
 }
+
+@media(max-width:600px){
+  .summary{grid-template-columns:minmax(0,1fr)}
+  .summary>article{min-height:96px;padding:16px}
+  .stats,.summary,.stats-grid,.overview-metrics{gap:12px}
+  .stats-grid>.stat-card{min-height:108px;padding:14px}
+  .stats-grid>.stat-card .stat-value{font-size:28px}
+  .page-content>#leave-scope{padding:16px}
+}
+@media(max-width:380px){.stats-grid{grid-template-columns:minmax(0,1fr)}}
