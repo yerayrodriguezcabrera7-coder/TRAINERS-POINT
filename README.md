@@ -1,6 +1,8 @@
 # Trainers Point
 
-Aplicacion unica con un solo servidor, un solo puerto y un solo comando de arranque.
+Aplicación única con un solo servidor y un solo comando de arranque.
+
+**Para localizar el código:** consulta el [mapa del proyecto y las optimizaciones](docs/estructura-y-optimizacion.md). Todas las pantallas están en `web/`, organizadas por apartado; el servidor está en `src/` y la base de datos en `prisma/`.
 
 ## Requisitos
 
@@ -10,13 +12,12 @@ Aplicacion unica con un solo servidor, un solo puerto y un solo comando de arran
 ## Instalacion
 
 ```sh
-npm install
-copy .env.example .env
+npm ci
 npm run prisma:generate
 npm run dev
 ```
 
-En PowerShell puede usarse npm.cmd. No imprimas ni compartas .env.
+Antes de arrancar por primera vez, copia `.env.example` a `.env` si todavía no lo tienes. En PowerShell puede usarse npm.cmd. No imprimas ni compartas .env.
 
 `npm run dev` configura y arranca PostgreSQL local en `.calendar-dev` (puerto `55439`), aplica las migraciones del CRM y del calendario, y activa una cuenta local `admin/admin` cuando aún no hay usuarios. Tanto el CRM como el calendario usan esa base local; no se conecta a AWS. Los datos de AWS no se copian: el CRM local empieza vacío. La base y sus credenciales permanecen en `.calendar-dev/`, que no se versiona.
 

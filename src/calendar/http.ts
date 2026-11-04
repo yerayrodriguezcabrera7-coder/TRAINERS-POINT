@@ -1,12 +1,12 @@
-﻿import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { timingSafeEqual, randomUUID } from "node:crypto";
-import { ZodError, z } from "zod";
-import { Store } from "./store";
-import { Inventory } from "../inventory";
+import { randomUUID,timingSafeEqual } from "node:crypto";
+import { createServer,IncomingMessage,ServerResponse } from "node:http";
+import { z,ZodError } from "zod";
+import { Inventory } from "../finance/inventory";
+import { serveAsset } from "../http/assets";
+import { serveRuntime } from "../http/runtime";
+import { Access,Identity,initialPassword } from "./access";
 import { ApiError } from "./model";
-import { Access, Identity, initialPassword } from "./access";
+import { Store } from "./store";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -361,70 +361,13 @@ export function server(
         }
         throw new ApiError(404, "Ruta desconocida.");
       }
-      if (req.method !== "GET") throw new ApiError(405, "Método no permitido.");
-      const file =
-        path === "/"
-          ? "index.html"
-          : path.replace(/^\//, "");
-      if (file === "runtime.js" || path === "/runtime.js") {
-        const exposeBootstrapToken = options.exposeAdminToken && (await access.needsSetup(gym));
-        res.writeHead(200, {
-          "Content-Type": "text/javascript",
-          "Cache-Control": "no-store",
-        });
-        res.end(
-          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);const t=sessionStorage.getItem('calendar-user-token')||sessionStorage.getItem('calendar-admin-token')||window.CALENDAR_DEV_TOKEN||'';if(t&&!h.has('Authorization'))h.set('Authorization','Bearer '+t);o={...o,headers:h};}return f(i,o);};})();${
-            exposeBootstrapToken
-              ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
-              : ""
-          }`,
-        );
+      if (req.method !== "GET" && req.method !== "HEAD") throw new ApiError(405, "Método no permitido.");
+      if (path === "/runtime.js") {
+        const expose = options.exposeAdminToken && await access.needsSetup(gym);
+        await serveRuntime(req,res,expose?token:'');
         return;
       }
-      const name = file.replace(/^\//, "");
-      const allowed: Record<string, string> = {
-        "index.html": "text/html",
-        "app.js": "text/javascript",
-        "calendar-core.js": "text/javascript",
-        "ayuda.js": "text/javascript",
-        "ayuda.css": "text/css",
-        "orden.css": "text/css",
-        "styles.css": "text/css",
-        "menu.css": "text/css",
-        "design.css": "text/css",
-        "inicio.html": "text/html",
-        "inicio.css": "text/css",
-        "inicio.js": "text/javascript",
-        "menu.js": "text/javascript",
-        "fichajes.html": "text/html",
-        "fichajes.js": "text/javascript",
-        "fichajes.css": "text/css",
-        "recuperaciones.html": "text/html",
-        "recuperaciones.js": "text/javascript",
-        "ausencias.html": "text/html",
-        "ausencias.js": "text/javascript",
-        "ausencias.css": "text/css",
-        "pendientes.html": "text/html",
-        "pendientes.js": "text/javascript",
-        "clients.css": "text/css",
-        "gestion.html": "text/html",
-        "gestion.js": "text/javascript",
-        "gestion.css": "text/css",
-        "gimnasios.html": "text/html",
-        "gimnasios.js": "text/javascript",
-        "gimnasios.css": "text/css",
-        "login.html": "text/html",
-        "login.js": "text/javascript",
-        "change-password.html": "text/html",
-        "change-password.js": "text/javascript",
-      };
-      if (!allowed[name]) throw new ApiError(404, "Archivo desconocido.");
-      res.writeHead(200, {
-        "Content-Type": allowed[name].startsWith("image/") ? allowed[name] : `${allowed[name]}; charset=utf-8`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      });
-      res.end(await readFile(resolve("web", name)));
+      if (!await serveAsset(req,res,path)) throw new ApiError(404,"Archivo desconocido.");
     } catch (e) {
       if (e instanceof ZodError) {
         send(res, 400, {

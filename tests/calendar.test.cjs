@@ -379,7 +379,7 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
   let dom;
   async function until(fn){const limit=Date.now()+7000;while(Date.now()<limit){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('La interfaz no se actualizó');}
   try{
-    dom=await JSDOM.fromURL(url,{resources:'usable',runScripts:'dangerously',beforeParse(w){
+    dom=await JSDOM.fromURL(url,{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){
       w.prompt=()=>{throw Error('El modo local no debe pedir una clave');};w.fetch=(p,o)=>fetch(new URL(p,url),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;
       w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
       w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
@@ -533,7 +533,7 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
   const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+app.address().port;let dom;
   const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('UI timeout');};
-  async function open(section){dom?.window.close();dom=await JSDOM.fromURL(base+'/gestion.html?section='+section,{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}});await until(()=>dom.window.document.querySelector('[data-edit]'));return dom.window.document;}
+  async function open(section){dom?.window.close();dom=await JSDOM.fromURL(base+'/gestion.html?section='+section,{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}});await until(()=>dom.window.document.querySelector('[data-edit]'));return dom.window.document;}
   try{
     let d=await open('clients');d.getElementById('add').click();d.querySelector('[name=name]').value='Cliente interfaz';d.querySelector('[name=email]').value='ui@example.com';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>d.getElementById('rows').textContent.includes('Cliente interfaz'));
@@ -545,7 +545,7 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
     await until(()=>!d.getElementById('editor').open);
     assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
     assert.deepEqual((await other.state(g)).employees[0].weeklyPeriods[1],[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
-    dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
+    dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
     await until(()=>d.querySelector('[data-slot="2030-10-22"]'));
     d.getElementById('service-filter').value='s2';d.getElementById('service-filter').dispatchEvent(new dom.window.Event('change'));
     const slot=n=>d.querySelector(`[data-slot="2030-10-22"][data-employee="e1"][data-minute="${n}"]`);
@@ -569,7 +569,7 @@ test('Inicio: muestra actividad real, filtra pendientes y abre la reserva correc
   const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+app.address().port;let dom;
   const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('Overview UI timeout');};
-  const options={resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}};
+  const options={pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}};
   try{
     dom=await JSDOM.fromURL(base+'/inicio.html',options);let d=dom.window.document;
     await until(()=>d.getElementById('today-count').textContent==='2');
@@ -679,7 +679,7 @@ test('Pendientes: interfaz asigna una reserva y la elimina de la cola compartida
  const {JSDOM}=require('jsdom'),g=await gym(),center=await gym();const b=await store.save(g,booking({employeeId:null,status:'PENDING',centerId:center}));
  const app=server(store,g,'planning-ui-token-long-enough',{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;let dom;
  const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('No se actualizó la cola de pendientes');};
- try{dom=await JSDOM.fromURL(base+'/pendientes.html',{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0)'));const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
+ try{dom=await JSDOM.fromURL(base+'/pendientes.html',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0)'));const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
 });
 test('Centros: un trabajador no puede estar en dos centros a la misma hora',async()=>{
  const g=await gym(),center=await gym();await store.save(g,booking());await assert.rejects(store.save(g,booking({centerId:center,clientId:'c1'})),/ocupados/);

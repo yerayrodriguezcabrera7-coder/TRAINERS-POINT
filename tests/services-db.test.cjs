@@ -187,13 +187,13 @@ test('Base de datos: Desactivar servicio sin eliminarlo físicamente', async () 
 });
 
 test('Interfaz y archivos: Comprobar existencia y estructura de la página de servicios', () => {
-  const htmlPath = path.join(__dirname, '..', 'public', 'services.html');
-  const cssPath = path.join(__dirname, '..', 'public', 'services.css');
-  const jsPath = path.join(__dirname, '..', 'public', 'services.js');
+  const htmlPath = path.join(__dirname, '..', 'web', 'services', 'services.html');
+  const cssPath = path.join(__dirname, '..', 'web', 'services', 'services.css');
+  const jsPath = path.join(__dirname, '..', 'web', 'services', 'services.js');
 
-  assert.ok(fs.existsSync(htmlPath), 'Debe existir public/services.html');
-  assert.ok(fs.existsSync(cssPath), 'Debe existir public/services.css');
-  assert.ok(fs.existsSync(jsPath), 'Debe existir public/services.js');
+  assert.ok(fs.existsSync(htmlPath), 'Debe existir web/services/services.html');
+  assert.ok(fs.existsSync(cssPath), 'Debe existir web/services/services.css');
+  assert.ok(fs.existsSync(jsPath), 'Debe existir web/services/services.js');
 
   const html = fs.readFileSync(htmlPath, 'utf8');
   assert.ok(html.includes('id="services-grid"'), 'Debe incluir el grid de servicios');
@@ -244,9 +244,9 @@ test('Integración: servicios compartidos actualizan el calendario y conservan s
 });
 
 test('Formulario: Configuración de los 11 campos, cálculo automático y duración de 4 semanas solo', () => {
-  const htmlPath = path.join(__dirname, '..', 'public', 'services.html');
-  const jsPath = path.join(__dirname, '..', 'public', 'services.js');
-  const cssPath = path.join(__dirname, '..', 'public', 'services.css');
+  const htmlPath = path.join(__dirname, '..', 'web', 'services', 'services.html');
+  const jsPath = path.join(__dirname, '..', 'web', 'services', 'services.js');
+  const cssPath = path.join(__dirname, '..', 'web', 'services', 'services.css');
 
   const html = fs.readFileSync(htmlPath, 'utf8');
   const js = fs.readFileSync(jsPath, 'utf8');
@@ -374,8 +374,8 @@ test('Base de datos: Modificación completa posterior de todos los 11 campos de 
   assert.equal(cleared.recommendedWeeklyFrequency, null);
 });
 
-test('Backend: Verificación de reglas de validación en parseServiceInput (src/index.ts)', () => {
-  const indexPath = path.join(__dirname, '..', 'src', 'index.ts');
+test('Backend: Verificación de reglas de validación en parseServiceInput (validation/records.ts)', () => {
+  const indexPath = path.join(__dirname, '..', 'src', 'validation', 'records.ts');
   const src = fs.readFileSync(indexPath, 'utf8');
 
   // Validación de nombre
@@ -484,9 +484,9 @@ test('Clientes y Bonos: Asignar bono a cliente vinculado a servicio dinámico ac
 });
 
 test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica de asignación de bonos', () => {
-  const profileHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.html'), 'utf8');
-  const profileJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.js'), 'utf8');
-  const profileCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.css'), 'utf8');
+  const profileHtml = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.html'), 'utf8');
+  const profileJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.js'), 'utf8');
+  const profileCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.css'), 'utf8');
 
   // Comprobar elementos HTML en la ficha
   assert.ok(profileHtml.includes('id="open-add-bono"'), 'Debe existir botón para abrir el modal de añadir bono');
@@ -509,9 +509,9 @@ test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica d
 });
 
 test('Clientes y Bonos: Directorio de clientes incluye botón de asignación rápida y auto-completado', () => {
-  const clientsHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.html'), 'utf8');
-  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.js'), 'utf8');
-  const clientsCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.css'), 'utf8');
+  const clientsHtml = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'clients.html'), 'utf8');
+  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'clients.js'), 'utf8');
+  const clientsCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'clients.css'), 'utf8');
 
   // Comprobar botón rápido en la tarjeta de cliente
   assert.ok(clientsJs.includes('client-card-bono-btn'), 'Debe incluir botón rápido de bono en cada tarjeta de cliente');
@@ -599,10 +599,10 @@ test('Seguridad y Accesos: Administrador puede cambiar o restablecer la contrase
 });
 
 test('Interfaz de Usuarios y Profesionales: Elementos para cambio y restablecimiento de contraseña de entrenadores', () => {
-  const usersHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.html'), 'utf8');
-  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.js'), 'utf8');
-  const profHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.html'), 'utf8');
-  const profJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.js'), 'utf8');
+  const usersHtml = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'users.html'), 'utf8');
+  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'users.js'), 'utf8');
+  const profHtml = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'professionals.html'), 'utf8');
+  const profJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'professionals.js'), 'utf8');
 
   // En gestión de usuarios (users.html y users.js)
   assert.ok(usersHtml.includes('id="user-password-box"'), 'Debe incluir caja de gestión de contraseña');
@@ -619,15 +619,15 @@ test('Interfaz de Usuarios y Profesionales: Elementos para cambio y restablecimi
 });
 
 test('Control de acceso y navegación para perfil Entrenador: Restricción de ventanas y rutas privadas', () => {
-  const menuJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'menu.js'), 'utf8');
-  const menuCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'menu.css'), 'utf8');
-  const gymsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'gyms.js'), 'utf8');
-  const servicesJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'services.js'), 'utf8');
-  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'users.js'), 'utf8');
-  const profJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'professionals.js'), 'utf8');
-  const gestionJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'gestion.js'), 'utf8');
-  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'clients.js'), 'utf8');
-  const clientProfileJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'client-profile.js'), 'utf8');
+  const menuJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'shared', 'menu.js'), 'utf8');
+  const menuCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'shared', 'menu.css'), 'utf8');
+  const gymsJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'centers', 'gyms.js'), 'utf8');
+  const servicesJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'services', 'services.js'), 'utf8');
+  const usersJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'users.js'), 'utf8');
+  const profJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'professionals.js'), 'utf8');
+  const gestionJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'gestion.js'), 'utf8');
+  const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'clients.js'), 'utf8');
+  const clientProfileJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.js'), 'utf8');
 
   // Menú lateral y redirección global
   assert.ok(menuJs.includes("location.replace('/index.html')"), 'menu.js debe redirigir si se intenta acceder a una ruta no autorizada');

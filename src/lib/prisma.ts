@@ -1,5 +1,5 @@
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import "dotenv/config";
 
 // The development database currently presents a self-signed certificate.
 // Keep production certificate verification strict, while making the local

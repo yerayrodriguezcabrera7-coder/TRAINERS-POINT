@@ -1,28 +1,27 @@
-import { Pool, PoolClient } from "pg";
-import { randomUUID } from "node:crypto";
-import { DateTime } from "luxon";
 import type { PrismaClient } from "@prisma/client";
+import { DateTime } from "luxon";
+import { randomUUID } from "node:crypto";
+import { Pool,PoolClient } from "pg";
 import { accessMigration } from "./access";
 import {
-  ApiError,
-  Booking,
-  Config,
-  bookingSchema,
-  configSchema,
-  normalize,
-  assertAvailable,
-  assertTransition,
-  date,
-  label,
-  minutes,
-  clientSchema,
-  attendanceActionSchema,
-  haversineDistanceMeters,
-  employeeSchema,
-  serviceSchema,
-  leaveRequestInputSchema,
-  LeaveRequest,
-  workerActionSchema,
+ApiError,
+Booking,
+Config,
+LeaveRequest,
+assertAvailable,
+assertTransition,
+attendanceActionSchema,
+bookingSchema,
+clientSchema,
+configSchema,
+date,
+employeeSchema,
+haversineDistanceMeters,
+label,
+leaveRequestInputSchema,
+normalize,
+serviceSchema,
+workerActionSchema
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
 CREATE TABLE IF NOT EXISTS calendar.gyms(id text PRIMARY KEY, name text, config jsonb NOT NULL, revision bigint NOT NULL DEFAULT 0);
@@ -54,22 +53,12 @@ export class Store {
     const gyms = await this.clientsDb.gym.findMany({ where: { isActive: true }, select: { id: true, name: true } });
     const externalGym = gyms.find(item => item.id === row.name || slug(item.name) === slug(String(row.name)));
     if (!externalGym) return config;
-    const clients = await this.clientsDb.client.findMany({
+    const clientsQuery = this.clientsDb.client.findMany({
       where: { gymId: externalGym.id },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
-    config.clients = clients.map(client => ({
-      id: client.id,
-      name: `${client.firstName} ${client.lastName}`.trim(),
-      email: client.email,
-      phone: client.phone,
-      notes: client.notes || "",
-      status: client.status === "ACTIVO" || client.status === "LEAD" ? "ACTIVE" as const : client.status === "BAJA" ? "BLOCKED" as const : "INACTIVE" as const,
-      birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : "",
-      assignedWorkerId: (client as any).assignedWorkerId || null,
-    }));
-    const services = await this.clientsDb.service.findMany({
+    const servicesQuery = this.clientsDb.service.findMany({
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -86,10 +75,23 @@ export class Store {
         conditions: true,
       },
     });
+    const [clients, services] = await Promise.all([clientsQuery, servicesQuery]);
+    config.clients = clients.map(client => ({
+      id: client.id,
+      name: `${client.firstName} ${client.lastName}`.trim(),
+      email: client.email,
+      phone: client.phone,
+      notes: client.notes || "",
+      status: client.status === "ACTIVO" || client.status === "LEAD" ? "ACTIVE" as const : client.status === "BAJA" ? "BLOCKED" as const : "INACTIVE" as const,
+      birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : "",
+      assignedWorkerId: (client as any).assignedWorkerId || null,
+    }));
     if (services.length) {
       const saved = config.services;
+      const savedById = new Map(saved.map(service => [service.id, service]));
+      const serviceIds = new Set(services.map(service => service.id));
       config.services = services.map(service => ({
-        ...saved.find(s => s.id === service.id),
+        ...savedById.get(service.id),
         id: service.id,
         name: service.name,
         description: service.description || "",
@@ -104,7 +106,7 @@ export class Store {
         recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
         conditions: service.conditions,
       }));
-      config.services.push(...saved.filter(s => !services.some(e => e.id === s.id)));
+      config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
     return config;
   }
@@ -198,12 +200,17 @@ export class Store {
       [gym],
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
-    const centers=await this.centers();
-    const paidPackages=this.clientsDb?(await this.pool.query('SELECT b.id,p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym])).rows:[];
+    const [centers, packageResult, config] = await Promise.all([
+      this.centers(),
+      this.clientsDb ? this.pool.query('SELECT b.id,p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym]) : Promise.resolve({rows:[]}),
+      this.externalConfig(gym, rows[0].config),
+    ]);
+    const centersById = new Map(centers.map(center => [center.id, center]));
+    const packagesByBooking = new Map(packageResult.rows.map(pkg => [pkg.id, pkg]));
     return {
       gymId:gym, centers, packagesEnabled:!!this.clientsDb,
-      ...await this.externalConfig(gym, rows[0].config),
-      bookings: rows[0].bookings.map((b:Booking)=>{const center=centers.find(g=>g.id===(b.centerId||gym));const linked=paidPackages.find(p=>p.id===b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&linked.paymentStatus!=='PAGADO'}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
+      ...config,
+      bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&linked.paymentStatus!=='PAGADO'}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };

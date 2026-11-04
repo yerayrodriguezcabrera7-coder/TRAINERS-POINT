@@ -1,7 +1,7 @@
-import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
+import { createHash,randomBytes,randomUUID,scrypt,timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
 import { z } from "zod";
-import type { PrismaClient } from "@prisma/client";
 import { ApiError } from "./model";
 
 const SCRYPT_N = 131072;

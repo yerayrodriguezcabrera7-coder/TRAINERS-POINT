@@ -331,8 +331,8 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     // ==========================================
     const { JSDOM } = require("jsdom");
     const { readFile } = require("node:fs/promises");
-    const usersHtml = await readFile("public/users.html", "utf-8");
-    const usersJs = await readFile("public/users.js", "utf-8");
+    const usersHtml = await readFile("web/staff/users.html", "utf-8");
+    const usersJs = await readFile("web/staff/users.js", "utf-8");
 
     const dom = new JSDOM(usersHtml, {
       url: "http://127.0.0.1:3000/usuarios",
@@ -353,7 +353,7 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
         if (fn()) return;
         await new Promise((r) => setTimeout(r, 40));
       }
-      throw Error("UI timeout en public/users.html: " + dom.window.document.getElementById("user-rows")?.textContent);
+      throw Error("UI timeout en web/staff/users.html: " + dom.window.document.getElementById("user-rows")?.textContent);
     };
 
     const doc = dom.window.document;

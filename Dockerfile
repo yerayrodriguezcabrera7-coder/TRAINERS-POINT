@@ -7,6 +7,7 @@ COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src
+COPY scripts/build.cjs ./scripts/build.cjs
 RUN npm run build
 
 FROM build AS production-deps

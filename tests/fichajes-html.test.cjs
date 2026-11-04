@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
 test('Página de fichajes tiene la estructura y clases del diseño de clientes', () => {
-  const html = fs.readFileSync('web/fichajes.html', 'utf8');
+  const html = fs.readFileSync('web/staff/fichajes.html', 'utf8');
 
   // Links CSS
   assert.ok(html.includes('href="/clients.css"'), 'Debe incluir clients.css');

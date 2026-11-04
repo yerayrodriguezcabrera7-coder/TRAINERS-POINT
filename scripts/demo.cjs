@@ -8,7 +8,7 @@ let pg,db,pool,child;
  const probe=net.createServer();
  await new Promise((resolve,reject)=>{probe.once('error',()=>reject(Error('El puerto de la demo ya está ocupado. Cierra la demo anterior o utiliza DEMO_PORT.')));probe.listen(demoPort,'127.0.0.1',resolve);});
  await new Promise(resolve=>probe.close(resolve));
- const {default:Embedded}=await import(req.resolve('embedded-postgres'));const {PrismaClient}=req('@prisma/client'),{Pool}=req('pg'),{Inventory}=req('./dist/inventory'),{Store}=req('./dist/calendar/store'),{DateTime}=req('luxon');
+ const {default:Embedded}=await import(req.resolve('embedded-postgres'));const {PrismaClient}=req('@prisma/client'),{Pool}=req('pg'),{Inventory}=req('./dist/finance/inventory'),{Store}=req('./dist/calendar/store'),{DateTime}=req('luxon');
  const socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
  const password=randomUUID(),directory=await fs.mkdtemp(path.join(os.tmpdir(),'cobosu-demo-'));
  pg=new Embedded({databaseDir:path.join(directory,'db'),user:'postgres',password,port,persistent:false,postgresFlags:['-h','127.0.0.1'],onLog:()=>{},onError:()=>{}});await pg.initialise();await pg.start();
