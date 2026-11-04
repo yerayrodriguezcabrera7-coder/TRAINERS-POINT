@@ -2,6 +2,8 @@ export const staticFiles: Record<string, {
   file: string;
   contentType: string;
 }> = {
+  "/training-plans.js": { file: "web/shared/training-plans.js", contentType: "text/javascript; charset=utf-8" },
+  "/training-plans.css": { file: "web/shared/training-plans.css", contentType: "text/css; charset=utf-8" },
   "/polling.js": { file: "web/shared/polling.js", contentType: "text/javascript; charset=utf-8" },
   "/ayuda.js": { file: "web/shared/ayuda.js", contentType: "text/javascript; charset=utf-8" },
   "/orden.css": { file: "web/shared/orden.css", contentType: "text/css; charset=utf-8" },

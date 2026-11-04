@@ -1,0 +1,20 @@
+#training-plans { margin:24px 0; padding:24px; border:1px solid #ddd6cc; border-radius:16px; background:var(--surface,#fffdfa); min-width:0; }
+#training-plans h2,.tp-dialog h2 { margin:0 0 16px; font-size:1.5rem; }
+.tp-actions { display:flex; gap:12px; flex-wrap:wrap; margin:16px 0; }
+.tp-button { display:inline-flex; align-items:center; justify-content:center; padding:10px 16px; margin:6px 6px 6px 0; border:1px solid #bfb5a7; border-radius:8px; background:#fff; color:#293439; font:inherit; cursor:pointer; }
+.tp-primary { background:#ff8100; color:#171c1e; font-weight:bold; }
+.tp-button:disabled { opacity:.5; cursor:wait; }
+.tp-button:focus-visible { outline:3px solid #b35500; outline-offset:2px; }
+.tp-dialog { width:min(860px,calc(100vw - 32px)); max-height:90dvh; padding:24px; border:1px solid #ddd6cc; border-radius:16px; overflow:auto; color:#293439; background:#fffdfa; box-sizing:border-box; }
+.tp-dialog::backdrop { background:#10182099; }
+.tp-dialog header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.tp-dialog .tp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.tp-dialog label { display:flex; flex-direction:column; gap:6px; min-width:0; font-size:1rem; }
+.tp-dialog input,.tp-dialog textarea,.tp-dialog select { width:100%; box-sizing:border-box; min-width:0; border:1px solid #bfb5a7; border-radius:8px; padding:10px; font:inherit; background:#fff; color:#293439; }
+.tp-dialog textarea { min-height:80px; resize:vertical; }
+.tp-day,.tp-plan { padding:16px; margin:16px 0; border:1px solid #ddd6cc; border-radius:12px; min-width:0; overflow-wrap:anywhere; }
+.tp-exercise { margin:12px 0; padding:16px; border:1px solid #ddd6cc; border-radius:8px; min-width:0; }
+.tp-day h3 { margin:0 0 12px; font-size:1.15rem; }
+.tp-day li { margin:12px 0; }.tp-day p { margin:6px 0; }
+.tp-plan summary { cursor:pointer; font-weight:bold; }.tp-notes { color:#52636b; }.tp-error { color:#a32323; }
+@media(max-width:600px){.tp-dialog .tp-grid{grid-template-columns:1fr}.tp-dialog,#training-plans{padding:16px}.tp-dialog header{align-items:flex-start}}

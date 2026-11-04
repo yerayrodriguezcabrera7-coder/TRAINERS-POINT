@@ -64,7 +64,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "Tu perfil no permite modificar servicios.");
         return true;
       }
-      if (url.pathname.startsWith("/api/clients") && request.method !== "GET") {
+      if (url.pathname.startsWith("/api/clients") && request.method !== "GET" && !/^\/api\/clients\/[^/]+\/training-plans$/.test(url.pathname)) {
         sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
         return true;
       }

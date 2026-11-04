@@ -14,6 +14,7 @@ import { serveRuntime } from "./http/runtime";
 import { prisma } from "./lib/prisma";
 import { progressMigration } from "./progress-migration";
 import { centersRoutes } from './routes/centers';
+import { trainingPlansRoutes } from './routes/training-plans';
 import { clientsRoutes } from './routes/clients';
 import { financeRoutes } from './routes/finance';
 import { packagesRoutes } from './routes/packages';
@@ -45,7 +46,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, hasTrustedOrigin };
   if (await authorize(request, response, url, context))
     return;
-  for (const route of [financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
+  for (const route of [trainingPlansRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
     if (await route(request, response, url, context))
       return;
   if (calendarHandler) {

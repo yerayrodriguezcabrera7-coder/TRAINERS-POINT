@@ -329,6 +329,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const b = id ? data.bookings.find(item => item.id === id) : null;
   state.editingVersion=b?.version;
   state.editingSnapshot=b ? {...b} : null;
+  $('view-training-plan').hidden = !serverMode || !b;
+  $('view-training-plan').onclick = () => window.TrainersPoint.openTrainingPlan(b.clientId, b.date);
   const bookingClients = serverMode && awsClientsLoaded ? awsClients : data.clients;
   fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
