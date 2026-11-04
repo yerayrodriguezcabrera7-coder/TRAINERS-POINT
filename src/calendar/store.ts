@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
 import { randomUUID } from "node:crypto";
 import { Pool,PoolClient } from "pg";
-import { accessMigration } from "./access";
+import { accessMigration, type Identity } from "./access";
 import {
 ApiError,
 Booking,
@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS calendar.attendance(
 );
 ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_in jsonb;
 ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_out jsonb;
+ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS actor_in jsonb;
+ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS actor_out jsonb;
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_one_open_shift ON calendar.attendance(gym_id,employee_id) WHERE clock_out IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_by_gym_and_time ON calendar.attendance(gym_id,clock_in DESC);`;
 export class Store {
@@ -583,7 +585,7 @@ export class Store {
     if (end <= start) throw new ApiError(400, "Rango de fechas inválido.");
     const { rows } = await this.pool.query(
       `SELECT id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
-              geo_in AS "geoIn",geo_out AS "geoOut"
+              geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"
        FROM calendar.attendance
        WHERE gym_id=$1 AND clock_in < $3 AND COALESCE(clock_out,now()) >= $2
        ORDER BY clock_in DESC`,
@@ -593,7 +595,7 @@ export class Store {
     let employeesList = current.employees;
     let recordsList = rows;
 
-    if (viewerRole === "TRAINER" || viewerRole === "RECEPTION") {
+    if (viewerRole === "TRAINER") {
       employeesList = current.employees.filter((e: any) => e.id === employeeId);
       recordsList = rows.filter(r => r.employeeId === employeeId);
     } else if (employeeId) {
@@ -618,8 +620,11 @@ export class Store {
     };
   }
 
-  async clock(gym: string, raw: unknown) {
+  async clock(gym: string, raw: unknown, actor?: Identity) {
     const input = attendanceActionSchema.parse(raw);
+    if (actor && (!['ADMIN','RECEPTION','TRAINER'].includes(actor.role) || (actor.role === 'TRAINER' && actor.employeeId !== input.employeeId)))
+      throw new ApiError(403, 'Solo puedes registrar tus propios fichajes.');
+    const audit = actor ? JSON.stringify({id:actor.id,name:actor.name,username:actor.username || null,role:actor.role,employeeId:actor.employeeId,onBehalf:actor.employeeId !== input.employeeId}) : null;
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
@@ -676,11 +681,11 @@ export class Store {
           throw new ApiError(409, `${employee.name} ya tiene una jornada abierta.`);
         row = (
           await db.query(
-            `INSERT INTO calendar.attendance(id,gym_id,employee_id,geo_in)
-             VALUES($1,$2,$3,$4)
+            `INSERT INTO calendar.attendance(id,gym_id,employee_id,geo_in,actor_in)
+             VALUES($1,$2,$3,$4,$5)
              RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
-                       geo_in AS "geoIn",geo_out AS "geoOut"`,
-            [randomUUID(), gym, input.employeeId, geoRecord ? JSON.stringify(geoRecord) : null],
+                       geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"`,
+            [randomUUID(), gym, input.employeeId, geoRecord ? JSON.stringify(geoRecord) : null, audit],
           )
         ).rows[0];
       } else {
@@ -688,10 +693,10 @@ export class Store {
           throw new ApiError(409, `${employee.name} no tiene una jornada abierta.`);
         row = (
           await db.query(
-            `UPDATE calendar.attendance SET clock_out=now(), geo_out=$2 WHERE id=$1
+            `UPDATE calendar.attendance SET clock_out=now(), geo_out=$2, actor_out=$3 WHERE id=$1
              RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
-                       geo_in AS "geoIn",geo_out AS "geoOut"`,
-            [open.rows[0].id, geoRecord ? JSON.stringify(geoRecord) : null],
+                       geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"`,
+            [open.rows[0].id, geoRecord ? JSON.stringify(geoRecord) : null, audit],
           )
         ).rows[0];
       }

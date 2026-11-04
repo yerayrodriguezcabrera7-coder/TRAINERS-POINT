@@ -3,7 +3,7 @@
 Configuración aparece en el menú para cada perfil autenticado. Reutiliza las pantallas y los permisos existentes, sin duplicar gestión de usuarios, turnos ni contraseñas.
 
 - Administración: enlaces a usuarios, permisos, centros, servicios, turnos y calendario/apertura.
-- Recepción: clientes, calendario, turnos, productos/pagos, caja y fichajes propios.
+- Recepción: clientes, calendario, turnos, productos/pagos, caja y fichajes del equipo con identificación de quien los registra.
 - Entrenador: agenda y clientes vinculados, rutinas, turnos propios, fichajes, ausencias y recuperaciones.
 - Cliente: reservas propias y cambio de contraseña.
 

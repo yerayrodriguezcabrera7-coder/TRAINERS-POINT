@@ -133,7 +133,7 @@
 
   function adaptRoleUI() {
     if (!me) return;
-    const isAdmin = me.role === 'ADMIN';
+    const isAdmin = ['ADMIN','RECEPTION'].includes(me.role);
 
     if (!isAdmin) {
       // Entrenador o recepcionista: vista personal
@@ -155,7 +155,7 @@
       // Administrador: vista completa
       $('page-eyebrow').textContent = 'EQUIPO · CONTROL HORARIO';
       $('heading-count').textContent = data.employees.length ? `(${data.employees.length} trabajadores)` : '';
-      $('page-description').textContent = 'Control de jornada de la plantilla, estado de presencia en directo e historial.';
+      $('page-description').textContent = 'Puedes fichar entradas y salidas de la plantilla. El historial identifica quién registra cada fichaje.';
       $('attendance-list-title').textContent = 'Control de jornada';
 
       if ($('search-box-wrap')) $('search-box-wrap').hidden = false;
@@ -181,7 +181,7 @@
   }
 
   function renderSummary(now = Date.now()) {
-    const isAdmin = !me || me.role === 'ADMIN';
+    const isAdmin = !me || ['ADMIN','RECEPTION'].includes(me.role);
     const today = dateKey(new Date(now));
     const todayRecords = data.records.filter(r => dateKey(new Date(r.clockIn)) === today);
     const totalTodayDuration = todayRecords.reduce((sum, r) => sum + duration(r, now), 0);
@@ -281,7 +281,7 @@
       const open = openRecord(employee.id);
       const color = /^#[0-9a-f]{6}$/i.test(employee.color) ? employee.color : '#ff7f0a';
       const soft = `${color}18`;
-      const canClock = !me || me.role === 'ADMIN' || me.employeeId === employee.id;
+      const canClock = !me || ['ADMIN','RECEPTION'].includes(me.role) || me.employeeId === employee.id;
 
       const today = dateKey(new Date(now));
       const empTodayRecords = data.records.filter(r => r.employeeId === employee.id && dateKey(new Date(r.clockIn)) === today);
@@ -347,6 +347,11 @@
     });
   }
 
+  function actorLabel(actor) {
+    if (!actor) return '<small>Autor no registrado (fichaje anterior)</small>';
+    const role = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Trabajador'}[actor.role] || actor.role;
+    return `<small class="clock-author">Registrado por ${escapeHTML(actor.name)} · ${escapeHTML(role)}${actor.onBehalf ? ' · En nombre del trabajador' : ''}</small>`;
+  }
   function renderHistory(now = Date.now()) {
     const employeeId = $('history-employee')?.value || 'all';
     const records = data.records.filter(r => employeeId === 'all' || r.employeeId === employeeId);
@@ -364,8 +369,8 @@
           <td>
             <strong style="color:var(--tp-ink);font-weight:700;">${escapeHTML(employeeName(record.employeeId))}</strong>
           </td>
-          <td>${escapeHTML(formatDateTime(record.clockIn))}</td>
-          <td>${isOpen ? '<span style="color:var(--tp-ok);font-weight:700;">Jornada en curso</span>' : escapeHTML(formatDateTime(record.clockOut))}</td>
+          <td>${escapeHTML(formatDateTime(record.clockIn))}${actorLabel(record.actorIn)}</td>
+          <td>${isOpen ? '<span style="color:var(--tp-ok);font-weight:700;">Jornada en curso</span>' : escapeHTML(formatDateTime(record.clockOut)) + actorLabel(record.actorOut)}</td>
           <td class="duration-cell">${escapeHTML(formatDuration(recDuration, !isOpen))}</td>
           <td>${renderGeoCell(geoInfo)}</td>
           <td>
@@ -394,11 +399,12 @@
   }
 
   async function clock(employeeId, action, button) {
-    if (me && me.role !== 'ADMIN' && me.employeeId !== employeeId) {
+    if (me && !['ADMIN','RECEPTION'].includes(me.role) && me.employeeId !== employeeId) {
       warn('Solo puedes registrar tus propios fichajes.');
       return;
     }
 
+    if (me && me.employeeId !== employeeId && !confirm(`¿Registrar ${action === 'IN' ? 'entrada' : 'salida'} de ${employeeName(employeeId)}? El fichaje quedará registrado por ${me.name}. Si se recoge ubicación, será la de este dispositivo.`)) return;
     const originalText = button ? button.innerHTML : '';
     if (button) {
       button.disabled = true;
@@ -406,7 +412,7 @@
     }
 
     try {
-      // Captura puntual y legal de geolocalización
+      // Captura puntual de la ubicación del dispositivo que registra el fichaje.
       const geo = await getCurrentGeolocation();
 
       if (button) {

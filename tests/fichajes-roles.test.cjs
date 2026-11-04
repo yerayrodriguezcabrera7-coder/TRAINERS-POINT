@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Store } = require('../dist/calendar/store');
 
-test('Fichajes RBAC: Trainer y Reception solo ven su propio fichaje, Admin ve todo', async () => {
+test('Fichajes RBAC: Trainer solo ve sus fichajes; Reception y Admin pueden consultar la plantilla', async () => {
   const fakeEmployees = [
     { id: 'e1', name: 'Admin Uno', color: '#111111', active: true },
     { id: 'e2', name: 'Entrenador Dos', color: '#222222', active: true },
@@ -40,11 +40,9 @@ test('Fichajes RBAC: Trainer y Reception solo ven su propio fichaje, Admin ve to
   assert.equal(trainerRes.records[0].employeeId, 'e2');
 
   // 3. Recepcionista e4 consulta fichajes -> solo ve a e4 y sus propios registros
-  const recRes = await store.attendance('gym-1', '2026-11-02', '2026-11-02', 'e4', 'RECEPTION');
-  assert.equal(recRes.employees.length, 1, 'Recepcionista solo debe ver a un empleado');
-  assert.equal(recRes.employees[0].id, 'e4', 'Recepcionista solo se ve a sí misma');
-  assert.equal(recRes.records.length, 1, 'Recepcionista solo ve su propio registro');
-  assert.equal(recRes.records[0].employeeId, 'e4');
+  const recRes = await store.attendance('gym-1', '2026-11-02', '2026-11-02', undefined, 'RECEPTION');
+  assert.equal(recRes.employees.length, 4);
+  assert.equal(recRes.records.length, 4);
 
   // 4. Entrenador e3 consulta fichajes -> solo ve a e3
   const trainer3Res = await store.attendance('gym-1', '2026-11-02', '2026-11-02', 'e3', 'TRAINER');

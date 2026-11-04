@@ -161,7 +161,7 @@ test('API completa: registrar deuda, cobrar en recepción y consultar la ficha d
 
   const ownExport=await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-01-31',{headers});
   assert.equal(ownExport.status,200);assert.match(ownExport.headers.get('content-type'),/text\/csv/);assert.match(await ownExport.text(),/Fecha entrada/);
-  assert.equal((await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-01-31&employeeId=otro',{headers})).status,403);
+  assert.equal((await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-01-31&employeeId=otro',{headers})).status,200);
   assert.equal((await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-12-31',{headers})).status,400);
   const {Store}=require('../dist/calendar/store'),appointmentStore=new Store(pool,db);
   const session=await appointmentStore.save(gym.id,{clientId:client.id,employeeId:'e1',serviceId:service.id,roomId:'r1',date:'2026-01-05',start:'10:00',status:'CONFIRMED'});
