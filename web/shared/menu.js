@@ -148,7 +148,7 @@
         const center = host.querySelector('.app-menu-center');
         if (center) center.hidden = true;
       }
-      const roleName = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador',CLIENT:'Cliente'}[me.role] || me.role;
+      const roleName = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador / Trabajador',CLIENT:'Cliente'}[me.role] || me.role;
       const loginUrl = ['ADMIN','RECEPTION'].includes(me.role) ? '/login.html?portal=office' : me.role === 'CLIENT' ? '/login.html?portal=client' : '/login.html';
       let avatar = document.querySelector('.topbar .profile-avatar');
       if (!avatar && document.querySelector('.topbar')) { avatar=document.createElement('div'); avatar.className='profile-avatar'; document.querySelector('.topbar').append(avatar); }

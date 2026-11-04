@@ -3,7 +3,7 @@
     const $ = id => document.getElementById(id);
     const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const labels = { services: 'Servicios', employees: 'Profesionales', shifts: 'Turnos', users: 'Usuarios', roles: 'Permisos por puesto' };
-    const roleNames = { ADMIN: 'Administración', RECEPTION: 'Recepción', TRAINER: 'Entrenador', CLIENT: 'Cliente' };
+    const roleNames = { ADMIN: 'Administración', RECEPTION: 'Recepción', TRAINER: 'Entrenador / Trabajador', CLIENT: 'Cliente' };
     const statusNames = { ACTIVE: 'Activo', INACTIVE: 'Inactivo', BLOCKED: 'Bloqueado' };
     const bookingNames = { PENDING: 'Pendiente', CONFIRMED: 'Confirmada', CANCELLED: 'Cancelada', COMPLETED: 'Finalizada', NO_SHOW: 'No asistió' };
     const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];

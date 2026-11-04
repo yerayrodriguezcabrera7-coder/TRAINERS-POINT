@@ -3,7 +3,7 @@ const loginPortal = portalParam === 'office' ? 'OFFICE' : portalParam === 'clien
 if (loginPortal !== 'TRAINER') {
   document.getElementById('login-title').textContent = loginPortal === 'OFFICE' ? 'Administración y recepción' : 'Acceso de clientes';
   document.getElementById('other-access').href = '/login.html';
-  document.getElementById('other-access').textContent = 'Volver al acceso de entrenadores';
+  document.getElementById('other-access').textContent = 'Acceso de entrenadores / trabajadores →';
   if (loginPortal === 'OFFICE') document.getElementById('recovery-instructions').textContent = 'Consulta el registro interno de accesos que custodia el centro o solicita a administración un restablecimiento. Ese archivo no está disponible desde esta página.';
 }
 document.getElementById('login-form').addEventListener('submit', async event => {
@@ -23,6 +23,15 @@ document.getElementById('login-form').addEventListener('submit', async event => 
     location.href = result.mustChangePassword
       ? 'change-password.html'
       : safeReturnTo || (result.role === 'CLIENT' ? 'mis-reservas.html' : result.role === 'TRAINER' ? 'index.html' : 'inicio.html');
-  } catch (e) { error.textContent=e.message || 'No se pudo conectar.'; error.hidden=false; }
+  } catch (e) {
+    error.replaceChildren(document.createTextNode(e.message || 'No se pudo conectar.'));
+    if (e.message?.includes('otro acceso')) {
+      const link=document.createElement('a');
+      link.href=loginPortal==='OFFICE'?'/login.html':'/login.html?portal=office';
+      link.textContent=loginPortal==='OFFICE'?'Ir al acceso de entrenadores / trabajadores →':'Ir al acceso de administración y recepción →';
+      link.style.display='block';link.style.marginTop='12px';error.append(link);
+    }
+    error.hidden=false;
+  }
   finally { button.disabled=false; }
 });
