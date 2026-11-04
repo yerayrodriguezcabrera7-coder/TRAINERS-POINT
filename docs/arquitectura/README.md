@@ -33,3 +33,19 @@ Los pagos actuales registran dinero recibido. No ejecutan cargos bancarios. Los 
 - [Estado y puesta en marcha](../puesta-en-marcha.md).
 
 Archivos de esta entrega: `funcionamiento-trainers-point.png`, `funcionamiento-trainers-point.svg` y este documento. Son documentación y no modifican el funcionamiento de la aplicación.
+
+## Mapa del código
+
+![Organización del código por carpetas](organizacion-del-codigo.png)
+
+Este segundo esquema muestra las carpetas y los archivos principales del proyecto. Su original editable es `organizacion-del-codigo.svg`. En las etiquetas, `clients.*` significa los archivos con ese nombre y sus distintas extensiones, como `.html`, `.css` y `.js`.
+
+Para orientarte en VS Code, abre la carpeta **TRAINERS-POINT** y despliega **web** para ver las pantallas o **src** para ver las reglas del servidor. Puedes pulsar **⌘P** y escribir el nombre del archivo.
+
+- Márgenes y separación: [orden.css](../../web/shared/orden.css).
+- Menú lateral: [menu.js](../../web/shared/menu.js) y [menu.css](../../web/shared/menu.css).
+- Calendario: [app.js](../../web/calendar/app.js) y [styles.css](../../web/calendar/styles.css).
+- Reglas de reservas: [model.ts](../../src/calendar/model.ts) y [store.ts](../../src/calendar/store.ts).
+- Estructura de los datos: [schema.prisma](../../prisma/schema.prisma).
+
+Los mapas forman parte de la documentación del proyecto. La publicación se prepara sin contratar servicios; servidor, dominio y proveedor de pagos siguen pendientes.
