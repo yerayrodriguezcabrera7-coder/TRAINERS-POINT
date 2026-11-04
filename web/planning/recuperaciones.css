@@ -1,0 +1,7 @@
+.recoveries-page .attendance-header{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.recoveries-page>.attendance-card{padding:24px;margin:0 0 24px;min-width:0}
+.recoveries-page .attendance-card h2{margin:0 0 20px;font-size:21px;line-height:1.4}
+.recovery-list{display:grid;gap:12px}.recovery-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border:1px solid var(--ui-line,#ddd);border-radius:10px;min-width:0;background:#fff}
+.recovery-row>div{min-width:0;overflow-wrap:anywhere}.recovery-row h3{font-size:16px;margin:0 0 6px;line-height:1.4}.recovery-row p{margin:4px 0;color:var(--ui-muted,#546674);line-height:1.5}.recovery-row button{flex-shrink:0}.recovery-status{display:inline-block;margin-top:8px;padding:4px 10px;background:#f0f3f6;border-radius:6px;font-size:13px}
+.recoveries-page #notice:not(:empty){padding:16px;margin:0 0 20px;background:#fff5e8;border:1px solid #e7cfad;border-radius:10px}.recovery-empty{margin:0;padding:20px;background:#f7f8fa;border-radius:8px}
+@media(max-width:650px){.recoveries-page>.attendance-card{padding:18px}.recovery-row{align-items:stretch;flex-direction:column;padding:16px}.recovery-row button{width:100%}}
