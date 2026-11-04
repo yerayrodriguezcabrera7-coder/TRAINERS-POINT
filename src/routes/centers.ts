@@ -25,7 +25,8 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
       latitude: number | null;
       longitude: number | null;
       radiusMeters: number | null;
-    }>>(Prisma.sql`SELECT "id", "photoData", "latitude", "longitude", "radiusMeters" FROM "Gym" WHERE "isActive" = true`).catch(() => []);
+      maxBookingsPerHour: number | null;
+    }>>(Prisma.sql`SELECT "id", "photoData", "latitude", "longitude", "radiusMeters", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true`).catch(() => []);
     const extraById = new Map(extraRows.map((e) => [e.id, e]));
     sendJson(response, 200, {
       gyms: gyms.map((gym) => {
@@ -36,6 +37,7 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
           latitude: extra?.latitude ?? null,
           longitude: extra?.longitude ?? null,
           radiusMeters: extra?.radiusMeters ?? 200,
+          maxBookingsPerHour: extra?.maxBookingsPerHour != null ? Number(extra.maxBookingsPerHour) : null,
         };
       }),
     });
@@ -52,17 +54,21 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
       return true;
     }
     try {
-      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
+      const { photoData, latitude, longitude, radiusMeters, maxBookingsPerHour, ...gymData } = input;
       const gym = await prisma.gym.create({
         data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gym.id}::uuid`).catch(() => { });
+      await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200}, "maxBookingsPerHour" = ${maxBookingsPerHour ?? null} WHERE "id" = ${gym.id}::uuid`).catch(() => { });
+      if (calendarPool) {
+        await calendarPool.query(`UPDATE calendar.gyms SET config = jsonb_set(config, '{maxBookingsPerHour}', $2::jsonb) WHERE id=$1 OR name=$3`, [gym.id, JSON.stringify(maxBookingsPerHour ?? null), gym.name]).catch(() => { });
+      }
       if (typeof latitude === "number" && typeof longitude === "number") {
         const locationObj = {
           latitude,
           longitude,
           radiusMeters: radiusMeters ?? 200,
+          maxBookingsPerHour: maxBookingsPerHour ?? null,
           address: [gym.address, gym.city, gym.province].filter(Boolean).join(", "),
         };
         if (calendarPool) {
@@ -76,6 +82,7 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
           latitude: latitude ?? null,
           longitude: longitude ?? null,
           radiusMeters: radiusMeters ?? 200,
+          maxBookingsPerHour: maxBookingsPerHour ?? null,
         },
       });
     }
@@ -101,18 +108,22 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
       return true;
     }
     try {
-      const { photoData, latitude, longitude, radiusMeters, ...gymData } = input;
+      const { photoData, latitude, longitude, radiusMeters, maxBookingsPerHour, ...gymData } = input;
       const updated = await prisma.gym.update({
         where: { id: gymId },
         data: gymData,
         select: { id: true, name: true, city: true, province: true, address: true },
       });
-      await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200} WHERE "id" = ${gymId}::uuid`).catch(() => { });
+      await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200}, "maxBookingsPerHour" = ${maxBookingsPerHour ?? null} WHERE "id" = ${gymId}::uuid`).catch(() => { });
+      if (calendarPool) {
+        await calendarPool.query(`UPDATE calendar.gyms SET config = jsonb_set(config, '{maxBookingsPerHour}', $2::jsonb) WHERE id=$1 OR name=$3`, [gymId, JSON.stringify(maxBookingsPerHour ?? null), updated.name]).catch(() => { });
+      }
       if (typeof latitude === "number" && typeof longitude === "number") {
         const locationObj = {
           latitude,
           longitude,
           radiusMeters: radiusMeters ?? 200,
+          maxBookingsPerHour: maxBookingsPerHour ?? null,
           address: [updated.address, updated.city, updated.province].filter(Boolean).join(", "),
         };
         if (calendarPool) {
@@ -126,6 +137,7 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
           latitude: latitude ?? null,
           longitude: longitude ?? null,
           radiusMeters: radiusMeters ?? 200,
+          maxBookingsPerHour: maxBookingsPerHour ?? null,
         },
       });
     }

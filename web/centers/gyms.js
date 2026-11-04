@@ -124,6 +124,7 @@ function openCreateDialog() {
   photoPreview.removeAttribute("src");
   error.hidden = true;
   if (geoStatusMsg) geoStatusMsg.hidden = true;
+  if (form.elements.maxBookingsPerHour) form.elements.maxBookingsPerHour.value = "";
   dialog.showModal();
   form.elements.name.focus();
 }
@@ -138,6 +139,7 @@ function openEditDialog(gym) {
   form.elements.latitude.value = gym.latitude ?? "";
   form.elements.longitude.value = gym.longitude ?? "";
   form.elements.radiusMeters.value = gym.radiusMeters ?? 200;
+  if (form.elements.maxBookingsPerHour) form.elements.maxBookingsPerHour.value = gym.maxBookingsPerHour ?? "";
 
   dialogTitle.textContent = "Editar gimnasio";
   dialogEyebrow.textContent = "MODIFICAR SEDE";
@@ -218,6 +220,16 @@ function render() {
       noGeoTag.innerHTML = `<span>⚠️</span> <span>Sin coordenadas GPS configuradas</span>`;
       location.append(noGeoTag);
     }
+
+    const limitTag = document.createElement("div");
+    if (gym.maxBookingsPerHour != null && gym.maxBookingsPerHour > 0) {
+      limitTag.style.cssText = "font-size:11px;color:#38bdf8;display:flex;align-items:center;gap:4px;margin-top:4px;";
+      limitTag.innerHTML = `<span>⏱️</span> <span>Máx. <strong>${gym.maxBookingsPerHour}</strong> ${gym.maxBookingsPerHour === 1 ? 'reserva' : 'reservas'} / hora</span>`;
+    } else {
+      limitTag.style.cssText = "font-size:10px;color:#888;display:flex;align-items:center;gap:4px;margin-top:4px;";
+      limitTag.innerHTML = `<span>⏱️</span> <span>Sin límite de reservas por hora</span>`;
+    }
+    location.append(limitTag);
 
     const footer = document.createElement("div");
     footer.className = "gym-card-footer";
@@ -343,6 +355,12 @@ form.addEventListener("submit", async (event) => {
 
     if (body.radiusMeters !== "") body.radiusMeters = Number(body.radiusMeters);
     else delete body.radiusMeters;
+
+    if (body.maxBookingsPerHour !== "" && body.maxBookingsPerHour != null) {
+      body.maxBookingsPerHour = Number(body.maxBookingsPerHour);
+    } else {
+      delete body.maxBookingsPerHour;
+    }
 
     const file = photoInput.files[0];
     if (file) {

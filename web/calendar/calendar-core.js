@@ -31,13 +31,33 @@
     return isOpen(date, start, end, schedule) && employeePeriods(employee, date, schedule)
       .some(p => start >= minutes(p.open) && end <= minutes(p.close));
   }
-  function validateBooking(booking, bookings, schedule) {
+  function validateBooking(booking, bookings, schedule, centers) {
     if (!validDate(booking.date) || !validTime(booking.start) || !validTime(booking.end)) return 'Introduce una fecha y unas horas válidas.';
     if (minutes(booking.start) >= minutes(booking.end)) return 'La hora de fin debe ser posterior al inicio.';
     if (booking.status === 'cancelled') return '';
     if (!isOpen(booking.date, minutes(booking.start), minutes(booking.end), schedule)) return 'La reserva debe quedar dentro del horario de apertura.';
     const clash = bookings.find(other => other.id !== booking.id && other.date === booking.date && other.status !== 'cancelled' && overlap(booking, other) && (other.employeeId === booking.employeeId || other.roomId === booking.roomId));
     if (clash) return clash.employeeId === booking.employeeId ? 'Este entrenador ya tiene una reserva en ese horario.' : 'La sala ya está ocupada en ese horario.';
+    if (centers && booking.centerId) {
+      const center = centers.find(c => c.id === booking.centerId);
+      if (center && center.maxBookingsPerHour > 0) {
+        const startMin = minutes(booking.start), endMin = minutes(booking.end);
+        const startHour = Math.floor(startMin / 60), endHour = Math.floor((endMin - 1) / 60);
+        for (let h = startHour; h <= endHour; h++) {
+          const hStart = h * 60, hEnd = (h + 1) * 60;
+          const count = bookings.filter(o =>
+            o.id !== booking.id &&
+            o.date === booking.date &&
+            o.status !== 'cancelled' &&
+            (o.centerId || center.id) === center.id &&
+            minutes(o.start) < hEnd && minutes(o.end) > hStart
+          ).length;
+          if (count >= center.maxBookingsPerHour) {
+            return `El centro ha alcanzado el límite máximo de ${center.maxBookingsPerHour} reserva${center.maxBookingsPerHour === 1 ? '' : 's'} por hora.`;
+          }
+        }
+      }
+    }
     return '';
   }
   // Interval partitioning keeps imported, overlapping appointments readable.

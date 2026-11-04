@@ -38,7 +38,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
-      include: { service: { select: { id: true, name: true, durationMin: true } }, sale: { include: { lines: true, payments: true } } },
+      include: { service: { select: { id: true, name: true, durationMin: true, validityWeeks: true } }, sale: { include: { lines: true, payments: true } } },
       orderBy: { purchasedAt: "desc" },
     });
     const [bookings, bookingCounts, sales, debtSales] = await Promise.all([
@@ -114,22 +114,76 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
       .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
       .filter(({ amount }) => amount > 0);
     const heldPackages = calendarPool ? (await calendarPool.query(`SELECT original."packageId",count(*) AS held FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE r.gym_id=$1 AND original."clientId"=$2::uuid AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING') GROUP BY original."packageId"`, [(request as any).selectedGym, clientId])).rows : [];
+    const now = Date.now();
+    const mappedPackages = packages.map((servicePackage) => {
+      const sessionsUsed = bookingCounts.find((count) => count.packageId === servicePackage.id && count.attendance === AttendanceStatus.ASISTIO)?._count._all ?? 0;
+      const sessionsScheduled = bookingCounts.find((count) => count.packageId === servicePackage.id && count.attendance === AttendanceStatus.PENDIENTE)?._count._all ?? 0;
+      const held = Number(heldPackages.find((p: any) => p.packageId === servicePackage.id)?.held || 0);
+      const sessionsRemaining = Math.max(0, servicePackage.sessionsBought - sessionsUsed - sessionsScheduled - held);
+      const validityWeeks = Number(servicePackage.service?.validityWeeks) || 4;
+      const purchasedTime = new Date(servicePackage.purchasedAt).getTime();
+      const expiresAt = new Date(purchasedTime + validityWeeks * 7 * 86400000);
+      const daysRemaining = Math.ceil((expiresAt.getTime() - now) / 86400000);
+      const isLastSession = sessionsRemaining === 1;
+      const isExpiringSoon = sessionsRemaining > 0 && daysRemaining <= 7 && daysRemaining >= 0;
+      const isExpired = sessionsRemaining > 0 && daysRemaining < 0;
+      const isDepleted = sessionsRemaining === 0;
+      const needsRenewal = isLastSession || isExpiringSoon || isExpired || isDepleted;
+      let renewalMessage = "";
+      if (isLastSession) {
+        renewalMessage = daysRemaining <= 7 && daysRemaining >= 0 ? `Última sesión (caduca en ${daysRemaining}d)` : "Última sesión disponible";
+      } else if (isExpiringSoon) {
+        renewalMessage = `Caduca en ${daysRemaining} día${daysRemaining === 1 ? "" : "s"} (${sessionsRemaining} ses.)`;
+      } else if (isExpired) {
+        renewalMessage = `Bono caducado (${sessionsRemaining} ses.)`;
+      } else if (isDepleted) {
+        renewalMessage = "Bono agotado";
+      }
+      return {
+        ...servicePackage,
+        sale: servicePackage.sale ? saleBalance(servicePackage.sale) : null,
+        sessionsUsed,
+        sessionsScheduled,
+        sessionsRemaining,
+        validityWeeks,
+        expiresAt: expiresAt.toISOString(),
+        daysRemaining,
+        isLastSession,
+        isExpiringSoon,
+        isExpired,
+        isDepleted,
+        needsRenewal,
+        renewalMessage,
+      };
+    });
+
+    const hasHealthyPackage = mappedPackages.some((p) => p.sessionsRemaining > 1 && p.daysRemaining > 7);
+    let renewalAlert: any = null;
+    if (!hasHealthyPackage) {
+      const activeAlertPkg = mappedPackages.find((p) => p.sessionsRemaining > 0 && (p.sessionsRemaining === 1 || p.daysRemaining <= 7))
+        || mappedPackages.find((p) => p.sessionsRemaining > 0)
+        || mappedPackages[0];
+      if (activeAlertPkg && activeAlertPkg.needsRenewal) {
+        renewalAlert = {
+          packageId: activeAlertPkg.id,
+          serviceName: activeAlertPkg.service?.name || "Bono",
+          sessionsRemaining: activeAlertPkg.sessionsRemaining,
+          daysRemaining: activeAlertPkg.daysRemaining,
+          expiresAt: activeAlertPkg.expiresAt,
+          type: activeAlertPkg.isLastSession ? 'LAST_SESSION' : (activeAlertPkg.isExpiringSoon ? 'EXPIRING_SOON' : (activeAlertPkg.isExpired ? 'EXPIRED' : 'DEPLETED')),
+          message: activeAlertPkg.renewalMessage,
+          needsRenewal: true,
+        };
+      }
+    }
+
     sendJson(response, 200, {
       client,
-      packages: packages.map((servicePackage) => {
-        const sessionsUsed = bookingCounts.find((count) => count.packageId === servicePackage.id && count.attendance === AttendanceStatus.ASISTIO)?._count._all ?? 0;
-        const sessionsScheduled = bookingCounts.find((count) => count.packageId === servicePackage.id && count.attendance === AttendanceStatus.PENDIENTE)?._count._all ?? 0;
-        return {
-          ...servicePackage,
-          sale: servicePackage.sale ? saleBalance(servicePackage.sale) : null,
-          sessionsUsed,
-          sessionsScheduled,
-          sessionsRemaining: Math.max(0, servicePackage.sessionsBought - sessionsUsed - sessionsScheduled - Number(heldPackages.find(p => p.packageId === servicePackage.id)?.held || 0)),
-        };
-      }),
+      packages: mappedPackages,
       bookings,
       sales: sales.map(saleBalance),
       debt,
+      renewalAlert,
     });
     return true;
   }

@@ -2,6 +2,7 @@ import { randomUUID,timingSafeEqual } from "node:crypto";
 import { createServer,IncomingMessage,ServerResponse } from "node:http";
 import { z,ZodError } from "zod";
 import { Inventory } from "../finance/inventory";
+import { clientPackageAlerts } from "../finance/packages";
 import { serveAsset } from "../http/assets";
 import { serveRuntime } from "../http/runtime";
 import { Access,Identity,initialPassword } from "./access";
@@ -132,6 +133,10 @@ export function server(
 
           if (req.method === "GET" && path === "/api/manage") {
             const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
             let clients = s.clients;
             let bookings = s.bookings;
             let employees = s.employees;
@@ -207,10 +212,16 @@ export function server(
         }
         if (req.method === "GET" && path === "/api/state") {
           const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
           if (identity.role === "TRAINER") {
             const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
             send(res, 200, {
               ...s,
+              clientDebts,
+              clientPackageAlerts: clientPackageAlertsMap,
               bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking),
               employees: s.employees.filter((e: any) => e.id === identity.employeeId),
               clients: s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId),
@@ -218,8 +229,7 @@ export function server(
             });
             return;
           }
-          const clientDebts = store.clientsDb ? await new Inventory(store.clientsDb).debtSummary(gym) : {};
-          send(res, 200, {...s,clientDebts});
+          send(res, 200, { ...s, clientDebts, clientPackageAlerts: clientPackageAlertsMap });
           return;
         }
         if (req.method === "GET" && path === "/api/attendance/export") {
@@ -253,6 +263,10 @@ export function server(
         }
         if (req.method === "GET" && path === "/api/clients") {
           const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
           let clients = s.clients;
           if (identity.role === "TRAINER") {
             const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
@@ -277,6 +291,10 @@ export function server(
         }
         if (req.method === "GET" && path === "/api/public/catalog") {
           const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
           send(res, 200, {
             timezone: s.timezone,
             employees: s.employees.filter((e: any) => e.active !== false).map(({ id, name }: any) => ({ id, name })),

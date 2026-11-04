@@ -105,6 +105,15 @@ export const configSchema = z
     schedule: week,
     leaveRequests: z.array(leaveRequestSchema).max(10000).default([]),
     location: locationSchema,
+    maxBookingsPerHour: z.number().int().positive().nullable().optional(),
+    centers: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      maxBookingsPerHour: z.number().int().positive().nullable().optional(),
+      address: z.string().optional().nullable(),
+      city: z.string().optional().nullable(),
+      province: z.string().optional().nullable(),
+    })).optional(),
   })
   .superRefine((c, ctx) => {
     const colors=c.services.map(s=>s.color?.toLowerCase()).filter(Boolean);
@@ -269,6 +278,40 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (resources.some((o) => !same(o)))
     throw new ApiError(409, "Entrenador o sala ya ocupados.");
   if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
+
+  const targetCenterId = b.centerId || (c as any).gymId;
+  const centerConfig = c.centers?.find((x) => x.id === targetCenterId || x.id === b.centerId);
+  const hourlyLimit = centerConfig?.maxBookingsPerHour ?? (b.centerId === (c as any).gymId ? c.maxBookingsPerHour : null) ?? c.maxBookingsPerHour ?? null;
+
+  if (hourlyLimit != null && hourlyLimit > 0) {
+    const startMin = minutes(b.start);
+    const endMin = minutes(b.end);
+    const startHour = Math.floor(startMin / 60);
+    const endHour = Math.floor((endMin - 1) / 60);
+
+    const otherCenterBookings = all.filter(
+      (o) =>
+        o.id !== b.id &&
+        o.status !== "CANCELLED" &&
+        o.date === b.date &&
+        (o.centerId || targetCenterId) === targetCenterId
+    );
+
+    for (let h = startHour; h <= endHour; h++) {
+      const hStart = h * 60;
+      const hEnd = (h + 1) * 60;
+      const count = otherCenterBookings.filter(
+        (o) => minutes(o.start) < hEnd && minutes(o.end) > hStart
+      ).length;
+
+      if (count + 1 > hourlyLimit) {
+        throw new ApiError(
+          409,
+          `El centro ha alcanzado el límite máximo de ${hourlyLimit} reserva${hourlyLimit === 1 ? "" : "s"} por hora.`
+        );
+      }
+    }
+  }
 }
 export function assertTransition(old: Booking, next: Booking, c: Config) {
   const allowed: Record<string, string[]> = {

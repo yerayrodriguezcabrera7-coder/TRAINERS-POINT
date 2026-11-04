@@ -99,6 +99,12 @@
             <input name="province" id="gym-province" maxlength="100" placeholder="Ej. Bizkaia">
           </label>
 
+          <label class="form-field form-field-wide">
+            <span>Límite de reservas por hora</span>
+            <input type="number" name="maxBookingsPerHour" id="gym-max-bookings" min="1" max="1000" placeholder="Ej. 6 (vacío = sin límite)">
+            <small style="font-size:11px;color:#888;">Número máximo de reservas que se pueden realizar en una misma hora en este centro.</small>
+          </label>
+
           <!-- Sección de Geolocalización y Control Horario -->
           <div class="form-field-wide" style="margin-top:6px;padding:14px;border:1px solid #363636;border-radius:12px;background:#1a1a1a;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">

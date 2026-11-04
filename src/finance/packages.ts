@@ -60,3 +60,119 @@ export class Packages {
     });
   }
 }
+
+export type ClientPackageAlert = {
+  packageId: string;
+  serviceName: string;
+  sessionsRemaining: number;
+  daysRemaining: number;
+  expiresAt: string;
+  type: 'LAST_SESSION' | 'EXPIRING_SOON' | 'EXPIRED' | 'DEPLETED';
+  message: string;
+  needsRenewal: boolean;
+};
+
+export async function clientPackageAlerts(
+  db: PrismaClient,
+  gym: string
+): Promise<Record<string, ClientPackageAlert>> {
+  const clientGymId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(gym) ? gym : null;
+
+  const rows = await db.$queryRaw<Array<{
+    packageId: string;
+    clientId: string;
+    serviceName: string;
+    sessionsBought: number;
+    sessionsUsed: bigint | number;
+    purchasedAt: Date;
+    validityWeeks: number | null;
+  }>>`
+    SELECT
+      p.id AS "packageId",
+      p."clientId",
+      s.name AS "serviceName",
+      p."sessionsBought",
+      p."purchasedAt",
+      COALESCE(s."validityWeeks", 4) AS "validityWeeks",
+      COUNT(b.id) FILTER (WHERE b.attendance IN ('ASISTIO', 'PENDIENTE') AND b.status <> 'CANCELADA') AS "sessionsUsed"
+    FROM "ClientServicePackage" p
+    JOIN "Client" c ON c.id = p."clientId"
+    JOIN "Service" s ON s.id = p."serviceId"
+    LEFT JOIN "Booking" b ON b."packageId" = p.id
+    WHERE (${clientGymId}::uuid IS NULL OR c."gymId" = ${clientGymId}::uuid)
+      AND p."paymentStatus" IN ('PAGADO', 'PENDIENTE')
+    GROUP BY p.id, p."clientId", s.name, p."sessionsBought", p."purchasedAt", s."validityWeeks"
+    ORDER BY p."purchasedAt" DESC
+  `.catch(() => []);
+
+  const byClient = new Map<string, Array<{
+    packageId: string;
+    serviceName: string;
+    sessionsRemaining: number;
+    daysRemaining: number;
+    expiresAt: Date;
+  }>>();
+
+  const now = Date.now();
+  for (const row of rows) {
+    const remaining = Math.max(0, row.sessionsBought - Number(row.sessionsUsed));
+    const validityWeeks = Number(row.validityWeeks) || 4;
+    const expiresAt = new Date(new Date(row.purchasedAt).getTime() + validityWeeks * 7 * 86400000);
+    const daysRemaining = Math.ceil((expiresAt.getTime() - now) / 86400000);
+
+    if (!byClient.has(row.clientId)) byClient.set(row.clientId, []);
+    byClient.get(row.clientId)!.push({
+      packageId: row.packageId,
+      serviceName: row.serviceName,
+      sessionsRemaining: remaining,
+      daysRemaining,
+      expiresAt,
+    });
+  }
+
+  const result: Record<string, ClientPackageAlert> = {};
+
+  for (const [clientId, pkgs] of byClient.entries()) {
+    const hasHealthy = pkgs.some(p => p.sessionsRemaining > 1 && p.daysRemaining > 7);
+    if (hasHealthy) continue;
+
+    const activeExpiring = pkgs.find(p => p.sessionsRemaining > 0 && (p.sessionsRemaining === 1 || p.daysRemaining <= 7));
+    const target = activeExpiring || pkgs.find(p => p.sessionsRemaining > 0) || pkgs[0];
+
+    if (!target) continue;
+
+    let type: ClientPackageAlert['type'];
+    let message: string;
+
+    if (target.sessionsRemaining === 1) {
+      type = 'LAST_SESSION';
+      message = target.daysRemaining <= 7 && target.daysRemaining >= 0
+        ? `Última sesión (caduca en ${target.daysRemaining}d)`
+        : 'Última sesión disponible';
+    } else if (target.sessionsRemaining > 0 && target.daysRemaining <= 7 && target.daysRemaining >= 0) {
+      type = 'EXPIRING_SOON';
+      message = `Caduca en ${target.daysRemaining} día${target.daysRemaining === 1 ? '' : 's'} (${target.sessionsRemaining} ses.)`;
+    } else if (target.sessionsRemaining > 0 && target.daysRemaining < 0) {
+      type = 'EXPIRED';
+      message = `Bono caducado (${target.sessionsRemaining} ses.)`;
+    } else if (target.sessionsRemaining === 0) {
+      type = 'DEPLETED';
+      message = 'Bono agotado';
+    } else {
+      continue;
+    }
+
+    result[clientId] = {
+      packageId: target.packageId,
+      serviceName: target.serviceName,
+      sessionsRemaining: target.sessionsRemaining,
+      daysRemaining: target.daysRemaining,
+      expiresAt: target.expiresAt.toISOString(),
+      type,
+      message,
+      needsRenewal: true,
+    };
+  }
+
+  return result;
+}
