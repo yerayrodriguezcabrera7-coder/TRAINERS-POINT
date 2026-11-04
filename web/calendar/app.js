@@ -119,13 +119,14 @@ async function refreshServer(force=false) {
   polling=true;
   try {
     const next=await api('state');
-    if(force||next.revision!==data.revision||JSON.stringify(next.clientDebts||{})!==JSON.stringify(data.clientDebts||{})||JSON.stringify(next.bookings.map(b=>[b.id,b.paymentDue]))!==JSON.stringify(data.bookings.map(b=>[b.id,b.paymentDue]))) {
+    if(force||next.revision!==data.revision||JSON.stringify(next.clientDebts||{})!==JSON.stringify(data.clientDebts||{})||JSON.stringify(next.clientPackageAlerts||{})!==JSON.stringify(data.clientPackageAlerts||{})||JSON.stringify(next.bookings.map(b=>[b.id,b.paymentDue]))!==JSON.stringify(data.bookings.map(b=>[b.id,b.paymentDue]))) {
       data={...next,bookings:next.bookings.map(fromServer)};
       await loadBookingClients();
       // Do not change form values or the version captured when a dialog was opened.
       if(!document.querySelector('dialog[open]')) setupSelects();
       render();
       updateDebtDetail();
+      updateRenewalDetail();
     }
     $('storage-warning').hidden=true;
   } finally {polling=false;}
@@ -187,7 +188,16 @@ function updateDebtDetail(){
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
  box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
 }
-function eventLabel(b) { return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}`; }
+function upcomingRenewal(b){return ['pending','confirmed'].includes(b.status)?(data.clientPackageAlerts?.[b.clientId]||null):null;}
+function renewalBadge(b){const alert=upcomingRenewal(b);if(!alert||!alert.needsRenewal)return '';return `<span class="booking-renewal-badge" title="${escapeHTML(alert.message)}">🔄 ${escapeHTML(alert.message)}</span>`;}
+function updateRenewalDetail(){
+ const box=$('booking-renewal-alert');if(!box)return;
+ const id=$('booking-client').value,alert=data.clientPackageAlerts?.[id];
+ if(!alert||!alert.needsRenewal){box.hidden=true;box.innerHTML='';return;}
+ box.hidden=false;
+ box.innerHTML=`<strong>⚠️ Aviso de bono · ${escapeHTML(alert.serviceName)}</strong><p>${escapeHTML(alert.message)}. Ofrece la renovación del bono al cliente.</p><a href="/clientes/ficha.html?id=${encodeURIComponent(id)}">Ver bono en la ficha del cliente ↗</a>`;
+}
+function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
 
 function renderTimeGrid(dates, bookings, employees) {
   const selected = lookup('services',state.service), duration = selected.duration || 30;
@@ -229,7 +239,7 @@ function renderTimeGrid(dates, bookings, employees) {
       const clientName = lookup('clients', b.clientId).name;
       const serviceName = lookup('services', b.serviceId).name;
       const roomName = lookup('rooms', b.roomId).name;
-      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
+      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
     });
     if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
     html += '</div>';
@@ -251,7 +261,7 @@ function renderMonth(bookings) {
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
       const color = lookup('services', b.serviceId).color || '#317b9b';
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
@@ -304,6 +314,7 @@ function renderClientResults() {
 function syncClientPicker() {
   if($('booking-client').value!==state.packagesClientId)loadClientPackages();
   updateDebtDetail();
+  updateRenewalDetail();
   const value = $('booking-client').value;
   if (value === 'new') { updateClientFields(); return; }
   const client = availableClients().find(item => item.id === value);
@@ -349,6 +360,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   syncClientPicker();
   loadClientPackages(b?.packageId||null);
   updateDebtDetail();
+  updateRenewalDetail();
   $('booking-end').readOnly=serverMode;
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
 
@@ -384,7 +396,19 @@ async function loadClientPackages(selected=null){
   $('package-create-result').textContent='';
   if(!clientId||clientId==='new'){packageBusy=false;renderPackages();return;}
   packageBusy=true;$('booking-package-message').textContent='Consultando los bonos del cliente…';
-  try{const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if(request!==packageRequest)return;clientPackages=result.packages||[];renderPackages(selected);}
+  try{
+    const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');
+    if(request!==packageRequest)return;
+    clientPackages=result.packages||[];
+    if (result.renewalAlert) {
+      if (!data.clientPackageAlerts) data.clientPackageAlerts = {};
+      data.clientPackageAlerts[clientId] = result.renewalAlert;
+    } else if (data.clientPackageAlerts) {
+      delete data.clientPackageAlerts[clientId];
+    }
+    updateRenewalDetail();
+    renderPackages(selected);
+  }
   catch(e){if(request===packageRequest){$('booking-package-message').textContent='No se pudieron consultar los bonos: '+e.message;$('booking-package').innerHTML='<option value="">Reservar sin bono · pago pendiente</option>';}}
   finally{if(request===packageRequest)packageBusy=false;}
 }
@@ -448,7 +472,7 @@ $('booking-form').addEventListener('submit', async event => {
     return;
   }
   if(booking.status!=='cancelled' && !C.employeeAvailable(lookup('employees',booking.employeeId),booking.date,C.minutes(booking.start),C.minutes(booking.end),data.schedule)){formError('booking-error','La reserva debe quedar dentro del turno del empleado.');return;}
-  const error = C.validateBooking(booking,data.bookings,data.schedule);
+  const error = C.validateBooking(booking,data.bookings,data.schedule,data.centers);
   if (error) { formError('booking-error',error); return; }
   if (clientId === 'new') data.clients.push({id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''});
   const index = data.bookings.findIndex(b => b.id === booking.id);

@@ -798,3 +798,260 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
   color: var(--tp-ink);
   font-weight: 700;
 }
+
+
+/* --- Renewal Alert & Warning Styles --- */
+.profile-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-renewal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #fff4e5;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+  box-shadow: 0 1px 2px rgba(180, 83, 9, 0.08);
+  animation: pulse-renewal-subtle 3s infinite ease-in-out;
+}
+
+@keyframes pulse-renewal-subtle {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+.profile-renewal-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0 20px 0;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 1px solid #fde68a;
+  border-left: 5px solid #d97706;
+  border-radius: var(--tp-radius-md);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08);
+}
+
+.profile-renewal-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-renewal-banner-icon {
+  font-size: 22px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.profile-renewal-banner strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 2px;
+}
+
+.profile-renewal-banner p {
+  margin: 0;
+  font-size: 13px;
+  color: #78350f;
+}
+
+.profile-renewal-banner-btn {
+  flex-shrink: 0;
+  background: #d97706 !important;
+  color: #fff !important;
+  border-color: #b45309 !important;
+  font-weight: 600;
+  padding: 8px 16px;
+  box-shadow: 0 2px 4px rgba(217, 119, 6, 0.2);
+  cursor: pointer;
+}
+
+.profile-renewal-banner-btn:hover {
+  background: #b45309 !important;
+}
+
+.bono-history-card.has-renewal-warning {
+  border-left-color: #f59e0b;
+  background: #fffdfa;
+}
+
+.badge-status.badge-renewal-warning {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+
+/* --- Measurements Global Evolution Header & Banner --- */
+.profile-accordion-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.profile-accordion-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-accordion-title-row .profile-accordion-title {
+  display: inline-block;
+  margin: 0;
+}
+
+.measurements-header-evolution {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(6, 95, 70, 0.05);
+}
+
+.measurements-header-evolution.is-baseline {
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: #e5e7eb;
+}
+
+.measurements-evolution-banner {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  margin: 0 20px 14px 20px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #10b981;
+  border-radius: var(--tp-radius-md, 10px);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.06);
+}
+
+.measurements-evolution-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.measurements-evolution-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.measurements-evolution-banner-icon {
+  font-size: 20px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #d1fae5;
+  color: #059669;
+  flex-shrink: 0;
+}
+
+.measurements-evolution-banner strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #064e3b;
+  margin-bottom: 2px;
+}
+
+.measurements-evolution-phrase {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #047857;
+}
+
+.measurements-evolution-time {
+  font-size: 11px;
+  color: #065f46;
+  background: #d1fae5;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.measurements-evolution-chips {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.measurements-evolution-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #d1fae5;
+  min-width: 105px;
+  flex: 1 1 110px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.measurements-evolution-chip .chip-metric {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #6b7280;
+  letter-spacing: 0.04em;
+}
+
+.measurements-evolution-chip .chip-diff {
+  font-size: 15px;
+  font-weight: 800;
+  color: #065f46;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.measurements-evolution-chip.is-down .chip-diff {
+  color: #059669;
+}
+
+.measurements-evolution-chip.is-up .chip-diff {
+  color: #2563eb;
+}
+
+.measurements-evolution-chip.is-neutral .chip-diff {
+  color: #4b5563;
+}
+
+.measurements-evolution-chip .chip-range {
+  font-size: 10px;
+  color: #9ca3af;
+}

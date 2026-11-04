@@ -62,6 +62,7 @@ type GymInput = {
   latitude?: number | null;
   longitude?: number | null;
   radiusMeters?: number | null;
+  maxBookingsPerHour?: number | null;
 };
 
 type ServiceInput = {
@@ -301,6 +302,15 @@ export function parseGymInput(value: unknown): GymInput | string {
   const longitude = typeof rawLon === "number" && !isNaN(rawLon) ? rawLon : (typeof rawLon === "string" && rawLon.trim() && !isNaN(Number(rawLon)) ? Number(rawLon) : null);
   const rawRadius = value.radiusMeters;
   const radiusMeters = typeof rawRadius === "number" && !isNaN(rawRadius) ? Math.round(rawRadius) : (typeof rawRadius === "string" && rawRadius.trim() && !isNaN(Number(rawRadius)) ? Math.round(Number(rawRadius)) : 200);
+  const rawMax = value.maxBookingsPerHour;
+  const maxBookingsPerHour =
+    rawMax === "" || rawMax === null || rawMax === undefined
+      ? null
+      : typeof rawMax === "number" && !isNaN(rawMax)
+      ? Math.round(rawMax)
+      : typeof rawMax === "string" && rawMax.trim() && !isNaN(Number(rawMax))
+      ? Math.round(Number(rawMax))
+      : null;
 
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
@@ -313,6 +323,9 @@ export function parseGymInput(value: unknown): GymInput | string {
   }
   if (longitude !== null && (longitude < -180 || longitude > 180)) {
     return "La longitud debe estar comprendida entre -180 y 180.";
+  }
+  if (rawMax !== undefined && rawMax !== null && rawMax !== "" && (maxBookingsPerHour === null || maxBookingsPerHour <= 0)) {
+    return "El límite de reservas por hora debe ser un número entero positivo.";
   }
 
   if (photoData && (!/^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photoData) || photoData.length > 1_500_000)) {
@@ -328,6 +341,7 @@ export function parseGymInput(value: unknown): GymInput | string {
     latitude: latitude ?? null,
     longitude: longitude ?? null,
     radiusMeters: radiusMeters ?? 200,
+    maxBookingsPerHour: maxBookingsPerHour ?? null,
   };
 }
 
