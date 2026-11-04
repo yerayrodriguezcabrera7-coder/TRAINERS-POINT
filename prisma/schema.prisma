@@ -396,6 +396,8 @@ model ClientServicePackage {
 }
 
 model Booking {
+  saleId String? @unique @db.Uuid
+  sale Sale? @relation(fields: [saleId], references: [id], onDelete: Restrict)
   calendarGymId String?
   paymentPending Boolean @default(false)
   id         String                @id @default(uuid()) @db.Uuid
@@ -485,6 +487,7 @@ model StockMovement {
 }
 
 model Sale {
+  booking Booking?
   servicePackage ClientServicePackage?
   cashSessionId String? @db.Uuid
   cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)

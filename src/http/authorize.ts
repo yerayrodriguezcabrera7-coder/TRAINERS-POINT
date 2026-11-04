@@ -68,7 +68,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
         return true;
       }
-      if (url.pathname.startsWith("/api/service-packages") || url.pathname.includes("/attendance")) {
+      if (url.pathname.startsWith("/api/service-packages") || /^\/api\/bookings\/[^/]+\/attendance$/.test(url.pathname)) {
         sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
         return true;
       }

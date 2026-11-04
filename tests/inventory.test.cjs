@@ -159,6 +159,27 @@ test('API completa: registrar deuda, cobrar en recepción y consultar la ficha d
   packageHistory=await request('clients/'+client.id+'/service-history');assert.deepEqual(packageHistory.data.debt,[]);assert.equal(packageHistory.data.packages[0].paymentStatus,'PAGADO');
   assert.equal((await request('cash/sessions/'+drawer.data.id)).data.summary.collections.EFECTIVO,5);
 
+  const ownExport=await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-01-31',{headers});
+  assert.equal(ownExport.status,200);assert.match(ownExport.headers.get('content-type'),/text\/csv/);assert.match(await ownExport.text(),/Fecha entrada/);
+  assert.equal((await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-01-31&employeeId=otro',{headers})).status,403);
+  assert.equal((await fetch(base+'/api/attendance/export?from=2026-01-01&to=2026-12-31',{headers})).status,400);
+  const {Store}=require('../dist/calendar/store'),appointmentStore=new Store(pool,db);
+  const session=await appointmentStore.save(gym.id,{clientId:client.id,employeeId:'e1',serviceId:service.id,roomId:'r1',date:'2026-01-05',start:'10:00',status:'CONFIRMED'});
+  const completedSession=await request('bookings/'+session.id+'/attendance','PATCH',{attendance:'ASISTIO'});assert.equal(completedSession.status,200,JSON.stringify(completedSession.data));
+  const quickBill=await request('bookings/'+session.id+'/billing','POST',{});assert.equal(quickBill.status,200,JSON.stringify(quickBill.data));assert.equal(quickBill.data.outstandingAmount,50);assert.equal(quickBill.data.scope,'SESSION');
+  const {JSDOM:PaymentDOM}=require('jsdom');const quickDom=new PaymentDOM('<body></body>',{url:base,runScripts:'outside-only'});
+  try {
+   const w=quickDom.window;w.AbortSignal=AbortSignal;w.fetch=(p,o)=>fetch(new URL(p,base),{...o,headers:{...headers,...o.headers}});w.sessionStorage.setItem('calendar-user-token',headers.Authorization.slice(7));
+   w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+   w.eval(await readFile('web/shared/booking-payment.js','utf8'));
+   let paid=false;await w.TrainersPoint.collectBookingPayment(session.id,()=>{paid=true;});
+   const paymentDialog=w.document.querySelector('.quick-payment');assert.equal(paymentDialog.open,true);assert.match(paymentDialog.textContent,/50/);
+   paymentDialog.querySelector('select').value='TARJETA';paymentDialog.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));
+   await until(()=>paid);assert.equal(paymentDialog.open,false);
+  }finally{quickDom.window.close();}
+  assert.equal((await request('bookings/'+session.id+'/billing','POST',{})).data.outstandingAmount,0);
+  assert.equal((await request('state')).data.bookings.find(b=>b.id===session.id).paymentDue,false);
+
   assert.equal((await fetch(base+'/api/inventory/sales/'+sale.data.id+'/payments',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  }finally{dom?.window.close();child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
 });
@@ -388,3 +409,72 @@ test('Primera cuenta: el operador crea administración sin imprimir la contrase�
    const reads=queries.filter(q=>q.startsWith('SELECT')&&q.includes('"Product"')).length;assert.equal(reads,1);t.diagnostic('20 líneas de venta: 1 lectura de productos y 1 inserción conjunta de movimientos; stock e importe verificados.');
   }finally{await watched.$disconnect();}
  });
+
+async function appointmentFixture(preference = 'SMS') {
+ const {Store}=require('../dist/calendar/store');
+ const gym=await db.gym.create({data:{name:randomUUID()}});
+ const client=await db.client.create({data:{gymId:gym.id,firstName:'Ana',lastName:'Prueba',email:randomUUID()+'@example.com',phone:'+34600000000',contactPreference:preference}});
+ const service=await db.service.create({data:{name:'Sesión de fuerza',price:40,durationMin:60}});
+ const schedule=Array.from({length:7},()=>({open:'00:00',close:'23:59',closed:false}));
+ const store=new Store(pool,db);
+ await store.seed(gym.id,{timezone:'Europe/Madrid',schedule,employees:[{id:'e1',name:'Entrenadora Julia',color:'#123456',schedule}],rooms:[{id:'r1',name:'Sala'}],services:[{id:service.id,name:service.name,duration:60,capacity:1}],clients:[]});
+ const input={clientId:client.id,employeeId:'e1',serviceId:service.id,roomId:'r1',date:'2026-01-15',start:'10:00',status:'CONFIRMED'};
+ return {gym,client,service,store,input};
+}
+
+test('Asistencia sin bono: deuda única, pagos parciales idempotentes, Caja y calendario sincronizados',async()=>{
+ const {CashRegister}=require('../dist/finance/cash'),{saleBalance}=require('../dist/finance/inventory');
+ const f=await appointmentFixture(),cash=new CashRegister(db),actor={id:'desk',name:'Recepción',role:'RECEPTION'};
+ await cash.open(f.gym.id,actor,{requestKey:randomUUID(),openingAmount:100});
+ const reservation=await f.store.save(f.gym.id,f.input);
+ const completed=await f.store.save(f.gym.id,{...reservation,status:'COMPLETED'},reservation.id);
+ const mirror=await db.booking.findUnique({where:{id:reservation.id}});
+ assert.ok(mirror.saleId);assert.equal(mirror.paymentPending,true);
+ await f.store.save(f.gym.id,completed,reservation.id);
+ assert.equal(await db.sale.count({where:{gymKey:f.gym.id}}),1);
+ const sale=await db.sale.findUnique({where:{id:mirror.saleId},include:{lines:true,payments:true}});
+ assert.equal(saleBalance(sale).outstandingAmount,40);assert.equal(sale.payments.length,0);
+ assert.equal((await inventory.debtSummary(f.gym.id))[f.client.id],40);
+ const input={requestKey:randomUUID(),amount:10,method:'EFECTIVO'};
+ await Promise.all([inventory.pay(f.gym.id,'desk',sale.id,input),inventory.pay(f.gym.id,'desk',sale.id,input)]);
+ assert.equal(await db.payment.count({where:{saleId:sale.id}}),1);
+ assert.equal((await f.store.state(f.gym.id)).bookings[0].paymentDue,true);
+ await inventory.pay(f.gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:30,method:'BIZUM'});
+ assert.equal((await f.store.state(f.gym.id)).bookings[0].paymentDue,false);
+ assert.deepEqual(await inventory.debtSummary(f.gym.id),{});
+ await assert.rejects(inventory.pay(f.gym.id,'desk',sale.id,{requestKey:randomUUID(),amount:1,method:'TARJETA'}),/supera/);
+ await assert.rejects(inventory.reverse(f.gym.id,sale.id,{},true),/sesión/);
+ const state=await f.store.state(f.gym.id);
+ await f.store.save(f.gym.id,{...state.bookings[0]},reservation.id);
+ assert.equal((await f.store.state(f.gym.id)).bookings[0].paymentDue,false);
+ const drawer=await cash.current(f.gym.id);assert.equal(drawer.session.summary.expectedCash,110);
+});
+
+test('Recordatorios: día anterior, canal de ficha, procesos concurrentes y reprogramación sin duplicados',async()=>{
+ const {ReminderWorker}=require('../dist/reminders/worker');const f=await appointmentFixture('WHATSAPP');
+ const b=await f.store.save(f.gym.id,{...f.input,date:'2031-01-15'});
+ const now=new Date('2031-01-14T09:00:30Z'),sent=[];
+ const provider={send:async m=>{sent.push(m);await new Promise(r=>setTimeout(r,20));return 'SM-test';}};
+ await Promise.all([new ReminderWorker(pool,provider).run(now),new ReminderWorker(pool,provider).run(now)]);
+ assert.equal(sent.length,1);assert.equal(sent[0].channel,'WHATSAPP');assert.equal(sent[0].trainer,'Entrenadora Julia');assert.equal(sent[0].service,'Sesión de fuerza');assert.equal(sent[0].date,'15/01/2031');
+ await new ReminderWorker(pool,provider).run(now);assert.equal(sent.length,1);
+ const moved=await f.store.save(f.gym.id,{...b,date:'2031-01-16'},b.id);
+ await db.client.update({where:{id:f.client.id},data:{contactPreference:'SMS'}});
+ await new ReminderWorker(pool,provider).run(new Date('2031-01-15T09:00:30Z'));
+ assert.equal(sent.length,2);assert.equal(sent[1].channel,'SMS');
+ await f.store.save(f.gym.id,{...moved,status:'CANCELLED'},b.id);
+ await new ReminderWorker(pool,provider).run(new Date('2031-01-15T09:01:00Z'));assert.equal(sent.length,2);
+});
+
+test('Recordatorios: fallo ambiguo no repite; rechazo temporal se reintenta; modo desactivado no envía',async()=>{
+ const {ReminderWorker}=require('../dist/reminders/worker'),{DeliveryError}=require('../dist/reminders/provider');
+ const f=await appointmentFixture();await f.store.save(f.gym.id,{...f.input,date:'2032-01-15'});
+ const now=new Date('2032-01-14T09:00:30Z');let calls=0;
+ const worker=new ReminderWorker(pool,{send:async()=>{calls++;throw new DeliveryError('UNKNOWN','Sin respuesta');}});
+ await worker.run(now);await worker.run(now);assert.equal(calls,1);
+ const g=await appointmentFixture();await g.store.save(g.gym.id,{...g.input,date:'2033-01-15'});
+ let retries=0;const retry=new ReminderWorker(pool,{send:async()=>{retries++;if(retries===1)throw new DeliveryError('RETRY','Límite');return 'SM-retry';}});
+ await retry.run(new Date('2033-01-14T09:00:30Z'));await retry.run(new Date('2033-01-14T09:01:00Z'));assert.equal(retries,1);
+ await retry.run(new Date('2033-01-14T09:06:00Z'));assert.equal(retries,2);
+ await new ReminderWorker({query:()=>{throw Error('No debe consultar ni enviar');}},null).run(now);
+});

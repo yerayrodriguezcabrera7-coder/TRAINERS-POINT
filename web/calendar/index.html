@@ -10,7 +10,7 @@
   <script src="runtime.js" defer=""></script>
   <script src="calendar-core.js" defer=""></script>
   <script src="app.js" defer=""></script>
-<link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script></head>
+<link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script><link rel="stylesheet" href="/booking-payment.css"><script src="/booking-payment.js" defer></script></head>
 <body>
 
   <div class="app-shell"><aside data-app-menu="" aria-label="Navegación del centro"></aside><main id="main" class="main-content"><header class="topbar"><div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Calendario del equipo</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header><section class="page-content">
@@ -51,9 +51,9 @@
         <label>3. Trabajador y disponibilidad<select id="booking-employee"></select></label><label>Centro de trabajo<select id="booking-center" required=""></select></label><label>Servicio<select id="booking-service" required=""></select></label>
         <label>Sala o espacio<select id="booking-room" required=""></select></label><label>Fecha<input type="date" id="booking-date" required=""></label>
         <label>Inicio<input type="time" id="booking-start" step="900" required=""></label><label>Fin<input type="time" id="booking-end" step="900" required=""></label>
-        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de confirmación</option><option value="completed">Finalizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select></label>
+        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de confirmación</option><option value="completed">Realizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select></label>
         <label class="full">Notas (opcional)<textarea id="booking-notes" rows="3" maxlength="1000" placeholder="Indicaciones para esta sesión…"></textarea></label>
-      </div><p class="form-hint" id="booking-hours"></p><label id="available-slots-wrap">Horarios libres para este trabajador<select id="booking-available-slot"><option value="">Consulta los horarios disponibles</option></select></label><p id="booking-center-info"></p><div id="booking-debt" role="status" hidden=""></div><div id="booking-history"></div><p class="form-error" id="booking-error" role="alert" hidden=""></p></div>
+      </div><p class="form-hint" id="booking-hours"></p><label id="available-slots-wrap">Horarios libres para este trabajador<select id="booking-available-slot"><option value="">Consulta los horarios disponibles</option></select></label><p id="booking-center-info"></p><div id="booking-debt" role="status" hidden=""></div><button type="button" class="button primary" id="collect-booking" hidden>Registrar cobro pendiente</button><div id="booking-history"></div><p class="form-error" id="booking-error" role="alert" hidden=""></p></div>
       <footer class="modal-footer"><button type="button" class="button secondary" id="reschedule-booking" hidden="">Pendiente de reprogramar</button><button type="button" class="button secondary" id="worker-complete" hidden="">Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden="">Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden="">Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
     </form>
   </dialog>

@@ -202,7 +202,7 @@ export class Store {
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
     const [centers, packageResult, config] = await Promise.all([
       this.centers(),
-      this.clientsDb ? this.pool.query('SELECT b.id,p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym]) : Promise.resolve({rows:[]}),
+      this.clientsDb ? this.pool.query('SELECT b.id,b."saleId",b."paymentPending",p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym]) : Promise.resolve({rows:[]}),
       this.externalConfig(gym, rows[0].config),
     ]);
     const centersById = new Map(centers.map(center => [center.id, center]));
@@ -210,7 +210,7 @@ export class Store {
     return {
       gymId:gym, centers, packagesEnabled:!!this.clientsDb,
       ...config,
-      bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&linked.paymentStatus!=='PAGADO'}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
+      bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&(b.packageId?linked.paymentStatus!=='PAGADO':linked.paymentPending)}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };
@@ -225,6 +225,11 @@ export class Store {
     const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid AND c."gymId"=$3::uuid',[b.clientId,b.serviceId,gym])).rowCount;
     if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo de este centro.");
     if(b.packageId&&b.recoveryId)throw new ApiError(400,"Selecciona un bono o una recuperación, sin utilizar ambos para la misma sesión.");
+    // Keep the lock order: calendar centre, finance centre, package/booking rows.
+    await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[gym]);
+    const billed=(await db.query('SELECT "saleId","clientId","serviceId","packageId","paymentPending" FROM "Booking" WHERE id=$1::uuid',[b.id])).rows[0];
+    if(billed?.saleId && (billed.clientId!==b.clientId || billed.serviceId!==b.serviceId || (b.packageId||null)!==billed.packageId || b.recoveryId))
+      throw new ApiError(409,"Esta sesión ya tiene una venta vinculada. No cambies el cliente, servicio o bono; revisa su cobro en la ficha.");
     let effectivePackageId=b.packageId;
     if(b.recoveryId){
       effectivePackageId=(await db.query('SELECT p."packageId" FROM calendar.recoveries r JOIN "Booking" p ON p.id::text=r.original_id WHERE r.gym_id=$1 AND r.id=$2',[gym,b.recoveryId])).rows[0]?.packageId||null;
@@ -238,6 +243,7 @@ export class Store {
       if(!['CANCELLED','NO_SHOW'].includes(b.status)&&count+held>=pkg.sessionsBought)throw new ApiError(409,"Este bono ya no tiene sesiones disponibles. Actualiza los bonos del cliente.");
       paid=pkg.paymentStatus==='PAGADO';
     }
+    if(billed?.saleId)paid=!billed.paymentPending;
     b.paymentDue=!paid&&!b.recoveryId;
     if(paid||b.recoveryId)b.chargeAmount=0;
     const start=DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toJSDate(),end=DateTime.fromISO(`${b.date}T${b.end}`,{zone:c.timezone}).toJSDate();
@@ -248,6 +254,23 @@ export class Store {
     await db.query(`INSERT INTO "Booking" (id,"clientId","serviceId","packageId","employeeId","startTime","endTime",status,attendance,"updatedAt","calendarGymId","paymentPending")
       VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,$7,$8::"BookingStatus",$9::"AttendanceStatus",now(),$10,$11)
       ON CONFLICT(id) DO UPDATE SET "clientId"=EXCLUDED."clientId","serviceId"=EXCLUDED."serviceId","packageId"=EXCLUDED."packageId","employeeId"=EXCLUDED."employeeId","startTime"=EXCLUDED."startTime","endTime"=EXCLUDED."endTime",status=EXCLUDED.status,attendance=EXCLUDED.attendance,"updatedAt"=now(),"paymentPending"=EXCLUDED."paymentPending"`,[b.id,b.clientId,b.serviceId,effectivePackageId||null,employee,start,end,status,attendance,gym,b.paymentDue]);
+    // Completing an unpaid single session creates one debt, never a receipt.
+    if(b.status==='COMPLETED' && !effectivePackageId && !b.recoveryId && !billed?.saleId){
+      const amount=Math.round((b.chargeAmount||0)*100)/100;
+      if(amount>0){
+        const saleId=randomUUID(),lineId=randomUUID();
+        const serviceName=c.services.find(s=>s.id===b.serviceId)?.name||'Sesión';
+        const cash=(await db.query('UPDATE "CashSession" SET revision=revision+1 WHERE "gymKey"=$1 AND "closedAt" IS NULL RETURNING id',[gym])).rows[0];
+        await db.query(`INSERT INTO "Sale" (id,"gymKey","clientId","sellerAccountId",status,"paymentTracking",subtotal,"taxAmount","totalAmount","soldAt","updatedAt","cashSessionId")
+          VALUES($1::uuid,$2,$3::uuid,$4,'COMPLETADA',true,$5,0,$5,now(),now(),$6::uuid)`,[saleId,gym,b.clientId,'calendar',amount,cash?.id||null]);
+        await db.query(`INSERT INTO "SaleLine" (id,"saleId",type,"serviceId",description,quantity,"unitPrice","taxRate","lineSubtotal","taxAmount","lineTotal")
+          VALUES($1::uuid,$2::uuid,'SERVICIO',$3::uuid,$4,1,$5,0,$5,0,$5)`,[lineId,saleId,b.serviceId,`Sesión · ${serviceName} · ${b.date} ${b.start}`,amount]);
+        await db.query('UPDATE "Booking" SET "saleId"=$2::uuid WHERE id=$1::uuid',[b.id,saleId]);
+      }else{
+        b.paymentDue=false;
+        await db.query('UPDATE "Booking" SET "paymentPending"=false WHERE id=$1::uuid',[b.id]);
+      }
+    }
   }
   async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string) {
     const input = bookingSchema.parse(raw);

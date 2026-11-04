@@ -159,6 +159,32 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     }
     return true;
   }
+  const bookingBillingMatch = url.pathname.match(/^\/api\/bookings\/([0-9a-f-]+)\/billing$/i);
+  if (bookingBillingMatch && request.method === 'POST') {
+    const actor = (request as any).identity as Identity, gym = (request as any).selectedGym as string;
+    inventoryPermission(actor, 'sell');
+    const booking = await prisma.booking.findFirst({ where: { id: bookingBillingMatch[1], calendarGymId: gym }, include: { package: true } });
+    if (!booking) throw new ApiError(404, 'Reserva desconocida en este centro.');
+    let saleId = booking.saleId;
+    if (booking.packageId) {
+      if (booking.package?.paymentStatus === 'PAGADO') { sendJson(response, 200, { outstandingAmount: 0 }); return true; }
+      const pkg = await new Packages(prisma).billing(gym, booking.packageId, actor.id);
+      saleId = pkg.saleId;
+    }
+    if (!saleId && booking.paymentPending && booking.status === 'COMPLETADA' && calendarPool) {
+      const store = new Store(calendarPool, prisma), state = await store.state(gym);
+      const previous = state.bookings.find((b: any) => b.id === booking.id);
+      if (previous) {
+        await store.save(gym, previous, previous.id, undefined, actor.id);
+        saleId = (await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } })).saleId;
+      }
+    }
+    if (!saleId && booking.paymentPending) throw new ApiError(409, 'Revisa la sesión y su importe antes de registrar el cobro.');
+    if (!saleId) { sendJson(response, 200, { outstandingAmount: 0 }); return true; }
+    const sale = await prisma.sale.findFirstOrThrow({ where: { id: saleId, gymKey: gym }, include: { lines: true, payments: true } });
+    sendJson(response, 200, { ...saleBalance(sale), scope: booking.packageId ? 'PACKAGE' : 'SESSION' });
+    return true;
+  }
   const packageBillingMatch = url.pathname.match(/^\/api\/service-packages\/([0-9a-f-]+)\/billing$/i);
   if (packageBillingMatch && request.method === 'POST') {
     const actor = (request as any).identity as Identity;

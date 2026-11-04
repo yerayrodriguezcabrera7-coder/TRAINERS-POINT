@@ -77,3 +77,6 @@ staticFiles['/gimnasios.js'] = staticFiles['/gyms.js'];
 staticFiles['/gimnasios.css'] = staticFiles['/gyms.css'];
 staticFiles['/assets/logo-cobosu.png'] = { file: 'public/assets/logo-cobosu.png', contentType: 'image/png' };
 staticFiles['/logo-cobosu.png'] = staticFiles['/assets/logo-cobosu.png'];
+
+staticFiles['/booking-payment.js'] = { file: 'web/shared/booking-payment.js', contentType: 'text/javascript; charset=utf-8' };
+staticFiles['/booking-payment.css'] = { file: 'web/shared/booking-payment.css', contentType: 'text/css; charset=utf-8' };

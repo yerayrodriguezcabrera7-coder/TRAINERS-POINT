@@ -504,6 +504,25 @@
 
   $('refresh-button').addEventListener('click', () => load());
   $('refresh-history').addEventListener('click', () => load($('history-from').value, $('history-to').value));
+  $('export-history').addEventListener('click', async () => {
+    const button = $('export-history');
+    button.disabled = true;
+    try {
+      const from = $('history-from').value, to = $('history-to').value;
+      if (!from || !to || from > to) throw new Error('Selecciona un período válido para exportar.');
+      const query = new URLSearchParams({ from, to });
+      const employeeId = $('history-employee').value;
+      if (employeeId && employeeId !== 'all') query.set('employeeId', employeeId);
+      const response = await fetch('/api/attendance/export?' + query, { headers: { Authorization: `Bearer ${adminToken}` }, signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw new Error((await response.json()).error || 'No se pudo exportar el informe.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url; link.download = `fichajes-${from}-${to}.csv`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Informe descargado. Puedes abrirlo con Excel.');
+    } catch (error) { warn(error.message); } finally { button.disabled = false; }
+  });
   $('history-employee')?.addEventListener('change', () => renderHistory());
 
   // Filtros rápidos al pulsar en las tarjetas de resumen

@@ -380,3 +380,5 @@
     width: 100%;
   }
 }
+
+.export-help { flex-basis: 100%; color: var(--tp-muted, #637168); line-height: 1.5; }

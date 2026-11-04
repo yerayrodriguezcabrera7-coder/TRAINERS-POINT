@@ -1454,6 +1454,7 @@ bookingRows.addEventListener("change", async (event) => {
     showToast("Asistencia actualizada.");
     const client = { id: historyClientId, ...historyDialogClientName() };
     await openClientHistory(client);
+    if (select.value === 'ASISTIO') await offerAttendancePayment(select.dataset.bookingId);
   } catch (error) {
     select.value = select.dataset.previousAttendance;
     showToast("No se pudo guardar la asistencia. Inténtalo de nuevo.", true);
@@ -1894,6 +1895,10 @@ async function undoArrival(client) {
   }
 }
 
+async function offerAttendancePayment(bookingId) {
+  try { await window.TrainersPoint.collectBookingPayment(bookingId, () => { showToast('Cobro registrado. Consulta el saldo actualizado en la ficha.'); }); }
+  catch (error) { showToast('La asistencia está guardada. No se pudo abrir el cobro: ' + error.message, true); }
+}
 async function registerArrival(client, button) {
   const booking = client.nextSession;
   if (!booking?.id) {
@@ -1912,6 +1917,7 @@ async function registerArrival(client, button) {
       label: "Deshacer",
       onAction: () => undoArrival(client),
     });
+    await offerAttendancePayment(booking.id);
     return true;
   } catch (error) {
     showToast("No se pudo registrar la llegada. Inténtalo de nuevo.", true);

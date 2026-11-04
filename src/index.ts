@@ -19,6 +19,8 @@ import { financeRoutes } from './routes/finance';
 import { packagesRoutes } from './routes/packages';
 import { servicesRoutes } from './routes/services';
 import { runtimeConfig } from "./runtime-config";
+import { configuredProvider } from "./reminders/provider";
+import { ReminderWorker } from "./reminders/worker";
 const deployment = runtimeConfig();
 const host = deployment.host, port = deployment.port;
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
@@ -192,8 +194,10 @@ async function start(): Promise<void> {
   const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: !deployment.production });
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
+  const stopReminders = new ReminderWorker(pool, configuredProvider()).start();
   const close = () => {
     void server.close(async () => {
+      await stopReminders();
       calendar.close();
       await pool.end();
       if (crmPool !== pool)

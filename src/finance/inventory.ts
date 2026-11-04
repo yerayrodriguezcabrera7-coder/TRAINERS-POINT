@@ -104,6 +104,8 @@ export class Inventory {
         throw new ApiError(404, 'Venta desconocida.');
       if ((cancel && sale.status === 'CANCELADA') || (!cancel && sale.returnKeys.includes(requested!.requestKey)))
         return saleBalance(sale);
+      if (await tx.booking.findUnique({ where: { saleId: id } }))
+        throw new ApiError(409, 'Esta venta corresponde a una sesión. No se puede anular desde las devoluciones de productos.');
       if (await tx.clientServicePackage.findUnique({ where: { saleId: id } }))
         throw new ApiError(409, 'Esta venta corresponde a un bono. No se puede anular desde las devoluciones de productos.');
       if (sale.status !== 'COMPLETADA')
@@ -166,7 +168,7 @@ export class Inventory {
       const balance = saleBalance(updated);
       await tx.clientServicePackage.updateMany({ where: { saleId: id }, data: { paymentStatus: balance.outstandingAmount === 0 ? 'PAGADO' : 'PENDIENTE', paymentMethod: v.method } });
       if (balance.outstandingAmount === 0)
-        await tx.booking.updateMany({ where: { package: { saleId: id } }, data: { paymentPending: false } });
+        await tx.booking.updateMany({ where: { OR: [{ package: { saleId: id } }, { saleId: id }] }, data: { paymentPending: false } });
       return balance;
     });
   }
@@ -193,7 +195,7 @@ export class Inventory {
       const balance = saleBalance(updated);
       await tx.clientServicePackage.updateMany({ where: { saleId: id }, data: { paymentStatus: balance.outstandingAmount === 0 ? 'PAGADO' : 'PENDIENTE', paymentMethod: v.method } });
       if (balance.outstandingAmount === 0)
-        await tx.booking.updateMany({ where: { package: { saleId: id } }, data: { paymentPending: false } });
+        await tx.booking.updateMany({ where: { OR: [{ package: { saleId: id } }, { saleId: id }] }, data: { paymentPending: false } });
       return balance;
     });
   }

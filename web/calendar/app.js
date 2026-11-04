@@ -353,6 +353,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   $('booking-title').textContent = b ? 'Detalle de la reserva' : 'Nueva reserva';
 
   const isTrainer = currentUser?.role === 'TRAINER';
+  $('collect-booking').hidden=isTrainer||!b||b.status!=='completed'||!b.paymentDue;
   const saveBtn = $('booking-form').querySelector('button[type="submit"]');
   if (saveBtn) saveBtn.hidden = isTrainer;
   if ($('cancel-booking')) $('cancel-booking').hidden = isTrainer || !b || (b.status === 'cancelled'&&!b.needsReschedule);
@@ -441,9 +442,10 @@ $('booking-form').addEventListener('submit', async event => {
       const duration=lookup('services',booking.serviceId).duration;
       booking.end=C.timeLabel(C.minutes(booking.start)+duration);
       const client=clientId==='new'?{id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''}:undefined;
-      await api(state.editing?'bookings/'+encodeURIComponent(state.editing):'bookings',state.editing?'PUT':'POST',{booking:toServer(booking),client});
+      const saved = await api(state.editing?'bookings/'+encodeURIComponent(state.editing):'bookings',state.editing?'PUT':'POST',{booking:toServer(booking),client});
       state.date=booking.date;$('booking-dialog').close();
       await refreshServer(true);toast('Reserva guardada en el servidor.');
+      if (booking.status === 'completed') await offerBookingPayment(saved.id);
     } catch(e){formError('booking-error',e.message);} finally{state.saving=false;}
     return;
   }
@@ -492,10 +494,15 @@ $('reschedule-booking').onclick=async()=>{
   if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
   try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
 };
+async function offerBookingPayment(id) {
+  try { await window.TrainersPoint.collectBookingPayment(id, async () => { await refreshServer(true); toast('Cobro registrado. El saldo y Caja se han actualizado.'); }); }
+  catch (error) { warn('La asistencia está guardada. No se pudo abrir el cobro: ' + error.message); }
+}
+$('collect-booking').onclick=()=>{ const id=state.editing; $('booking-dialog').close(); offerBookingPayment(id); };
 async function workerAction(action){
   const message=action==='INCIDENT'?prompt('Describe la incidencia o la solicitud de cancelación:'):undefined;
   if(action==='INCIDENT'&&!message)return;
-  try{await api('bookings/'+encodeURIComponent(state.editing)+'/worker-action','POST',{action,message,version:state.editingVersion});$('booking-dialog').close();await refreshServer(true);toast(action==='COMPLETE'?'Sesión realizada.':'Incidencia comunicada a recepción.');}catch(e){formError('booking-error',e.message);}
+  try{const completed = await api('bookings/'+encodeURIComponent(state.editing)+'/worker-action','POST',{action,message,version:state.editingVersion});$('booking-dialog').close();await refreshServer(true);toast(action==='COMPLETE'?(completed.paymentDue?'Sesión realizada. Pago pendiente: avisa a recepción para registrar el cobro.':'Sesión realizada.'):'Incidencia comunicada a recepción.');}catch(e){formError('booking-error',e.message);}
 }
 $('worker-complete').onclick=()=>workerAction('COMPLETE');$('worker-incident').onclick=()=>workerAction('INCIDENT');
 $('booking-date').addEventListener('change', updateHoursHint);

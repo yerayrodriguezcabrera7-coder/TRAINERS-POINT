@@ -7,6 +7,7 @@ import { serveRuntime } from "../http/runtime";
 import { Access,Identity,initialPassword } from "./access";
 import { ApiError } from "./model";
 import { Store } from "./store";
+import { attendanceCsv } from "./attendance-export";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -219,6 +220,15 @@ export function server(
           }
           const clientDebts = store.clientsDb ? await new Inventory(store.clientsDb).debtSummary(gym) : {};
           send(res, 200, {...s,clientDebts});
+          return;
+        }
+        if (req.method === "GET" && path === "/api/attendance/export") {
+          if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");
+          const requested = url.searchParams.get("employeeId") || undefined;
+          if (identity.role !== "ADMIN" && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
+          const report = await store.attendance(gym, url.searchParams.get("from")!, url.searchParams.get("to")!, identity.role === "ADMIN" ? requested : identity.employeeId || "unassigned", identity.role);
+          res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": `attachment; filename="fichajes-${report.from}-${report.to}.csv"` });
+          res.end(attendanceCsv(report));
           return;
         }
         if (req.method === "GET" && path === "/api/attendance") {
