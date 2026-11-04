@@ -407,3 +407,18 @@ test('Entrada por perfil: no emite sesión al usar el acceso equivocado y devuel
   const session=await access.login(gym,{username:'office-test',password:'Example-pass-123',portal:'OFFICE'});
   const identity=await access.identify(gym,session.token);assert.equal(identity.username,'office-test');assert.equal(identity.role,'ADMIN');await access.logout(session.token);
 });
+
+test('Olvido: solo recepción corrobora, conserva autoría, evita duplicados y no cambia jornadas',async()=>{
+ const {saveOmission,listOmissions}=require('../dist/calendar/attendance-omissions');const {DateTime}=require('luxon');const g=randomUUID();await store.seed(g,testConfig());
+ const reception={id:'reception-id',name:'Recepción Cuatro',role:'RECEPTION',employeeId:'e4',clientId:null,mustChangePassword:false};
+ const input={id:randomUUID(),employeeId:'e2',day:DateTime.now().setZone('Europe/Madrid').toISODate(),kind:'IN',note:'He comprobado personalmente que llegó a las 09:00.',corroborated:true,actor:{name:'Falsificado'}};
+ for(const role of ['ADMIN','TRAINER','CLIENT'])await assert.rejects(saveOmission(pool,g,{...reception,role},input),/Solo recepción/);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,corroborated:false}));
+ await assert.rejects(saveOmission(pool,g,reception,{...input,day:'2099-12-01'}),/futura/);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,employeeId:'ajeno'}),/desconocido/);
+ await saveOmission(pool,g,reception,input);await saveOmission(pool,g,reception,input);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,note:'Otra información distinta.'}),/otros datos/);
+ const list=await listOmissions(pool,g,reception,input.day,input.day);assert.equal(list.length,1);assert.equal(list[0].actor.name,reception.name);assert.equal(list[0].employeeId,'e2');
+ const other=await listOmissions(pool,g,{...reception,role:'TRAINER',employeeId:'e3'},input.day,input.day);assert.equal(other.length,0);
+ assert.equal((await store.attendance(g,input.day,input.day,undefined,'ADMIN')).records.length,0);
+});

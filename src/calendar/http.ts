@@ -8,6 +8,7 @@ import { serveRuntime } from "../http/runtime";
 import { Access,Identity,initialPassword } from "./access";
 import { ApiError } from "./model";
 import { Store } from "./store";
+import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
 async function body(req: IncomingMessage) {
   let text = "";
@@ -231,6 +232,11 @@ export function server(
           }
           send(res, 200, { ...s, clientDebts, clientPackageAlerts: clientPackageAlertsMap });
           return;
+        }
+        if (path === '/api/attendance/omissions') {
+          if(req.method==='POST'){send(res,201,await saveOmission(store.pool,gym,identity,await body(req)));return;}
+          if(req.method==='GET'){send(res,200,await listOmissions(store.pool,gym,identity,url.searchParams.get('from')||'',url.searchParams.get('to')||''));return;}
+          throw new ApiError(405,'Operación no permitida.');
         }
         if (req.method === "GET" && path === "/api/attendance/export") {
           if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");

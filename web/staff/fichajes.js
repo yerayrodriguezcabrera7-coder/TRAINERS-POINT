@@ -120,7 +120,8 @@
     try {
       if (!me) await loadMe();
       const next = await api(`attendance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      data = next;
+      const omissions = await api(`attendance/omissions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      data = { ...next, omissions: Array.isArray(omissions) ? omissions : [] };
       sessionStorage.setItem('calendar-admin-token', adminToken);
       clearWarn();
       adaptRoleUI();
@@ -327,6 +328,7 @@
           </div>
 
           <div class="employee-actions">
+            ${me?.role==='RECEPTION' ? `<button type="button" class="outline-button" data-omission="${escapeHTML(employee.id)}">Olvido de fichaje</button>` : ''}
             ${canClock ? `
               <button class="button ${open ? 'button-clock-out' : 'button-primary'}" data-clock="${escapeHTML(employee.id)}" data-action="${open ? 'OUT' : 'IN'}">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;" aria-hidden="true">
@@ -342,11 +344,23 @@
       `;
     }).join('');
 
+    $('employee-list').querySelectorAll('[data-omission]').forEach(button=>button.onclick=()=>openOmission(button.dataset.omission));
     $('employee-list').querySelectorAll('[data-clock]').forEach(button => {
       button.addEventListener('click', () => clock(button.dataset.clock, button.dataset.action, button));
     });
   }
 
+  let omissionEmployee=null, omissionId=null;
+  function openOmission(employeeId) {
+    if(me?.role!=='RECEPTION')return;
+    omissionEmployee=employeeId;omissionId=crypto.randomUUID();$('omission-form').reset();$('omission-worker').textContent=employeeName(employeeId);$('omission-day').value=dateKey();$('omission-day').max=dateKey();$('omission-error').textContent='';$('omission-dialog').showModal();
+  }
+  $('omission-close').onclick=()=>$('omission-dialog').close();
+  $('omission-form').onsubmit=async event=>{
+    event.preventDefault();const button=$('omission-save');if(button.disabled)return;button.disabled=true;$('omission-error').textContent='';
+    try{await api('attendance/omissions','POST',{id:omissionId,employeeId:omissionEmployee,day:$('omission-day').value,kind:$('omission-kind').value,note:$('omission-note').value,corroborated:$('omission-confirm').checked});$('omission-dialog').close();await load(data.from,data.to);toast('Olvido corroborado guardado. Las horas no se han cambiado.');}
+    catch(error){$('omission-error').textContent=error.message;}finally{button.disabled=false;}
+  };
   function actorLabel(actor) {
     if (!actor) return '<small>Autor no registrado (fichaje anterior)</small>';
     const role = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Trabajador'}[actor.role] || actor.role;
@@ -356,6 +370,8 @@
     const employeeId = $('history-employee')?.value || 'all';
     const records = data.records.filter(r => employeeId === 'all' || r.employeeId === employeeId);
 
+    const omissions=(data.omissions||[]).filter(r=>employeeId==='all'||r.employeeId===employeeId);
+    $('omission-list').innerHTML=omissions.map(r=>`<article class="omission-record"><strong>${escapeHTML(employeeName(r.employeeId))} · ${escapeHTML(r.day)} · ${r.kind==='IN'?'Entrada':'Salida'}</strong><p>${escapeHTML(r.note)}</p><small>Corroborado por ${escapeHTML(r.actor.name)} (recepción) · Anotado ${escapeHTML(formatDateTime(r.createdAt))}</small></article>`).join('')||'<p>No hay olvidos anotados en este período.</p>';
     $('history-empty').hidden = records.length > 0;
     $('results-count').textContent = `${records.length} ${records.length === 1 ? 'fichaje' : 'fichajes'}`;
 

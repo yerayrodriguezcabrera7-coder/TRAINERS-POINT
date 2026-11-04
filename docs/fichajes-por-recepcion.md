@@ -9,3 +9,13 @@ Administración y recepción pueden consultar y exportar los fichajes del centro
 Los registros anteriores a esta mejora muestran «Autor no registrado»: no se les atribuye un autor inventado. Si se recoge ubicación en un fichaje delegado, corresponde al dispositivo de recepción, no prueba la ubicación del trabajador.
 
 Migración: `20261104000300_attendance_actor`. No modifica las horas de los registros existentes.
+
+## Olvido de fichaje
+
+Solo recepción puede añadir una anotación con el botón **Olvido de fichaje** junto al trabajador. Debe indicar la fecha, si olvidó la entrada o la salida, explicar cómo comprobó su presencia y marcar la confirmación de corroboración. No se admiten fechas futuras.
+
+Se guardan el comentario, el trabajador, el usuario de recepción y el momento de anotación. Reintentar el mismo envío no crea duplicados. Las anotaciones se consultan en **Historial → Olvidos de fichaje corroborados por recepción**, con los filtros de fechas y trabajador. Administración y recepción ven las del centro; cada trabajador solo las suyas. No pueden editarse ni borrarse desde esta pantalla.
+
+Una anotación no genera un fichaje retroactivo ni modifica horas o totales. Si recepción ficha una entrada real en ese momento, utiliza el botón normal de fichar.
+
+Migración adicional: `20261104000400_attendance_omissions`.
