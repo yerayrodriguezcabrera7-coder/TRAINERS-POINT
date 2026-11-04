@@ -148,13 +148,29 @@
         const center = host.querySelector('.app-menu-center');
         if (center) center.hidden = true;
       }
+      const roleName = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador',CLIENT:'Cliente'}[me.role] || me.role;
+      const loginUrl = ['ADMIN','RECEPTION'].includes(me.role) ? '/login.html?portal=office' : me.role === 'CLIENT' ? '/login.html?portal=client' : '/login.html';
+      let avatar = document.querySelector('.topbar .profile-avatar');
+      if (!avatar && document.querySelector('.topbar')) { avatar=document.createElement('div'); avatar.className='profile-avatar'; document.querySelector('.topbar').append(avatar); }
+      if (avatar) {
+        const button=document.createElement('button');button.type='button';button.className='profile-avatar account-trigger';button.textContent='TP';button.setAttribute('aria-label','Mi cuenta: '+me.name+' · '+roleName);button.setAttribute('aria-haspopup','dialog');avatar.replaceWith(button);
+        const dialog=document.createElement('dialog');dialog.className='account-dialog';dialog.setAttribute('aria-label','Mi cuenta');
+        const title=document.createElement('h2');title.textContent=me.name;
+        const username=document.createElement('p');username.textContent='Usuario: '+(me.username || 'Cuenta del centro');
+        const role=document.createElement('p');role.textContent='Perfil: '+roleName;
+        const settings=document.createElement('a');settings.href='/configuracion.html';settings.textContent='Mi configuración';
+        const password=document.createElement('a');password.href='/change-password.html';password.textContent='Cambiar mi contraseña';
+        const logout=document.createElement('button');logout.type='button';logout.textContent='Cerrar sesión';logout.onclick=async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href=loginUrl;}};
+        const close=document.createElement('button');close.type='button';close.textContent='Volver';close.onclick=()=>dialog.close();
+        dialog.append(title,username,role,settings,password,logout,close);document.body.append(dialog);button.onclick=()=>dialog.showModal();
+      }
       const footer=document.createElement('div');footer.className='app-menu-account';
       const label=document.createElement('small');label.textContent=me.name;
-      const link=document.createElement('a');link.href='login.html';link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';
+      const link=document.createElement('a');link.href=loginUrl;link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';
       link.addEventListener('click',async event=>{
         event.preventDefault();
         try{await fetch('/api/logout',{method:'POST',headers:{Authorization:'Bearer '+token}});}finally{
-          sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href='login.html';
+          sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href=loginUrl;
         }
       });footer.append(label,link);host.append(footer);
     } catch (_) { /* The page shows connection errors. */ }

@@ -49,7 +49,7 @@ async function verifyPassword(password: string, encoded: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 export const roles = ["ADMIN", "RECEPTION", "TRAINER", "CLIENT"] as const;
-export type Identity = { id: string; name: string; role: typeof roles[number]; employeeId: string | null; clientId: string | null; mustChangePassword: boolean };
+export type Identity = { id: string; name: string; username?: string; role: typeof roles[number]; employeeId: string | null; clientId: string | null; mustChangePassword: boolean };
 type LinkedClient = { id: string; name: string; email?: string; phone?: string; notes?: string; status?: string };
 const slugUsername = (name: string) => name.toLocaleLowerCase("es").normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 60) || "cliente";
@@ -356,13 +356,15 @@ export class Access {
     };
   }
   async login(gym: string, raw: unknown) {
-    const input = z.object({ username: z.string().max(254), password: z.string().max(128) }).parse(raw);
+    const input = z.object({ username: z.string().max(254), password: z.string().max(128), portal: z.enum(["TRAINER", "OFFICE", "CLIENT"]).optional() }).parse(raw);
     const row = (await this.pool.query(`SELECT u.*,g.config FROM calendar.users u JOIN calendar.gyms g ON g.id=u.gym_id
       WHERE u.gym_id=$1 AND u.username=$2`, [gym,input.username.trim().toLowerCase()])).rows[0];
     const passwordMatches = await verifyPassword(input.password, row?.password_hash ||
       `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${"00".repeat(16)}$${"00".repeat(64)}`);
     if (!passwordMatches || !row?.enabled)
       throw new ApiError(401, "Usuario o contraseña incorrectos, o cuenta desactivada.");
+    if (input.portal && !(input.portal === 'OFFICE' ? ['ADMIN','RECEPTION'].includes(row.role) : row.role === input.portal))
+      throw new ApiError(403, 'Esta cuenta pertenece a otro acceso. Utiliza la entrada correspondiente a tu perfil.');
     if (row.password_hash.includes(":")) {
       await this.pool.query("UPDATE calendar.users SET password_hash=$2 WHERE id=$1", [row.id,await hashPassword(input.password)]);
     }
@@ -449,11 +451,11 @@ export class Access {
       const client = (row.client_id ? await this.findExternalClient(gym,row.client_id) : null) ||
         row?.config.clients.find((c: any) => c.id === row.client_id);
       if (!client || client.status === "BLOCKED") throw new ApiError(401, "Inicia sesión para continuar.");
-      return { id: row.id, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword: row.must_change_password };
+      return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword: row.must_change_password };
     }
     const employee = row?.config.employees.find((e: any) => e.id === row.employee_id);
     if (!employee || employee.active === false) throw new ApiError(401, "Inicia sesión para continuar.");
-    return { id: row.id, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword: row.must_change_password };
+    return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword: row.must_change_password };
   }
   async logout(token: string) {
     await this.pool.query("DELETE FROM calendar.sessions WHERE token_hash=$1", [digest(token)]);

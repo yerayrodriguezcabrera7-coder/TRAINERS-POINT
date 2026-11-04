@@ -395,3 +395,11 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     await new Promise((r) => app.close(r));
   }
 });
+
+test('Entrada por perfil: no emite sesión al usar el acceso equivocado y devuelve el usuario propio', async () => {
+  const {Access}=require('../dist/calendar/access');const access=new Access(pool);const gym=randomUUID();await store.seed(gym,testConfig());
+  await access.save(gym,{username:'office-test',employeeId:'e1',role:'ADMIN',enabled:true,password:'Example-pass-123',mustChangePassword:false});
+  await assert.rejects(access.login(gym,{username:'office-test',password:'Example-pass-123',portal:'TRAINER'}),/otro acceso/);
+  const session=await access.login(gym,{username:'office-test',password:'Example-pass-123',portal:'OFFICE'});
+  const identity=await access.identify(gym,session.token);assert.equal(identity.username,'office-test');assert.equal(identity.role,'ADMIN');await access.logout(session.token);
+});
