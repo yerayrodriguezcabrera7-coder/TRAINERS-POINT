@@ -8,6 +8,7 @@ async function fetchUserRole() {
       if (currentUserRole === 'TRAINER') {
         document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
         document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
+        document.querySelector("#btn-renew-bono-banner")?.setAttribute("hidden", "");
         document.querySelector("#profile-gym-form")?.setAttribute("hidden", "");
         const detailsForm = document.querySelector("#client-details-form");
         if (detailsForm) {
@@ -122,6 +123,41 @@ function renderPurchaseHistory(data) {
     ? debtAmounts.map(({ currency, amount }) => currencyText(amount, currency)).join(" · ")
     : "Sin pagos pendientes";
 
+  // Renewal Alert Banner & Badge
+  const renewalBadge = document.querySelector("#profile-renewal-badge");
+  const renewalBanner = document.querySelector("#profile-renewal-banner");
+  const renewalBannerTitle = document.querySelector("#profile-renewal-banner-title");
+  const renewalBannerText = document.querySelector("#profile-renewal-banner-text");
+
+  if (data.renewalAlert && data.renewalAlert.needsRenewal) {
+    if (renewalBadge) {
+      renewalBadge.hidden = false;
+      renewalBadge.textContent = `⚠️ ${data.renewalAlert.message}`;
+    }
+    if (renewalBanner) {
+      renewalBanner.hidden = false;
+      if (renewalBannerTitle) {
+        if (data.renewalAlert.type === 'LAST_SESSION') {
+          renewalBannerTitle.textContent = "Bono en última sesión";
+        } else if (data.renewalAlert.type === 'EXPIRING_SOON') {
+          renewalBannerTitle.textContent = "Bono próximo a caducar";
+        } else if (data.renewalAlert.type === 'EXPIRED') {
+          renewalBannerTitle.textContent = "Bono caducado";
+        } else if (data.renewalAlert.type === 'DEPLETED') {
+          renewalBannerTitle.textContent = "Bono agotado";
+        } else {
+          renewalBannerTitle.textContent = "Bono a punto de agotarse";
+        }
+      }
+      if (renewalBannerText) {
+        renewalBannerText.textContent = `${data.renewalAlert.serviceName}: ${data.renewalAlert.message}. Toca ofrecer la renovación del bono.`;
+      }
+    }
+  } else {
+    if (renewalBadge) renewalBadge.hidden = true;
+    if (renewalBanner) renewalBanner.hidden = true;
+  }
+
   purchaseHistory.replaceChildren();
   const packages = data.packages || [];
   const sales = data.sales || [];
@@ -158,6 +194,15 @@ function renderPurchaseHistory(data) {
     status.className = `badge-status badge-${String(pkg.paymentStatus).toLowerCase()}`;
     status.textContent = ({PAGADO:'Pagado',PENDIENTE:'Pago pendiente',FALLIDO:'Pago no completado',REEMBOLSADO:'Reembolsado'})[pkg.paymentStatus] || pkg.paymentStatus;
     badges.append(status);
+
+    if (pkg.needsRenewal) {
+      card.classList.add("has-renewal-warning");
+      const renewalNotice = document.createElement("span");
+      renewalNotice.className = "badge-status badge-renewal-warning";
+      renewalNotice.textContent = `⚠️ ${pkg.renewalMessage || "Renovación necesaria"}`;
+      badges.append(renewalNotice);
+    }
+
     header.append(titleWrap, badges);
 
     // Progress Bar
@@ -184,7 +229,9 @@ function renderPurchaseHistory(data) {
     const footer = document.createElement("div");
     footer.className = "bono-history-footer";
     const metaLeft = document.createElement("div");
-    metaLeft.textContent = `${historyDate(pkg.purchasedAt)} · ${pkg.paymentMethod} · 4 semanas de validez`;
+    const validityWeeks = pkg.validityWeeks || (pkg.service && pkg.service.validityWeeks) || 4;
+    const expiresFormatted = pkg.expiresAt ? ` · Caduca: ${new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(pkg.expiresAt))}` : '';
+    metaLeft.textContent = `${historyDate(pkg.purchasedAt)} · ${pkg.paymentMethod} · ${validityWeeks} semanas de validez${expiresFormatted}`;
     const amount = document.createElement("strong");
     amount.className = "bono-history-amount";
     amount.textContent = currencyText(pkg.totalAmount, "EUR");
@@ -942,6 +989,8 @@ document.querySelector("#bono-status-chips")?.addEventListener("click", (event) 
 
 if (openAddBonoBtn) openAddBonoBtn.addEventListener("click", openAddBonoModal);
 if (openAddBonoTopBtn) openAddBonoTopBtn.addEventListener("click", openAddBonoModal);
+const renewBonoBannerBtn = document.querySelector("#btn-renew-bono-banner");
+if (renewBonoBannerBtn) renewBonoBannerBtn.addEventListener("click", openAddBonoModal);
 if (closeAddBonoBtn) closeAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
 if (cancelAddBonoBtn) cancelAddBonoBtn.addEventListener("click", () => addBonoDialog.close());
 
