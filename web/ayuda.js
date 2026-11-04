@@ -28,10 +28,11 @@
   if (!main || !pages[key]) return;
   const guide = document.createElement('section'); guide.className = 'usage-guide'; guide.setAttribute('aria-label','Ayuda de esta pantalla');
   const title = document.createElement('strong'), purpose = document.createElement('p'), details = document.createElement('details'), summary = document.createElement('summary'), steps = document.createElement('ol');
-  summary.textContent = 'Cómo usar esta pantalla · paso a paso'; details.append(summary,steps); guide.append(title,purpose,details);
+  const copy = document.createElement('div'); copy.className = 'usage-guide-copy'; copy.append(title,purpose);
+  summary.textContent = 'Cómo usar esta pantalla · paso a paso'; details.append(summary,steps); guide.append(copy,details);
   function showGuide(content) { title.textContent = content[0]; purpose.textContent = content[1]; steps.replaceChildren(...content[2].map(text => { const item = document.createElement('li'); item.textContent = text; return item; })); }
   showGuide(pages[key]);
-  const heading = main.querySelector('.page-content > .page-heading,.page-content > .attendance-header,.page-content > header,.profile-content .profile-heading,.page-content > h1') || main.querySelector(':scope > header,:scope > .profile-topbar,:scope > h1');
+  const heading = main.querySelector(':scope.login-card > .hint') || main.querySelector('.page-content > .page-heading,.page-content > .attendance-header,.page-content > header,.profile-content .profile-heading,.page-content > h1') || main.querySelector(':scope > header,:scope > .profile-topbar,:scope > h1');
   if (heading) heading.after(guide); else main.prepend(guide);
   if (window.CALENDAR_SERVER && !['login','password'].includes(key)) fetch('/api/me').then(r => r.ok ? r.json() : null).then(me => {
     if (me?.role === 'TRAINER' && ['calendario','shifts'].includes(key)) showGuide(['Consulta tu jornada y tus citas', 'Esta pantalla muestra la información que tienes asignada como trabajador.', ['Revisa la fecha y el centro en el que tienes cada cita.', 'Pulsa una reserva para consultar los detalles o comunicar una incidencia.', 'Consulta tus horarios en Turnos y registra tu entrada y salida en Fichajes.']]);
@@ -80,7 +81,7 @@
     // Numeric examples live in visible help because browsers differ on numeric placeholders.
     if(input.type!=='number') input.placeholder=placeholder;
     const hint=document.createElement('small');hint.id='usage-'+id;hint.className='field-guidance';hint.textContent=input.type==='number'?text+' '+placeholder+'.':text;
-    const anchor=input.closest('label')||input;anchor.after(hint);
+    const label=input.closest('label'); if(label) label.append(hint); else input.after(hint);
     input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'),hint.id].filter(Boolean).join(' '));
   }
   document.addEventListener('invalid',e=>{
