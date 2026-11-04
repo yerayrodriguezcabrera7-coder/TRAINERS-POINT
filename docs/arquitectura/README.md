@@ -49,3 +49,11 @@ Para orientarte en VS Code, abre la carpeta **TRAINERS-POINT** y despliega **web
 - Estructura de los datos: [schema.prisma](../../prisma/schema.prisma).
 
 Los mapas forman parte de la documentación del proyecto. La publicación se prepara sin contratar servicios; servidor, dominio y proveedor de pagos siguen pendientes.
+
+## Diagrama de flujo
+
+![Del clic del usuario al dato guardado](flujo-del-codigo.png)
+
+El diagrama relaciona cada paso con sus carpetas: acceso, elección de pantalla, petición al servidor, comprobación de permisos y datos, consulta o escritura en PostgreSQL y actualización de la pantalla. Los rombos indican decisiones; la rama «No» vuelve al acceso o a la pantalla para corregir la operación. Es un recorrido simplificado; las comprobaciones específicas y las transacciones se ejecutan dentro de cada módulo del servidor.
+
+Original editable: [flujo-del-codigo.svg](flujo-del-codigo.svg).
