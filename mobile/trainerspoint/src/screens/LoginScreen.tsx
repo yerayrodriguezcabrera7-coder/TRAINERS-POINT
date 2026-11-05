@@ -13,13 +13,15 @@ import {
 import { trainersPointTheme } from "../../../shared/theme";
 import { ApiClient } from "../../../shared/api";
 import type { Identity } from "../../../shared/types";
+import { AccessHelp } from "./AccessHelp";
 
 interface LoginScreenProps {
   api: ApiClient;
   onLoginSuccess: (user: Identity) => void;
+  onBack?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess, onBack }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [portal, setPortal] = useState<"TRAINER" | "CLIENT">("CLIENT");
@@ -28,6 +30,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
   const [mustChange, setMustChange] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleLogin = async () => {
     if (loading) return;
@@ -67,7 +71,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}><View style={styles.card}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: "center", width: "100%", maxWidth: 480, alignSelf: "center" }}><View style={styles.card}>
+        {onBack && <TouchableOpacity accessibilityRole="button" disabled={loading} onPress={onBack} style={{ minHeight: 44, justifyContent: "center", marginBottom: 12 }}><Text style={{ color: "#5d7066", fontWeight: "600" }}>← Volver al inicio</Text></TouchableOpacity>}
         <View style={styles.header}>
           <Text style={styles.brandTitle}>TRAINERS POINT</Text>
           <Text style={styles.subtitle}>Inicia sesión para gestionar tus entrenamientos</Text>
@@ -77,6 +82,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
         {!mustChange && <View style={styles.portalToggle}>
           <TouchableOpacity
             accessibilityRole="button"
+            disabled={loading}
+            accessibilityState={{ selected: portal === "CLIENT" }}
             style={[styles.portalButton, portal === "CLIENT" && styles.portalButtonActive]}
             onPress={() => setPortal("CLIENT")}
           >
@@ -86,6 +93,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
           </TouchableOpacity>
           <TouchableOpacity
             accessibilityRole="button"
+            disabled={loading}
+            accessibilityState={{ selected: portal === "TRAINER" }}
             style={[styles.portalButton, portal === "TRAINER" && styles.portalButtonActive]}
             onPress={() => setPortal("TRAINER")}
           >
@@ -104,6 +113,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             onChangeText={setUsername}
             editable={!loading && !mustChange}
             accessibilityLabel="Usuario"
+            autoComplete="username"
+            maxLength={254}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -116,15 +127,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             onChangeText={setPassword}
             editable={!loading && !mustChange}
             accessibilityLabel="Contraseña"
-            secureTextEntry
+            autoComplete="current-password"
+            maxLength={128}
+            secureTextEntry={!showPassword}
           />
+          {!mustChange && <TouchableOpacity accessibilityRole="button" onPress={() => setShowPassword(value => !value)} style={{ minHeight: 44, justifyContent: "center" }}><Text style={{ color: "#915022", fontWeight: "600" }}>{showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}</Text></TouchableOpacity>}
 
           {mustChange && <>
             <Text>Para continuar debes cambiar tu contraseña provisional.</Text>
             <Text style={styles.label}>Nueva contraseña (mínimo 12 caracteres)</Text>
-            <TextInput accessibilityLabel="Nueva contraseña" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry editable={!loading} />
+            <TextInput accessibilityLabel="Nueva contraseña" autoComplete="new-password" maxLength={128} style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry editable={!loading} />
             <Text style={styles.label}>Repite la nueva contraseña</Text>
-            <TextInput accessibilityLabel="Repite la nueva contraseña" style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry editable={!loading} />
+            <TextInput accessibilityLabel="Repite la nueva contraseña" autoComplete="new-password" maxLength={128} style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry editable={!loading} />
           </>}
           {!!error && <Text accessibilityRole="alert" style={{ color: "#a52c20", marginVertical: 12 }}>{error}</Text>}
 
@@ -140,8 +154,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
               <Text style={styles.submitButtonText}>{mustChange ? "Guardar contraseña y entrar" : "Entrar a Trainers Point"}</Text>
             )}
           </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setShowHelp(true)} style={{ minHeight: 48, justifyContent: "center" }}><Text style={{ color: "#915022", textAlign: "center", fontWeight: "600" }}>¿No tienes acceso o has olvidado tu contraseña?</Text></TouchableOpacity>
+          <Text style={{ color: "#67746d", fontSize: 12, lineHeight: 19, textAlign: "center" }}>Cada persona utiliza su propia cuenta del centro.</Text>
         </View>
       </View></ScrollView>
+      <AccessHelp visible={showHelp} onClose={() => setShowHelp(false)} />
     </KeyboardAvoidingView>
   );
 };
@@ -191,6 +208,7 @@ const styles = StyleSheet.create({
   portalButton: {
     flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 6,
     alignItems: "center",
     borderRadius: 8,
   },
@@ -198,7 +216,9 @@ const styles = StyleSheet.create({
     backgroundColor: trainersPointTheme.colors.primary,
   },
   portalText: {
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
     fontWeight: "600",
     color: trainersPointTheme.colors.textMuted,
   },

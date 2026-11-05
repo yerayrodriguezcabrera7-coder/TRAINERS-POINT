@@ -13,7 +13,7 @@ function Button({ label, onPress, secondary = false }: { label: string; onPress:
 }
 function Label({ children }: { children: React.ReactNode }) { return <Text style={s.label}>{children}</Text>; }
 
-export function ClientPreview() {
+export function ClientPreview({ onExit }: { onExit?: () => void } = {}) {
   const [tab, setTab] = useState<Tab>('Inicio');
   const [sessions] = useState(createSessions);
   const [selected, setSelected] = useState(sessions[0]);
@@ -34,7 +34,7 @@ export function ClientPreview() {
   </Pressable>;
 
   return <View style={s.background}><SafeAreaView style={s.shell} edges={['top', 'bottom']}>
-    <View style={s.demo}><Text style={s.demoText}>VISTA PREVIA · DATOS DE EJEMPLO</Text></View>
+    <View style={[s.demo, { flexDirection: 'row', justifyContent: 'space-between', gap: 8, paddingHorizontal: 14 }]}><Text style={[s.demoText, { flex: 1 }]}>VISTA PREVIA · DATOS DE EJEMPLO</Text>{onExit && <Pressable accessibilityRole="button" onPress={onExit} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: '#40523c', fontSize: 11, fontWeight: '700' }}>Salir de la demo</Text></Pressable>}</View>
     <View style={s.header}><Text accessibilityRole="header" style={s.brand}><Text style={{ color: c.orange }}>T.</Text> trainerspoint</Text><Pressable accessibilityRole="button" accessibilityLabel="Abrir avisos" style={s.noticeButton} onPress={() => { setRead(true); setOverlay('notifications'); }}><Feather name="bell" size={19} color={c.ink}/>{!read && <View style={s.dot}/>}</Pressable></View>
     <ScrollView ref={scroll} style={s.flex} contentContainerStyle={s.content}>
       {tab === 'Inicio' && <>

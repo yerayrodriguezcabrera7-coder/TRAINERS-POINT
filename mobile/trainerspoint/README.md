@@ -1,6 +1,6 @@
 # Trainers Point · aplicación móvil
 
-Primera vista previa interactiva del área de clientes, construida sobre el proyecto Expo del equipo. No es todavía una aplicación de producción ni una copia independiente de las reservas.
+Aplicación con entrada a cuentas de clientes y trabajadores, construida sobre el proyecto Expo del equipo. Consulta las mismas reservas del backend de la web. Incluye una demostración separada con datos ficticios; todavía requiere validación de producción.
 
 ## Abrir la vista previa en el ordenador
 
@@ -12,13 +12,13 @@ npm ci
 npm run web -- --localhost --port 8081
 ```
 
-Abrir http://localhost:8081. Mantener la terminal abierta. No necesita servidor, base de datos, contraseña ni cuenta de Expo. El backend de la web puede continuar en el puerto 3000.
+Abrir http://localhost:8081. Mantener la terminal abierta. Para explorar la demostración no se necesita servidor ni contraseña. Para entrar a una cuenta real se necesita el backend de la web en el puerto 3000 y un usuario habilitado del centro.
 
 En Mac se utilizan barras `/`, no `\`, en la ruta. Si ya estás dentro de `mobile/trainerspoint`, no repitas el `cd`.
 
 ## Recorrido para revisar con el equipo
 
-1. **Inicio:** siguiente sesión, entrenador, centro y resumen del bono.
+1. **Bienvenida → Explorar una demostración → Inicio:** siguiente sesión, entrenador, centro y resumen del bono.
 2. **Agenda:** semana con días reservados, filtros por entrenador y detalle de cada reserva.
 3. **Mi bono:** saldo, movimientos ilustrativos y renovación.
 4. **Renovar mi bono:** elegir Tarjeta o Bizum y pulsar «Simular renovación · sin cobro».
@@ -26,15 +26,19 @@ En Mac se utilizan barras `/`, no `\`, en la ruta. Si ya estás dentro de `mobil
 6. **Campana / Perfil → Ver mis avisos:** recordatorios de sesión y renovación de ejemplo.
 7. Recargar la página: vuelve al estado inicial. Ningún cambio se guarda en la base de datos.
 
-Todo el contenido utiliza un cliente ficticio y precios ilustrativos. No se piden datos bancarios, no se llama a proveedores de pago y no se envían notificaciones.
+El contenido de la demostración utiliza un cliente ficticio y precios ilustrativos. «Salir de la demo» vuelve a la bienvenida. «Entrar a mi cuenta» abre el acceso real; no mezcla esos datos de ejemplo con las reservas del usuario. No se piden datos bancarios, no se llama a proveedores de pago y no se envían notificaciones.
 
 ## Organización
 
-- `App.tsx`: entrada de la vista previa.
+- `App.tsx`: navegación entre bienvenida, cuenta real y demostración.
 - `src/preview/ClientPreview.tsx`: pantallas, navegación y recorrido simulado.
 - `src/preview/data.ts`: reservas ficticias con fechas relativas al día de apertura.
-- `src/LegacyApp.tsx` y `src/screens/`: acceso al servidor y agenda real, conservados fuera de la vista previa. Permiten cambiar la contraseña provisional y muestran errores de conexión. Requieren configurar el servidor y no se consideran una app de producción validada.
+- `src/AccountApp.tsx`: sesión de la cuenta real, caducidad y cierre.
+- `src/screens/WelcomeScreen.tsx`, `LoginScreen.tsx` y `AccessHelp.tsx`: bienvenida, acceso y ayuda.
+- `src/screens/HomeScreen.tsx`: agenda de la persona autenticada, con datos del servidor.
 - `../shared/`: API, tipos, configuración, selección de reservas y pruebas compartidas. La vista previa no realiza llamadas al servidor.
+
+Funcionamiento para el centro y los usuarios: [informe del acceso](../ACCESO_USUARIOS.md). Capturas: [bienvenida](docs/vista-bienvenida.png) y [formulario de acceso](docs/vista-acceso.png).
 
 ## Validación local
 
@@ -56,8 +60,8 @@ Para una revisión visual desde el navegador del teléfono, se puede arrancar `n
 
 ## Trabajo pendiente para la primera fase real
 
-- Revisar y conectar inicio de sesión de clientes, sesión segura y permisos del servidor; no confiar en identificadores de cliente enviados por el móvil.
-- Consumir las reservas y los bonos del mismo backend de la web; no duplicar bases de datos.
+- Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. Actualmente la sesión se mantiene en memoria; al cerrar o recargar se debe iniciar sesión de nuevo. No se guardan contraseñas.
+- Integrar bonos en la cuenta real; las reservas ya se consultan en el mismo backend de la web, sin duplicar bases de datos.
 - Configurar proveedor de cobro aprobado por la empresa. Confirmar pagos en el servidor mediante eventos firmados e idempotentes antes de activar bonos o marcar deudas como pagadas. La app no debe poder declarar un pago recibido.
 - Integrar notificaciones: permisos del dispositivo, tokens, tareas programadas, preferencias y control de duplicados.
 - Mantener las dependencias de SDK 58 y los parches de herramientas transitivas alineados; los overrides de glob/minimatch corrigen avisos de seguridad del empaquetador.

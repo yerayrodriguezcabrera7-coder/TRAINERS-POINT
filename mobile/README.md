@@ -2,7 +2,7 @@
 
 El compañero añadió dos bases React Native + Expo:
 
-- **`trainerspoint/`**: aplicación de Trainers Point. Incluye una **vista previa navegable con datos ficticios**, todavía sin conexión a cobros ni al backend.
+- **`trainerspoint/`**: entrada a la cuenta real del cliente o trabajador y una demostración separada con datos ficticios. El acceso real consulta las reservas del mismo backend que la web.
 - **`cobosu/`**: acceso al servidor y agenda del cliente. Las funciones futuras se identifican como pendientes.
 - **`shared/`**: cliente HTTP ajustado a las rutas del backend, tipos, configuración y pruebas sin conexión a datos reales.
 
@@ -16,7 +16,7 @@ npm ci
 npm run web -- --localhost --port 8081
 ```
 
-Abrir http://localhost:8081. No hace falta iniciar la base de datos ni introducir credenciales.
+Abrir http://localhost:8081. «Explorar una demostración» no necesita servidor ni credenciales. «Entrar a mi cuenta» requiere el backend y un usuario habilitado del centro.
 
 Consulta [el recorrido de prueba, organización del código y trabajo pendiente](trainerspoint/README.md).
 
@@ -33,3 +33,5 @@ Cada aplicación es independiente: ejecutar `npm ci` en las dos carpetas si se q
 En desarrollo web, Metro reenvía `/api` al servidor configurado para evitar errores de origen cruzado. El proxy solo acepta el host local y su propio origen; no abre la API a otros sitios. Por ejemplo, iniciar el backend en el puerto 3000 y Cobosu con `npm run web -- --localhost --port 8082`. Una exportación web publicada necesita su propio proxy `/api` en el mismo dominio; Metro no se incluye en producción.
 
 Detalles del arreglo y comprobaciones: [correcciones de mobile](CORRECCIONES.md).
+
+Funcionamiento del acceso y alta de cuentas: [acceso de usuarios](ACCESO_USUARIOS.md).
