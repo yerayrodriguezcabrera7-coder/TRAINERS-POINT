@@ -33,13 +33,14 @@ Todo el contenido utiliza un cliente ficticio y precios ilustrativos. No se pide
 - `App.tsx`: entrada de la vista previa.
 - `src/preview/ClientPreview.tsx`: pantallas, navegación y recorrido simulado.
 - `src/preview/data.ts`: reservas ficticias con fechas relativas al día de apertura.
-- `src/LegacyApp.tsx` y `src/screens/`: primer esqueleto de acceso que aportó el compañero, conservado para revisar la integración. No se ejecuta en la vista previa; no se considera autenticación validada.
-- `../shared/`: API, tipos y temas del esqueleto compartido. Se revisarán sus contratos antes de conectar datos reales; la demo no los invoca.
+- `src/LegacyApp.tsx` y `src/screens/`: acceso al servidor y agenda real, conservados fuera de la vista previa. Permiten cambiar la contraseña provisional y muestran errores de conexión. Requieren configurar el servidor y no se consideran una app de producción validada.
+- `../shared/`: API, tipos, configuración, selección de reservas y pruebas compartidas. La vista previa no realiza llamadas al servidor.
 
 ## Validación local
 
 ```sh
 npm run typecheck
+npm run test:shared
 npm run export:web
 ```
 
@@ -47,7 +48,7 @@ Comprobar también navegación por las cuatro pestañas, filtro de agenda, detal
 
 ## Probar en un teléfono
 
-Esta base utiliza **Expo SDK 52**. No basta con instalar cualquier versión actual de Expo Go. En Android o simulador iOS se necesita una versión compatible; en iPhone físico no puede instalarse una versión antigua de Expo Go. Antes de distribuir la aplicación habrá que actualizar el SDK o preparar una compilación de desarrollo. No se ha contratado ningún servicio ni publicado en tiendas.
+Esta base utiliza **Expo SDK 58**, React Native 0.88 y React 19.3. Requiere Node 22.13 o posterior. En Android o simulador iOS se necesita una versión de Expo Go compatible con SDK 58 o una compilación de desarrollo. No se ha contratado ningún servicio ni publicado en tiendas. El arranque del simulador depende además de que Xcode tenga un runtime iOS válido instalado.
 
 Referencias oficiales: [compatibilidad de Expo Go](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/), [vista web de Expo](https://docs.expo.dev/workflow/web/).
 
@@ -59,7 +60,7 @@ Para una revisión visual desde el navegador del teléfono, se puede arrancar `n
 - Consumir las reservas y los bonos del mismo backend de la web; no duplicar bases de datos.
 - Configurar proveedor de cobro aprobado por la empresa. Confirmar pagos en el servidor mediante eventos firmados e idempotentes antes de activar bonos o marcar deudas como pagadas. La app no debe poder declarar un pago recibido.
 - Integrar notificaciones: permisos del dispositivo, tokens, tareas programadas, preferencias y control de duplicados.
-- Revisar dependencias del SDK antiguo antes de distribuir: la auditoría inicial detecta avisos en herramientas transitivas. No se ha aplicado una actualización mayor automática.
+- Mantener las dependencias de SDK 58 y los parches de herramientas transitivas alineados; los overrides de glob/minimatch corrigen avisos de seguridad del empaquetador.
 - Probar en Android/iOS reales, accesibilidad, recuperación de cuenta y errores de red.
 
 Rutinas, nutrición, medidas y actividades aparecen únicamente como futuras ampliaciones.

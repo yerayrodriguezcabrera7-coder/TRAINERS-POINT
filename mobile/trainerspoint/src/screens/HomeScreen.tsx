@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { trainersPointTheme } from "../../../shared/theme";
 import { ApiClient } from "../../../shared/api";
-import { Identity } from "../../../shared/types";
+import { CalendarData, Identity } from "../../../shared/types";
+import { localDay, upcomingBookings } from "../../../shared/calendar";
 
 interface HomeScreenProps {
   api: ApiClient;
@@ -19,24 +19,27 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) => {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<CalendarData | null>(null);
+  const [error, setError] = useState("");
 
-  const isTrainer = user.role === "TRAINER" || user.role === "ADMIN";
+  const isTrainer = user.role !== "CLIENT";
+  const upcoming = upcomingBookings(data);
+  const sessions = isTrainer ? upcoming.filter(booking => booking.date === localDay()) : upcoming;
 
   const loadData = async () => {
     setLoading(true);
+    setError("");
     try {
       if (isTrainer) {
-        const today = new Date().toISOString().split("T")[0];
-        const slots = await api.getStaffSlots(today);
-        setData(slots);
+        setData(await api.getStaffCalendar());
       } else {
         const calendar = await api.getClientCalendar();
         setData(calendar);
       }
-    } catch (e: any) {
-      Alert.alert("Aviso", e.message || "No se pudieron cargar los datos.");
+    } catch (e: unknown) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "No se pudieron cargar los datos.");
     } finally {
       setLoading(false);
     }
@@ -44,7 +47,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [api, user.id]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -53,9 +56,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
         <View>
           <Text style={styles.greeting}>Hola,</Text>
           <Text style={styles.userName}>{user.name || user.username}</Text>
-          <Text style={styles.roleBadge}>{user.role === "CLIENT" ? "Socio" : "Entrenador"}</Text>
+          <Text style={styles.roleBadge}>{{ CLIENT: "Cliente", TRAINER: "Entrenador / Trabajador", ADMIN: "Administración", RECEPTION: "Recepción" }[user.role]}</Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+        <TouchableOpacity accessibilityRole="button" style={styles.logoutButton} onPress={onLogout}>
           <Text style={styles.logoutText}>Salir</Text>
         </TouchableOpacity>
       </View>
@@ -66,7 +69,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
           {isTrainer ? "Agenda de Hoy" : "Tu Próximo Entrenamiento"}
         </Text>
         <Text style={styles.heroSubtitle}>
-          Sede: {api.getGymId()}
+          {isTrainer ? "Tus reservas de hoy" : "Tus próximas reservas"}
         </Text>
 
         {loading ? (
@@ -75,47 +78,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
           <View style={styles.statsContainer}>
             <View style={styles.statBox}>
               <Text style={styles.statNumber}>
-                {isTrainer ? (data?.slots?.length ?? 0) : (data?.upcoming?.length ?? 1)}
+                {error ? "—" : sessions.length}
               </Text>
               <Text style={styles.statLabel}>
-                {isTrainer ? "Sesiones asignadas" : "Sesiones restantes"}
+                {isTrainer ? "Reservas de hoy" : "Reservas próximas"}
               </Text>
             </View>
           </View>
         )}
       </View>
 
-      {/* Acciones Rápidas */}
+      {!!error && <Text accessibilityRole="alert" style={{ color: "#a52c20", marginBottom: 16 }}>{error}</Text>}
+      {sessions.map(booking => <View key={booking.id} style={[styles.actionCard, { marginBottom: 12 }]}>
+        <Text style={styles.actionTitle}>{data?.services.find(service => service.id === booking.serviceId)?.name || "Sesión"}</Text>
+        <Text style={styles.actionDesc}>{booking.date} · {booking.start} – {booking.end}</Text>
+        <Text style={styles.actionDesc}>{data?.employees.find(employee => employee.id === booking.employeeId)?.name || "Pendiente de asignar"}</Text>
+        <Text style={styles.actionDesc}>{booking.centerName || "Consulta el centro con recepción"}</Text>
+        {!!booking.centerAddress && <Text style={styles.actionDesc}>{booking.centerAddress}</Text>}
+      </View>)}
+      {!loading && !error && !sessions.length && <Text style={styles.actionDesc}>No hay reservas para mostrar.</Text>}
       <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
       <View style={styles.actionsGrid}>
-        {isTrainer ? (
-          <>
-            <TouchableOpacity style={styles.actionCard} onPress={loadData}>
+            <TouchableOpacity accessibilityRole="button" style={styles.actionCard} onPress={loadData}>
               <Text style={styles.actionIcon}>📋</Text>
-              <Text style={styles.actionTitle}>Ver Agenda</Text>
-              <Text style={styles.actionDesc}>Consulta tus citas del día</Text>
+              <Text style={styles.actionTitle}>Actualizar agenda</Text>
+              <Text style={styles.actionDesc}>Consultar las últimas reservas</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard} onPress={() => Alert.alert("Asistencia", "Selecciona una reserva para pasar lista.")}>
-              <Text style={styles.actionIcon}>✅</Text>
-              <Text style={styles.actionTitle}>Check-in</Text>
-              <Text style={styles.actionDesc}>Marcar asistencia de alumno</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity style={styles.actionCard} onPress={() => Alert.alert("Reservar", "Abre el selector de horas disponibles.")}>
-              <Text style={styles.actionIcon}>📅</Text>
-              <Text style={styles.actionTitle}>Reservar Sesión</Text>
-              <Text style={styles.actionDesc}>Elige día y hora con tu coach</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionCard} onPress={() => Alert.alert("Rutina", "Mostrando el plan de entreno activo.")}>
-              <Text style={styles.actionIcon}>🏋️</Text>
-              <Text style={styles.actionTitle}>Mi Rutina</Text>
-              <Text style={styles.actionDesc}>Ejercicios y series</Text>
-            </TouchableOpacity>
-          </>
-        )}
       </View>
+      <Text style={styles.actionDesc}>Para crear o cambiar una cita, contacta con recepción. Las rutinas móviles estarán disponibles en una próxima fase.</Text>
     </ScrollView>
   );
 };

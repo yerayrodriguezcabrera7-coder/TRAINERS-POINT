@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { cobosuTheme } from "../../../shared/theme";
 import { ApiClient } from "../../../shared/api";
-import { Identity } from "../../../shared/types";
+import { CalendarData, Identity } from "../../../shared/types";
+import { upcomingBookings } from "../../../shared/calendar";
 
 interface HomeScreenProps {
   api: ApiClient;
@@ -19,16 +19,20 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) => {
-  const [loading, setLoading] = useState(false);
-  const [calendar, setCalendar] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [calendar, setCalendar] = useState<CalendarData | null>(null);
+  const [error, setError] = useState("");
+  const bookings = upcomingBookings(calendar);
 
   const loadData = async () => {
     setLoading(true);
+    setError("");
     try {
       const data = await api.getClientCalendar();
       setCalendar(data);
-    } catch (e: any) {
-      Alert.alert("Aviso", e.message || "No se pudieron obtener las reservas.");
+    } catch (e: unknown) {
+      setCalendar(null);
+      setError(e instanceof Error ? e.message : "No se pudieron obtener las reservas.");
     } finally {
       setLoading(false);
     }
@@ -36,7 +40,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [api, user.id]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -47,15 +51,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
           <Text style={styles.userName}>{user.name || user.username}</Text>
           <Text style={styles.gymTag}>COBOSU TRAINING</Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+        <TouchableOpacity accessibilityRole="button" style={styles.logoutButton} onPress={onLogout}>
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </TouchableOpacity>
       </View>
 
       {/* Tarjeta de socio */}
       <View style={styles.memberCard}>
-        <Text style={styles.memberCardEyebrow}>ESTADO DEL SOCIO</Text>
-        <Text style={styles.memberCardTitle}>Tu Plan Activo</Text>
+        <Text style={styles.memberCardEyebrow}>TU AGENDA</Text>
+        <Text style={styles.memberCardTitle}>Próximas reservas</Text>
 
         {loading ? (
           <ActivityIndicator color="#fff" style={{ marginVertical: 16 }} />
@@ -63,44 +67,48 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) =
           <View style={styles.badgeRow}>
             <View style={styles.badge}>
               <Text style={styles.badgeNumber}>
-                {calendar?.upcoming?.length ?? 1}
+                {error ? "—" : bookings.length}
               </Text>
-              <Text style={styles.badgeLabel}>Próxima sesión</Text>
-            </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeNumber}>Activo</Text>
-              <Text style={styles.badgeLabel}>Estado de cuota</Text>
+              <Text style={styles.badgeLabel}>Reservas próximas</Text>
             </View>
           </View>
         )}
       </View>
 
-      {/* Menú de acciones */}
+      {!!error && <Text accessibilityRole="alert" style={{ color: "#a52c20", marginBottom: 16 }}>{error}</Text>}
+      {bookings.map(booking => <View key={booking.id} style={[styles.card, { marginBottom: 12 }]}>
+        <Text style={styles.cardTitle}>{calendar?.services.find(service => service.id === booking.serviceId)?.name || "Sesión"}</Text>
+        <Text style={styles.cardDesc}>{booking.date} · {booking.start} – {booking.end}</Text>
+        <Text style={styles.cardDesc}>{calendar?.employees.find(employee => employee.id === booking.employeeId)?.name || "Pendiente de asignar"}</Text>
+        <Text style={styles.cardDesc}>{booking.centerName || "Consulta el centro con recepción"}</Text>
+        {!!booking.centerAddress && <Text style={styles.cardDesc}>{booking.centerAddress}</Text>}
+      </View>)}
+      {!loading && !error && !bookings.length && <Text style={styles.cardDesc}>No hay próximas reservas.</Text>}
       <Text style={styles.sectionTitle}>Servicios de Sala</Text>
       <View style={styles.grid}>
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Reservas", "Abriendo calendario de citas...")}>
+        <TouchableOpacity accessibilityRole="button" style={styles.card} onPress={loadData}>
           <Text style={styles.icon}>📅</Text>
-          <Text style={styles.cardTitle}>Reservar Cita</Text>
-          <Text style={styles.cardDesc}>Elige tu sesión semanal</Text>
+          <Text style={styles.cardTitle}>Actualizar agenda</Text>
+          <Text style={styles.cardDesc}>Consultar las últimas reservas</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Rutina", "Cargando tus ejercicios asignados...")}>
+        <View style={styles.card}>
           <Text style={styles.icon}>💪</Text>
           <Text style={styles.cardTitle}>Mi Entrenamiento</Text>
-          <Text style={styles.cardDesc}>Rutinas, series y pesos</Text>
-        </TouchableOpacity>
+          <Text style={styles.cardDesc}>Próximamente · Rutinas, series y pesos</Text>
+        </View>
 
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Progreso", "Cargando histórico de peso y medidas...")}>
+        <View style={styles.card}>
           <Text style={styles.icon}>📈</Text>
           <Text style={styles.cardTitle}>Mi Evolución</Text>
-          <Text style={styles.cardDesc}>Peso, medidas corporales</Text>
-        </TouchableOpacity>
+          <Text style={styles.cardDesc}>Próximamente · Peso y medidas corporales</Text>
+        </View>
 
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Contacto", "Llamar o escribir a recepción...")}>
+        <View style={styles.card}>
           <Text style={styles.icon}>💬</Text>
           <Text style={styles.cardTitle}>Atención al Socio</Text>
-          <Text style={styles.cardDesc}>Dudas o cambios de cita</Text>
-        </TouchableOpacity>
+          <Text style={styles.cardDesc}>Para dudas o cambios de cita, contacta con recepción del centro.</Text>
+        </View>
       </View>
     </ScrollView>
   );

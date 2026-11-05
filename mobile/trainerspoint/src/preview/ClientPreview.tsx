@@ -22,7 +22,7 @@ export function ClientPreview() {
   const [read, setRead] = useState(false);
   const [method, setMethod] = useState('Tarjeta');
   const [filter, setFilter] = useState('Todas');
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const next = sessions[0];
   const navigate = (target: Tab) => { setTab(target); scroll.current?.scrollTo({ y: 0, animated: false }); };
   const openSession = (session: Session) => { setSelected(session); setOverlay('session'); };

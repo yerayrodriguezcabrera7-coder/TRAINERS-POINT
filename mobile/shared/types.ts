@@ -30,7 +30,7 @@ export interface ClientProfile {
   phone: string;
   status: "LEAD" | "ACTIVO" | "INACTIVO" | "BAJA";
   objective?: string;
-  injuries?: any;
+  injuries?: unknown;
   notes?: string;
   sessionsPerWeek?: number;
 }
@@ -45,8 +45,34 @@ export interface Booking {
   serviceName?: string;
   date: string; // YYYY-MM-DD
   start: string; // HH:mm
-  status: "PENDIENTE" | "CONFIRMADA" | "COMPLETADA" | "CANCELADA";
+  end: string;
+  roomId: string;
+  version: number;
+  centerName?: string;
+  centerAddress?: string;
+  status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
   notes?: string;
+}
+
+export interface CalendarData {
+  bookings: Booking[];
+  services: Array<{ id: string; name: string }>;
+  employees: Array<{ id: string; name: string }>;
+  rooms: Array<{ id: string; name: string }>;
+}
+
+export interface SlotQuery {
+  date: string;
+  serviceId: string;
+  employeeId: string;
+  roomId: string;
+}
+
+export interface ClientReservation extends SlotQuery {
+  start: string;
+  notes?: string;
+  packageId?: string | null;
+  recoveryId?: string | null;
 }
 
 export interface ServicePackage {
@@ -65,23 +91,23 @@ export interface TrainingPlan {
   name: string;
   goals?: string;
   details?: {
-    weeks?: Array<{
+    version?: number;
+    days?: Array<{
       name: string;
-      days: Array<{
-        dayName: string;
-        exercises: Array<{
+      weekday: number;
+      exercises: Array<{
           name: string;
           sets: number;
-          reps: string;
-          restSeconds?: number;
+          repetitions: string;
+          rest: string;
+          load: string;
           notes?: string;
-        }>;
       }>;
     }>;
   };
   status: "BORRADOR" | "ACTIVO" | "COMPLETADO" | "ARCHIVADO";
   startsAt?: string;
-  endsAt?: string;
+  endsAt?: string | null;
 }
 
 export interface Measurement {

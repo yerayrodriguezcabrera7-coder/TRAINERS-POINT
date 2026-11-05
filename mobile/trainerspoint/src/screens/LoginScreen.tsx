@@ -6,16 +6,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { trainersPointTheme } from "../../../shared/theme";
 import { ApiClient } from "../../../shared/api";
+import type { Identity } from "../../../shared/types";
 
 interface LoginScreenProps {
   api: ApiClient;
-  onLoginSuccess: (user: any) => void;
+  onLoginSuccess: (user: Identity) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess }) => {
@@ -23,24 +24,39 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
   const [password, setPassword] = useState("");
   const [portal, setPortal] = useState<"TRAINER" | "CLIENT">("CLIENT");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [mustChange, setMustChange] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const handleLogin = async () => {
+    if (loading) return;
+    setError("");
     if (!username.trim() || !password.trim()) {
-      Alert.alert("Campos requeridos", "Por favor introduce tu usuario y contraseña.");
+      setError("Introduce tu usuario y contraseña.");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await api.login({
+      if (mustChange) {
+        if (newPassword.length < 12 || newPassword !== confirmPassword) {
+          setError("Escribe una contraseña nueva de al menos 12 caracteres y repítela igual.");
+          return;
+        }
+        await api.changePassword(password, newPassword, confirmPassword);
+      } else {
+        const response = await api.login({
         username: username.trim(),
         password,
         portal,
-      });
+        });
+        if (response.mustChangePassword) { setMustChange(true); return; }
+      }
       const me = await api.getMe();
       onLoginSuccess(me);
-    } catch (error: any) {
-      Alert.alert("Error de acceso", error.message || "Credenciales incorrectas.");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "No se ha podido iniciar sesión.");
     } finally {
       setLoading(false);
     }
@@ -51,15 +67,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <View style={styles.card}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}><View style={styles.card}>
         <View style={styles.header}>
           <Text style={styles.brandTitle}>TRAINERS POINT</Text>
           <Text style={styles.subtitle}>Inicia sesión para gestionar tus entrenamientos</Text>
         </View>
 
         {/* Selector de perfil / portal */}
-        <View style={styles.portalToggle}>
+        {!mustChange && <View style={styles.portalToggle}>
           <TouchableOpacity
+            accessibilityRole="button"
             style={[styles.portalButton, portal === "CLIENT" && styles.portalButtonActive]}
             onPress={() => setPortal("CLIENT")}
           >
@@ -68,14 +85,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
+            accessibilityRole="button"
             style={[styles.portalButton, portal === "TRAINER" && styles.portalButtonActive]}
             onPress={() => setPortal("TRAINER")}
           >
             <Text style={[styles.portalText, portal === "TRAINER" && styles.portalTextActive]}>
-              Entrenador
+              Entrenador / Trabajador
             </Text>
           </TouchableOpacity>
-        </View>
+        </View>}
 
         <View style={styles.form}>
           <Text style={styles.label}>Usuario</Text>
@@ -84,6 +102,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             placeholder="ej. maria.lopez"
             value={username}
             onChangeText={setUsername}
+            editable={!loading && !mustChange}
+            accessibilityLabel="Usuario"
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -94,10 +114,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             placeholder="••••••••••••"
             value={password}
             onChangeText={setPassword}
+            editable={!loading && !mustChange}
+            accessibilityLabel="Contraseña"
             secureTextEntry
           />
 
+          {mustChange && <>
+            <Text>Para continuar debes cambiar tu contraseña provisional.</Text>
+            <Text style={styles.label}>Nueva contraseña (mínimo 12 caracteres)</Text>
+            <TextInput accessibilityLabel="Nueva contraseña" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry editable={!loading} />
+            <Text style={styles.label}>Repite la nueva contraseña</Text>
+            <TextInput accessibilityLabel="Repite la nueva contraseña" style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry editable={!loading} />
+          </>}
+          {!!error && <Text accessibilityRole="alert" style={{ color: "#a52c20", marginVertical: 12 }}>{error}</Text>}
+
           <TouchableOpacity
+            accessibilityRole="button"
             style={styles.submitButton}
             onPress={handleLogin}
             disabled={loading}
@@ -105,11 +137,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitButtonText}>Entrar a Trainers Point</Text>
+              <Text style={styles.submitButtonText}>{mustChange ? "Guardar contraseña y entrar" : "Entrar a Trainers Point"}</Text>
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </View></ScrollView>
     </KeyboardAvoidingView>
   );
 };

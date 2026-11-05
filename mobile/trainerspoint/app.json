@@ -5,10 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#fffdf9"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.trainerspoint.app"
