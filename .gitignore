@@ -9,3 +9,15 @@ dist
 backups/
 deploy/.env
 *.dump
+
+# Mobile (Expo / React Native)
+mobile/**/node_modules/
+mobile/**/.expo/
+mobile/**/dist/
+mobile/**/web-build/
+mobile/**/*.jks
+mobile/**/*.p8
+mobile/**/*.p12
+mobile/**/*.key
+mobile/**/*.mobileprovision
+
