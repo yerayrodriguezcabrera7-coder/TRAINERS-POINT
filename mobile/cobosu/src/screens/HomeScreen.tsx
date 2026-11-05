@@ -19,17 +19,29 @@ export interface UserVoucher {
   isLow: boolean;
 }
 
+export interface NextApptSummary {
+  id: string;
+  serviceName: string;
+  centerName: string;
+  dateFormatted: string;
+  timeSlot: string;
+}
+
 interface HomeScreenProps {
   userName?: string;
   vouchers?: UserVoucher[];
+  upcomingAppointment?: NextApptSummary | null;
   onPressBuyMore?: () => void;
+  onPressReservar?: () => void;
   onLogout?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   userName = "YERAY",
   vouchers: propVouchers,
+  upcomingAppointment,
   onPressBuyMore,
+  onPressReservar,
   onLogout,
 }) => {
   const initialVouchers: UserVoucher[] = [
@@ -134,6 +146,37 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <Text style={styles.ctaButtonArrow}>→</Text>
         </TouchableOpacity>
 
+        {/* PRÓXIMA CITA / SIGUIENTE RESERVA (SI EXISTE) */}
+        {upcomingAppointment ? (
+          <TouchableOpacity
+            style={styles.nextApptCard}
+            onPress={onPressReservar}
+            activeOpacity={0.85}
+          >
+            <View style={styles.nextApptTop}>
+              <View style={styles.nextApptBadge}>
+                <View style={styles.nextApptDot} />
+                <Text style={styles.nextApptBadgeText}>SIGUIENTE RESERVA</Text>
+              </View>
+              <Text style={styles.nextApptLinkText}>GESTIONAR →</Text>
+            </View>
+
+            <Text style={styles.nextApptTitle}>{upcomingAppointment.serviceName}</Text>
+            <Text style={styles.nextApptDetails}>
+              📍 {upcomingAppointment.centerName} · {upcomingAppointment.dateFormatted} a las {upcomingAppointment.timeSlot} h
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.noApptBanner}
+            onPress={onPressReservar}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.noApptTitle}>NO TIENES CITAS PROGRAMADAS</Text>
+            <Text style={styles.noApptLink}>PULSA AQUÍ PARA RESERVAR CITA →</Text>
+          </TouchableOpacity>
+        )}
+
         {/* 4. SECCIÓN TÉCNICA: DESGLOSE DE BONOS */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>ESTADO DE TUS BONOS</Text>
@@ -216,7 +259,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => Alert.alert("Reservar", "Próximo paso: calendario de citas.")}
+          onPress={onPressReservar}
         >
           <Text style={styles.navLabel}>RESERVAR</Text>
         </TouchableOpacity>
@@ -397,7 +440,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 28,
+    marginBottom: 16,
   },
   ctaButtonText: {
     color: "#ffffff",
@@ -409,6 +452,77 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 18,
     fontWeight: "900",
+  },
+  nextApptCard: {
+    backgroundColor: "#121215",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 4,
+    padding: 16,
+    marginBottom: 24,
+  },
+  nextApptTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  nextApptBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  nextApptDot: {
+    width: 6,
+    height: 6,
+    backgroundColor: "#22c55e",
+  },
+  nextApptBadgeText: {
+    color: "#22c55e",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  nextApptLinkText: {
+    color: "#a1a1aa",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  nextApptTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 0.3,
+  },
+  nextApptDetails: {
+    fontSize: 11,
+    color: "#a1a1aa",
+    marginTop: 4,
+    fontWeight: "600",
+  },
+  noApptBanner: {
+    backgroundColor: "#121215",
+    borderWidth: 1,
+    borderColor: "#1f1f23",
+    borderRadius: 4,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  noApptTitle: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#71717a",
+    letterSpacing: 1.2,
+  },
+  noApptLink: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: "#dc2626",
+    letterSpacing: 1,
   },
   sectionHeader: {
     flexDirection: "row",
