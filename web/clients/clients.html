@@ -67,6 +67,18 @@
               <span class="results-count" id="results-count"></span>
             </div>
 
+            <div class="brand-filter-bar" role="tablist" aria-label="Filtrar por marca">
+              <button class="brand-filter-btn active" type="button" data-brand="all" aria-selected="true">
+                Todos los clientes <span class="brand-counter" id="brand-count-all">0</span>
+              </button>
+              <button class="brand-filter-btn brand-tp" type="button" data-brand="trainerspoint" aria-selected="false">
+                <span class="brand-indicator tp-indicator"></span> Trainers Point <span class="brand-counter" id="brand-count-tp">0</span>
+              </button>
+              <button class="brand-filter-btn brand-cobosu" type="button" data-brand="cobosu" aria-selected="false">
+                <span class="brand-indicator cobosu-indicator"></span> Cobosu <span class="brand-counter" id="brand-count-cobosu">0</span>
+              </button>
+            </div>
+
             <div class="client-filter-chips" role="group" aria-label="Filtrar clientes">
               <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">Todos</button>
               <button class="filter-chip" type="button" data-filter="today" aria-pressed="false">Hoy</button>

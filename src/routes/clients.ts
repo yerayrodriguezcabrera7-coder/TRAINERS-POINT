@@ -301,6 +301,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
     const search = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
     const status = url.searchParams.get("status") ?? "";
     const gymId = url.searchParams.get("gymId") ?? "";
+    const brand = url.searchParams.get("brand")?.trim().toLowerCase() ?? "";
     if (status && !validStatuses.includes(status as ClientStatus)) {
       sendError(response, 400, "El filtro de estado no es válido.");
       return true;
@@ -313,6 +314,11 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
     const where: Prisma.ClientWhereInput = {
       ...(status ? { status: status as ClientStatus } : {}),
       ...(gymId ? { gymId } : {}),
+      ...(brand === "cobosu"
+        ? { gym: { name: { contains: "Cobosu", mode: "insensitive" } } }
+        : brand === "trainerspoint"
+          ? { gym: { NOT: { name: { contains: "Cobosu", mode: "insensitive" } } } }
+          : {}),
       ...(search
         ? {
           OR: [
@@ -351,7 +357,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         where.id = "00000000-0000-0000-0000-000000000000";
       }
     }
-    const [clients, total, grouped] = await Promise.all([
+    const [clients, total, grouped, cobosuCount, tpCount] = await Promise.all([
       prisma.client.findMany({
         where,
         select: {
@@ -414,6 +420,8 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       }),
       prisma.client.count({ where }),
       prisma.client.groupBy({ where, by: ["status"], _count: { _all: true } }),
+      prisma.client.count({ where: { gym: { name: { contains: "Cobosu", mode: "insensitive" } } } }),
+      prisma.client.count({ where: { gym: { NOT: { name: { contains: "Cobosu", mode: "insensitive" } } } } }),
     ]);
     sendJson(response, 200, {
       clients: clients.map((client) => {
@@ -424,8 +432,10 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         const pendingPayments = client.servicePackages.filter((servicePackage) => servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
           servicePackage.paymentStatus === PaymentStatus.FALLIDO).length;
         const { servicePackages, bookings, ...clientDetails } = client;
+        const isCobosu = (client.gym?.name || "").toLowerCase().includes("cobosu");
         return {
           ...clientDetails,
+          brand: isCobosu ? "COBOSU" : "TRAINERS_POINT",
           nextSession: bookings[0] ?? null,
           remainingSessions: Math.max(0, sessionsBought - sessionsCommitted),
           pendingPayments,
@@ -433,6 +443,11 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         };
       }),
       total,
+      brandCounts: {
+        all: cobosuCount + tpCount,
+        cobosu: cobosuCount,
+        trainerspoint: tpCount
+      },
       counts: Object.fromEntries(grouped.map((entry) => [entry.status, entry._count._all])),
       limit: 100,
     });

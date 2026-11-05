@@ -1597,3 +1597,123 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
   color: var(--tp-ink);
   font-weight: 700;
 }
+
+/* Brand Filter Bar & Badges (Trainers Point & Cobosu) */
+.brand-filter-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 18px;
+  background: #f7f9f8;
+  border-bottom: 1px solid var(--tp-line);
+  overflow-x: auto;
+}
+
+.brand-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--tp-line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.brand-filter-btn:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.brand-filter-btn.active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.brand-filter-btn.brand-tp.active {
+  background: #ea580c;
+  border-color: #ea580c;
+  color: #ffffff;
+}
+
+.brand-filter-btn.brand-cobosu.active {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+.brand-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tp-indicator {
+  background: #ff7f0a;
+}
+
+.cobosu-indicator {
+  background: #dc2626;
+}
+
+.brand-counter {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.brand-filter-btn.active .brand-counter {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.client-brand-pill {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.client-brand-pill.brand-cobosu {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.client-brand-pill.brand-tp {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+}
+
+.client-card-modern.is-cobosu {
+  border-left: 3px solid #dc2626;
+}
+
+.client-card-modern.is-tp {
+  border-left: 3px solid #ff7f0a;
+}
+
+.client-avatar.is-cobosu {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.client-avatar.is-tp {
+  background: #ffedd5;
+  color: #c2410c;
+}

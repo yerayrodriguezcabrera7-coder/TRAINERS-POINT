@@ -87,14 +87,18 @@ async function loadBookingClients() {
   try {
     const result = await api('clients?all=true');
     awsClientsLoaded = true;
-    awsClients = (result.clients || []).map(client => ({
-      id: client.id,
-      name: `${client.firstName} ${client.lastName}`.trim(),
-      email: client.email || '',
-      phone: client.phone || '',
-      notes: client.notes || '',
-      status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
-    }));
+    awsClients = (result.clients || []).map(client => {
+      const isCobosu = client.brand === 'COBOSU' || (client.gym?.name || '').toLowerCase().includes('cobosu');
+      const brandTag = isCobosu ? '[COBOSU]' : '[TP]';
+      return {
+        id: client.id,
+        name: `${brandTag} ${client.firstName} ${client.lastName}`.trim(),
+        email: client.email || '',
+        phone: client.phone || '',
+        notes: client.notes || '',
+        status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
+      };
+    });
   } catch (_) {
     awsClientsLoaded = false;
   }

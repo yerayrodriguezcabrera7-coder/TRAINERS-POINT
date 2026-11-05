@@ -31,6 +31,8 @@ const clearSearchButton = document.querySelector("#clear-search");
 const gymFilter = document.querySelector("#gym-filter");
 const gymFilterWrapper = document.querySelector("#gym-filter-wrapper");
 const clientFilterButtons = [...document.querySelectorAll(".filter-chip")];
+const brandFilterButtons = [...document.querySelectorAll(".brand-filter-btn")];
+let activeBrand = new URLSearchParams(window.location.search).get("marca") || "all";
 const validFilters = new Set(["all", "today", "attention", "pending-payment", "no-sessions", "leads", "low-sessions", "inactive"]);
 const initialFilter = new URLSearchParams(window.location.search).get("filtro");
 const explicitlySelectedToday = sessionStorage.getItem("clients-today-filter-explicit") === "true";
@@ -438,6 +440,7 @@ async function loadClients() {
   params.set("all", "true");
   if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
   if (gymFilter.value) params.set("gymId", gymFilter.value);
+  if (activeBrand && activeBrand !== "all") params.set("brand", activeBrand);
 
   try {
     const response = await fetch(`/api/clients?${params}`, {
@@ -457,6 +460,14 @@ async function loadClients() {
     });
     clientsData = clients;
     document.querySelector("#heading-count").textContent = `(${data.total})`;
+    if (data.brandCounts) {
+      const bAll = document.querySelector("#brand-count-all");
+      const bTp = document.querySelector("#brand-count-tp");
+      const bCb = document.querySelector("#brand-count-cobosu");
+      if (bAll) bAll.textContent = data.brandCounts.all;
+      if (bTp) bTp.textContent = data.brandCounts.trainerspoint;
+      if (bCb) bCb.textContent = data.brandCounts.cobosu;
+    }
     document.querySelector("#count-attention").textContent = clients.filter((client) => clientMatchesFilter(client, "attention")).length;
     document.querySelector("#count-today").textContent = clients.filter((client) => client.nextSession && isToday(client.nextSession.startTime)).length;
     document.querySelector("#count-low-sessions").textContent = clients.filter((client) => clientMatchesFilter(client, "low-sessions")).length;
@@ -503,20 +514,54 @@ function renderGyms() {
     return;
   }
 
+  const cobosuGyms = gyms.filter(g => g.name.toLowerCase().includes("cobosu"));
+  const tpGyms = gyms.filter(g => !g.name.toLowerCase().includes("cobosu"));
+
+  if (tpGyms.length) {
+    const tpFilterGroup = document.createElement("optgroup");
+    tpFilterGroup.label = "Trainers Point";
+    const tpCreateGroup = document.createElement("optgroup");
+    tpCreateGroup.label = "Trainers Point";
+    tpGyms.forEach(g => {
+      const fo = document.createElement("option");
+      fo.value = g.id;
+      fo.textContent = g.name;
+      tpFilterGroup.append(fo);
+
+      const co = document.createElement("option");
+      co.value = g.id;
+      co.textContent = g.name;
+      tpCreateGroup.append(co);
+    });
+    gymFilter.append(tpFilterGroup);
+    createGymSelect.append(tpCreateGroup);
+  }
+
+  if (cobosuGyms.length) {
+    const cbFilterGroup = document.createElement("optgroup");
+    cbFilterGroup.label = "Cobosu";
+    const cbCreateGroup = document.createElement("optgroup");
+    cbCreateGroup.label = "Cobosu";
+    cobosuGyms.forEach(g => {
+      const fo = document.createElement("option");
+      fo.value = g.id;
+      fo.textContent = g.name;
+      cbFilterGroup.append(fo);
+
+      const co = document.createElement("option");
+      co.value = g.id;
+      co.textContent = g.name;
+      cbCreateGroup.append(co);
+    });
+    gymFilter.append(cbFilterGroup);
+    createGymSelect.append(cbCreateGroup);
+  }
+
   gyms.forEach((gym) => {
-    const filterOption = document.createElement("option");
-    filterOption.value = gym.id;
-    filterOption.textContent = gym.name;
-    gymFilter.append(filterOption);
-
-    const clientOption = document.createElement("option");
-    clientOption.value = gym.id;
-    clientOption.textContent = gym.name;
-    createGymSelect.append(clientOption);
-
     const card = document.createElement("button");
     card.type = "button";
-    card.className = `gym-card${gymFilter.value === gym.id ? " selected" : ""}`;
+    const isCobosu = gym.name.toLowerCase().includes("cobosu");
+    card.className = `gym-card${gymFilter.value === gym.id ? " selected" : ""}${isCobosu ? " gym-card-cobosu" : " gym-card-tp"}`;
     card.setAttribute("aria-label", `Ver clientes de ${gym.name}`);
     const icon = document.createElement("span");
     icon.className = "gym-card-icon";
@@ -1351,6 +1396,30 @@ document.querySelector("#open-intake-service-create").addEventListener("click", 
   serviceCreateForm.elements.name.focus();
 });
 document.querySelector("#refresh-list").addEventListener("click", loadClients);
+function setActiveBrand(brand) {
+  activeBrand = brand;
+  brandFilterButtons.forEach(btn => {
+    const isSel = btn.dataset.brand === activeBrand;
+    btn.classList.toggle("active", isSel);
+    btn.setAttribute("aria-selected", String(isSel));
+  });
+  // Auto-filtrar centros compatibles si se selecciona una marca
+  if (brand === "cobosu") {
+    const cobosuGym = gyms.find(g => g.name.toLowerCase().includes("cobosu"));
+    if (cobosuGym && gymFilter.value && !gyms.find(g => g.id === gymFilter.value)?.name.toLowerCase().includes("cobosu")) {
+      gymFilter.value = "";
+    }
+  } else if (brand === "trainerspoint") {
+    const tpGym = gyms.find(g => !g.name.toLowerCase().includes("cobosu"));
+    if (tpGym && gymFilter.value && gyms.find(g => g.id === gymFilter.value)?.name.toLowerCase().includes("cobosu")) {
+      gymFilter.value = "";
+    }
+  }
+  loadClients();
+}
+brandFilterButtons.forEach((btn) => {
+  btn.addEventListener("click", () => setActiveBrand(btn.dataset.brand));
+});
 clientFilterButtons.forEach((button) => {
   button.addEventListener("click", () => setActiveFilter(button.dataset.filter));
 });
@@ -1686,21 +1755,30 @@ function renderClient(client) {
   if (signal) card.classList.add(`client-card-signal-${signal.type}`);
   const clientName = `${client.firstName} ${client.lastName}`.trim();
   const centerName = client.gym?.name || "Sin centro";
+  const isCobosu = client.brand === "COBOSU" || centerName.toLowerCase().includes("cobosu");
+  if (isCobosu) {
+    card.classList.add("is-cobosu");
+  } else {
+    card.classList.add("is-tp");
+  }
   card.setAttribute(
     "aria-label",
-    `Ver ficha de ${clientName}${signal ? `. ${signal.text}` : ""}. Centro: ${centerName}.`,
+    `Ver ficha de ${clientName}${signal ? `. ${signal.text}` : ""}. Centro: ${centerName}. Marca: ${isCobosu ? "Cobosu" : "Trainers Point"}.`,
   );
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
   const avatar = document.createElement("span");
-  avatar.className = `client-avatar client-avatar-tone-${getClientAvatarTone(client)}`;
+  avatar.className = `client-avatar client-avatar-tone-${getClientAvatarTone(client)} ${isCobosu ? "is-cobosu" : "is-tp"}`;
   avatar.setAttribute("aria-hidden", "true");
   avatar.textContent = `${client.firstName?.trim().charAt(0) ?? ""}${client.lastName?.trim().charAt(0) ?? ""}`.toLocaleUpperCase("es");
   const nameBlock = document.createElement("span");
   const name = document.createElement("strong");
   name.className = "client-card-name";
   name.textContent = clientName;
-  nameBlock.append(name);
+  const brandBadge = document.createElement("span");
+  brandBadge.className = `client-brand-pill ${isCobosu ? "brand-cobosu" : "brand-tp"}`;
+  brandBadge.textContent = isCobosu ? "COBOSU" : "TRAINERS POINT";
+  nameBlock.append(name, brandBadge);
   identity.append(avatar, nameBlock);
 
   const details = document.createElement("div");
