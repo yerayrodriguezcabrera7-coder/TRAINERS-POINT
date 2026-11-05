@@ -10,8 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { trainersPointTheme } from "../../shared/theme";
-import { ApiClient } from "../../shared/api";
+import { trainersPointTheme } from "../../../shared/theme";
+import { ApiClient } from "../../../shared/api";
 
 interface LoginScreenProps {
   api: ApiClient;

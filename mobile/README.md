@@ -1,40 +1,27 @@
-# Aplicaciones Móviles de Trainers Point & Cobosu
+# Aplicaciones móviles de Trainers Point y Cobosu
 
-Este directorio contiene las 2 aplicaciones móviles desarrolladas con **React Native + Expo (TypeScript)** conectadas al backend de Trainers Point:
+El compañero añadió dos bases React Native + Expo:
 
-1. **`trainerspoint/`**: Aplicación de Trainers Point (identificador `com.trainerspoint.app`).
-2. **`cobosu/`**: Aplicación del centro Cobosu (identificador `com.cobosu.app`).
-3. **`shared/`**: Lógica compartida (cliente HTTP `api.ts`, tipos de datos `types.ts` y temas de color `theme.ts`).
+- **`trainerspoint/`**: aplicación de Trainers Point. Incluye una **vista previa navegable con datos ficticios**, todavía sin conexión a cobros ni al backend.
+- **`cobosu/`**: esqueleto original del segundo centro; pendiente de revisión e integración.
+- **`shared/`**: cliente HTTP, tipos y temas del esqueleto. Los contratos deben contrastarse con el backend antes de usarlos en producción.
 
----
+## Ver el diseño de Trainers Point
 
-## Cómo ejecutarlas en desarrollo
+Desde la raíz del repositorio:
 
-### 1. Inicia el servidor backend (en la raíz del proyecto)
-```bash
-npm run dev
-```
-
-### 2. Para arrancar la app de Trainers Point
-```bash
+```sh
 cd mobile/trainerspoint
-npm install
-npm start
+npm ci
+npm run web -- --localhost --port 8081
 ```
 
-### 3. Para arrancar la app de Cobosu
-```bash
-cd mobile/cobosu
-npm install
-npm start
-```
+Abrir http://localhost:8081. No hace falta iniciar la base de datos ni introducir credenciales.
 
----
+Consulta [el recorrido de prueba, organización del código y trabajo pendiente](trainerspoint/README.md).
 
-## Cómo probar en tu teléfono móvil físico
+## Desarrollo nativo
 
-1. Descarga la app gratuita **Expo Go** desde Google Play (Android) o App Store (iOS).
-2. Asegúrate de que tu teléfono y tu ordenador estén en la **misma red Wi-Fi**.
-3. En `App.tsx` de cada app, cambia `API_BASE_URL` por la IP local de tu ordenador (por ejemplo: `http://192.168.1.45:3000`).
-4. Escanea el código QR que aparece en tu terminal con la cámara (en iOS) o desde Expo Go (en Android).
+`npm start` arranca Expo desde la carpeta de cada aplicación. La base utiliza SDK 52: la versión de Expo Go debe ser compatible. En iPhone físico será necesaria una actualización del SDK o una compilación de desarrollo; no se debe asumir que el QR funciona con la versión de la tienda. [Documentación de compatibilidad](https://docs.expo.dev/troubleshooting/expo-go-version-mismatch/).
 
+Cambiar una IP en el cliente no basta para conectar la aplicación al backend: también deben configurarse el acceso de red, HTTPS y la autenticación. No se ha abierto el servidor del gimnasio a la red ni habilitado servicios de pago.

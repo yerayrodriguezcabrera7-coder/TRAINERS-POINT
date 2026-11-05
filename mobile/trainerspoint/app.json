@@ -4,10 +4,8 @@
     "slug": "trainerspoint",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#fffdf9"
     },
@@ -16,13 +14,14 @@
       "bundleIdentifier": "com.trainerspoint.app"
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ff7f0a"
-      },
       "package": "com.trainerspoint.app"
     },
-    "plugins": []
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
   }
 }
-
