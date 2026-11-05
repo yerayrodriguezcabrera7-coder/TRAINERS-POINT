@@ -21,16 +21,18 @@ export interface UserVoucher {
 
 interface HomeScreenProps {
   userName?: string;
+  vouchers?: UserVoucher[];
   onPressBuyMore?: () => void;
   onLogout?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   userName = "YERAY",
+  vouchers: propVouchers,
   onPressBuyMore,
   onLogout,
 }) => {
-  const [vouchers] = useState<UserVoucher[]>([
+  const initialVouchers: UserVoucher[] = [
     {
       id: "v-1",
       code: "BONO-GYM-01",
@@ -51,7 +53,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       expiresAt: "15/01/2027",
       isLow: false,
     },
-  ]);
+  ];
+
+  const vouchers = propVouchers || initialVouchers;
 
   const handleBuyMore = () => {
     if (onPressBuyMore) {
