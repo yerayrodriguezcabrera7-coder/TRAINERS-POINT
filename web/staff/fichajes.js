@@ -120,7 +120,8 @@
     try {
       if (!me) await loadMe();
       const next = await api(`attendance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-      data = next;
+      const omissions = await api(`attendance/omissions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+      data = { ...next, omissions: Array.isArray(omissions) ? omissions : [] };
       sessionStorage.setItem('calendar-admin-token', adminToken);
       clearWarn();
       adaptRoleUI();
@@ -133,7 +134,7 @@
 
   function adaptRoleUI() {
     if (!me) return;
-    const isAdmin = me.role === 'ADMIN';
+    const isAdmin = ['ADMIN','RECEPTION'].includes(me.role);
 
     if (!isAdmin) {
       // Entrenador o recepcionista: vista personal
@@ -155,7 +156,7 @@
       // Administrador: vista completa
       $('page-eyebrow').textContent = 'EQUIPO · CONTROL HORARIO';
       $('heading-count').textContent = data.employees.length ? `(${data.employees.length} trabajadores)` : '';
-      $('page-description').textContent = 'Control de jornada de la plantilla, estado de presencia en directo e historial.';
+      $('page-description').textContent = 'Puedes fichar entradas y salidas de la plantilla. El historial identifica quién registra cada fichaje.';
       $('attendance-list-title').textContent = 'Control de jornada';
 
       if ($('search-box-wrap')) $('search-box-wrap').hidden = false;
@@ -181,7 +182,7 @@
   }
 
   function renderSummary(now = Date.now()) {
-    const isAdmin = !me || me.role === 'ADMIN';
+    const isAdmin = !me || ['ADMIN','RECEPTION'].includes(me.role);
     const today = dateKey(new Date(now));
     const todayRecords = data.records.filter(r => dateKey(new Date(r.clockIn)) === today);
     const totalTodayDuration = todayRecords.reduce((sum, r) => sum + duration(r, now), 0);
@@ -281,7 +282,7 @@
       const open = openRecord(employee.id);
       const color = /^#[0-9a-f]{6}$/i.test(employee.color) ? employee.color : '#ff7f0a';
       const soft = `${color}18`;
-      const canClock = !me || me.role === 'ADMIN' || me.employeeId === employee.id;
+      const canClock = !me || ['ADMIN','RECEPTION'].includes(me.role) || me.employeeId === employee.id;
 
       const today = dateKey(new Date(now));
       const empTodayRecords = data.records.filter(r => r.employeeId === employee.id && dateKey(new Date(r.clockIn)) === today);
@@ -327,6 +328,7 @@
           </div>
 
           <div class="employee-actions">
+            ${me?.role==='RECEPTION' ? `<button type="button" class="outline-button" data-omission="${escapeHTML(employee.id)}">Olvido de fichaje</button>` : ''}
             ${canClock ? `
               <button class="button ${open ? 'button-clock-out' : 'button-primary'}" data-clock="${escapeHTML(employee.id)}" data-action="${open ? 'OUT' : 'IN'}">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;" aria-hidden="true">
@@ -342,15 +344,34 @@
       `;
     }).join('');
 
+    $('employee-list').querySelectorAll('[data-omission]').forEach(button=>button.onclick=()=>openOmission(button.dataset.omission));
     $('employee-list').querySelectorAll('[data-clock]').forEach(button => {
       button.addEventListener('click', () => clock(button.dataset.clock, button.dataset.action, button));
     });
   }
 
+  let omissionEmployee=null, omissionId=null;
+  function openOmission(employeeId) {
+    if(me?.role!=='RECEPTION')return;
+    omissionEmployee=employeeId;omissionId=crypto.randomUUID();$('omission-form').reset();$('omission-worker').textContent=employeeName(employeeId);$('omission-day').value=dateKey();$('omission-day').max=dateKey();$('omission-error').textContent='';$('omission-dialog').showModal();
+  }
+  $('omission-close').onclick=()=>$('omission-dialog').close();
+  $('omission-form').onsubmit=async event=>{
+    event.preventDefault();const button=$('omission-save');if(button.disabled)return;button.disabled=true;$('omission-error').textContent='';
+    try{await api('attendance/omissions','POST',{id:omissionId,employeeId:omissionEmployee,day:$('omission-day').value,kind:$('omission-kind').value,note:$('omission-note').value,corroborated:$('omission-confirm').checked});$('omission-dialog').close();await load(data.from,data.to);toast('Olvido corroborado guardado. Las horas no se han cambiado.');}
+    catch(error){$('omission-error').textContent=error.message;}finally{button.disabled=false;}
+  };
+  function actorLabel(actor) {
+    if (!actor) return '<small>Autor no registrado (fichaje anterior)</small>';
+    const role = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Trabajador'}[actor.role] || actor.role;
+    return `<small class="clock-author">Registrado por ${escapeHTML(actor.name)} · ${escapeHTML(role)}${actor.onBehalf ? ' · En nombre del trabajador' : ''}</small>`;
+  }
   function renderHistory(now = Date.now()) {
     const employeeId = $('history-employee')?.value || 'all';
     const records = data.records.filter(r => employeeId === 'all' || r.employeeId === employeeId);
 
+    const omissions=(data.omissions||[]).filter(r=>employeeId==='all'||r.employeeId===employeeId);
+    $('omission-list').innerHTML=omissions.map(r=>`<article class="omission-record"><strong>${escapeHTML(employeeName(r.employeeId))} · ${escapeHTML(r.day)} · ${r.kind==='IN'?'Entrada':'Salida'}</strong><p>${escapeHTML(r.note)}</p><small>Corroborado por ${escapeHTML(r.actor.name)} (recepción) · Anotado ${escapeHTML(formatDateTime(r.createdAt))}</small></article>`).join('')||'<p>No hay olvidos anotados en este período.</p>';
     $('history-empty').hidden = records.length > 0;
     $('results-count').textContent = `${records.length} ${records.length === 1 ? 'fichaje' : 'fichajes'}`;
 
@@ -364,8 +385,8 @@
           <td>
             <strong style="color:var(--tp-ink);font-weight:700;">${escapeHTML(employeeName(record.employeeId))}</strong>
           </td>
-          <td>${escapeHTML(formatDateTime(record.clockIn))}</td>
-          <td>${isOpen ? '<span style="color:var(--tp-ok);font-weight:700;">Jornada en curso</span>' : escapeHTML(formatDateTime(record.clockOut))}</td>
+          <td>${escapeHTML(formatDateTime(record.clockIn))}${actorLabel(record.actorIn)}</td>
+          <td>${isOpen ? '<span style="color:var(--tp-ok);font-weight:700;">Jornada en curso</span>' : escapeHTML(formatDateTime(record.clockOut)) + actorLabel(record.actorOut)}</td>
           <td class="duration-cell">${escapeHTML(formatDuration(recDuration, !isOpen))}</td>
           <td>${renderGeoCell(geoInfo)}</td>
           <td>
@@ -394,11 +415,12 @@
   }
 
   async function clock(employeeId, action, button) {
-    if (me && me.role !== 'ADMIN' && me.employeeId !== employeeId) {
+    if (me && !['ADMIN','RECEPTION'].includes(me.role) && me.employeeId !== employeeId) {
       warn('Solo puedes registrar tus propios fichajes.');
       return;
     }
 
+    if (me && me.employeeId !== employeeId && !confirm(`¿Registrar ${action === 'IN' ? 'entrada' : 'salida'} de ${employeeName(employeeId)}? El fichaje quedará registrado por ${me.name}. Si se recoge ubicación, será la de este dispositivo.`)) return;
     const originalText = button ? button.innerHTML : '';
     if (button) {
       button.disabled = true;
@@ -406,7 +428,7 @@
     }
 
     try {
-      // Captura puntual y legal de geolocalización
+      // Captura puntual de la ubicación del dispositivo que registra el fichaje.
       const geo = await getCurrentGeolocation();
 
       if (button) {

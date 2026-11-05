@@ -163,7 +163,7 @@
                 </tbody>
               </table>
             </div>
-            <div id="history-empty" class="list-message" hidden="">No hay fichajes registrados en este período.</div>
+            <section class="omission-history"><h3>Olvidos de fichaje corroborados por recepción</h3><p>Estas observaciones no cambian las horas ni suman tiempo trabajado.</p><div id="omission-list"></div></section><div id="history-empty" class="list-message" hidden="">No hay fichajes registrados en este período.</div>
           </div>
 
           <div class="table-footer">
@@ -178,4 +178,4 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden=""></div>
 
 
-</body></html>
+<dialog id="omission-dialog" aria-labelledby="omission-title"><form id="omission-form"><h2 id="omission-title">Olvido de fichaje</h2><p id="omission-worker"></p><p>Explica cómo has comprobado la presencia del trabajador. No incluyas datos médicos ni información privada innecesaria.</p><label>Fecha del olvido<input id="omission-day" type="date" required></label><label>Fichaje olvidado<select id="omission-kind"><option value="IN">Entrada</option><option value="OUT">Salida</option></select></label><label>Comprobación y comentario de recepción<textarea id="omission-note" required minlength="10" maxlength="1000" rows="4" placeholder="Ej.: He visto llegar al trabajador a las 09:00; avisó de que olvidó fichar."></textarea></label><label class="omission-check"><input id="omission-confirm" type="checkbox" required>Confirmo que he comprobado personalmente la llegada o salida que indico.</label><p>Se guardará tu usuario y la hora de esta anotación. Las horas del fichaje no se modificarán.</p><p id="omission-error" role="alert"></p><div class="dialog-actions"><button type="button" id="omission-close">Cancelar</button><button type="submit" id="omission-save">Guardar olvido corroborado</button></div></form></dialog></body></html>

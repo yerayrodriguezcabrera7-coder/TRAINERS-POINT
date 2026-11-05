@@ -1,0 +1,12 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {JSDOM}=require('jsdom');const fs=require('node:fs');
+for(const role of ['ADMIN','RECEPTION','TRAINER','CLIENT'])test('Configuración muestra herramientas del perfil '+role,async()=>{
+ const dom=new JSDOM(fs.readFileSync('web/settings/configuracion.html','utf8'),{url:'http://localhost/configuracion.html',runScripts:'outside-only'});const w=dom.window;w.fetch=async()=>({ok:true,json:async()=>({role,name:'Cuenta de prueba'})});
+ try{w.eval(fs.readFileSync('web/settings/configuracion.js','utf8'));await new Promise(r=>setTimeout(r,20));const d=w.document;assert.equal(d.querySelector('#settings-content').hidden,false);const links=[...d.querySelectorAll('#settings-tools a')].map(a=>a.getAttribute('href'));
+ assert.equal(links.includes('/usuarios'),role==='ADMIN');assert.equal(links.includes('/productos.html'),role==='RECEPTION');assert.equal(links.includes('/clientes'),['TRAINER','RECEPTION'].includes(role));if(role==='CLIENT')assert.deepEqual(links,['/mis-reservas.html']);assert.ok(d.querySelector('#settings-limits').textContent);
+ }finally{w.close();}
+});
+test('Recuperaciones separa filas, escapa nombres y omite sesiones de fechas pasadas',async()=>{
+ const dom=new JSDOM(fs.readFileSync('web/planning/recuperaciones.html','utf8'),{url:'http://localhost/recuperaciones.html',runScripts:'outside-only'});const w=dom.window;
+ w.fetch=async url=>({ok:true,json:async()=>url.endsWith('/me')?{role:'TRAINER'}:url.endsWith('/recoveries')?[{clientId:'c',serviceId:'s',status:'PENDING'}]:{timezone:'Europe/Madrid',clients:[{id:'c',name:'Cliente <script>error</script>'}],services:[{id:'s',name:'Entrenamiento'}],bookings:[{id:'b',clientId:'c',serviceId:'s',date:'2099-12-01',start:'10:00',end:'11:00',status:'CONFIRMED'},{id:'old',clientId:'c',serviceId:'s',date:'2000-01-01',start:'10:00',status:'CONFIRMED'}]}});
+ try{w.eval(fs.readFileSync('web/planning/recuperaciones.js','utf8'));await new Promise(r=>setTimeout(r,20));const d=w.document;assert.equal(d.querySelectorAll('#sessions article').length,1);assert.equal(d.querySelectorAll('#credits article').length,1);assert.equal(d.querySelectorAll('#credits script').length,0);assert.match(d.querySelector('#sessions').textContent,/01\/12\/2099/);assert.ok(d.querySelector('#sessions button[data-defer="b"]'));}finally{w.close();}
+});

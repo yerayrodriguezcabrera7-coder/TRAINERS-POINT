@@ -288,19 +288,22 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     });
     assert.equal(newBookingRes.status, 201, "Recepción crea reserva para e3");
 
-    // REQUISITO: Cada entrenador y recepcionista solo ve su propio fichaje, admin ve todo
+    // Recepción consulta y registra fichajes del equipo con autoría autenticada.
     const recAtt = await (await req("attendance", rec)).json();
-    assert.equal(recAtt.employees.length, 1, "Recepción solo consulta su propio fichaje");
-    assert.equal(recAtt.employees[0].id, "e4", "Recepción ve a sí misma");
-    assert.ok(recAtt.records.every((r) => r.employeeId === "e4"), "Recepción solo ve sus propios registros");
-
-    // ==========================================
-    // REQUISITO: Recepción ficha por sí misma, pero 403 si intenta por otro
-    // ==========================================
-    // Intenta fichar por e2 -> 403
-    assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e2", action: "OUT" })).status, 403);
-    // Intenta fichar por e1 -> 403
-    assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e1", action: "IN" })).status, 403);
+    assert.equal(recAtt.employees.length, 4);
+    const delegated = await req("attendance/clock", rec, "POST", { employeeId: "e2", action: "OUT", actorOut:{name:'Falsificado',role:'ADMIN'} });
+    assert.equal(delegated.status, 201);
+    const recorded = await delegated.json();
+    assert.equal(recorded.actorOut.role,'RECEPTION');
+    assert.equal(recorded.actorOut.name,'Recepción Cuatro');
+    assert.equal(recorded.actorOut.onBehalf,true);
+    const persisted = await (await req('attendance',rec)).json();
+    assert.equal(persisted.records.find(r=>r.id===recorded.id).actorOut.role,'RECEPTION');
+    const csvResponse = await req('attendance/export?from='+persisted.from+'&to='+persisted.to,rec);
+    assert.equal(csvResponse.status,200);
+    assert.match(await csvResponse.text(),/Recepción Cuatro/);
+    assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e1", action: "IN" })).status, 201);
+    assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e1", action: "OUT" })).status, 201);
     // Ficha por sí misma (e4) -> 201
     assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e4", action: "IN" })).status, 201);
     assert.equal((await req("attendance/clock", rec, "POST", { employeeId: "e4", action: "OUT" })).status, 201);
@@ -324,6 +327,7 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     assert.equal((await req("attendance", adminToken)).status, 200);
     // Administrador puede fichar por sí mismo o por otros (Decisión 7.B)
     assert.equal((await req("attendance/clock", adminToken, "POST", { employeeId: "e1", action: "IN" })).status, 201);
+    assert.equal((await req("attendance/clock", adminToken, "POST", { employeeId: "e2", action: "IN" })).status, 201);
     assert.equal((await req("attendance/clock", adminToken, "POST", { employeeId: "e2", action: "OUT" })).status, 201);
 
     // ==========================================
@@ -394,4 +398,27 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
   } finally {
     await new Promise((r) => app.close(r));
   }
+});
+
+test('Entrada por perfil: no emite sesión al usar el acceso equivocado y devuelve el usuario propio', async () => {
+  const {Access}=require('../dist/calendar/access');const access=new Access(pool);const gym=randomUUID();await store.seed(gym,testConfig());
+  await access.save(gym,{username:'office-test',employeeId:'e1',role:'ADMIN',enabled:true,password:'Example-pass-123',mustChangePassword:false});
+  await assert.rejects(access.login(gym,{username:'office-test',password:'Example-pass-123',portal:'TRAINER'}),/otro acceso/);
+  const session=await access.login(gym,{username:'office-test',password:'Example-pass-123',portal:'OFFICE'});
+  const identity=await access.identify(gym,session.token);assert.equal(identity.username,'office-test');assert.equal(identity.role,'ADMIN');await access.logout(session.token);
+});
+
+test('Olvido: solo recepción corrobora, conserva autoría, evita duplicados y no cambia jornadas',async()=>{
+ const {saveOmission,listOmissions}=require('../dist/calendar/attendance-omissions');const {DateTime}=require('luxon');const g=randomUUID();await store.seed(g,testConfig());
+ const reception={id:'reception-id',name:'Recepción Cuatro',role:'RECEPTION',employeeId:'e4',clientId:null,mustChangePassword:false};
+ const input={id:randomUUID(),employeeId:'e2',day:DateTime.now().setZone('Europe/Madrid').toISODate(),kind:'IN',note:'He comprobado personalmente que llegó a las 09:00.',corroborated:true,actor:{name:'Falsificado'}};
+ for(const role of ['ADMIN','TRAINER','CLIENT'])await assert.rejects(saveOmission(pool,g,{...reception,role},input),/Solo recepción/);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,corroborated:false}));
+ await assert.rejects(saveOmission(pool,g,reception,{...input,day:'2099-12-01'}),/futura/);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,employeeId:'ajeno'}),/desconocido/);
+ await saveOmission(pool,g,reception,input);await saveOmission(pool,g,reception,input);
+ await assert.rejects(saveOmission(pool,g,reception,{...input,note:'Otra información distinta.'}),/otros datos/);
+ const list=await listOmissions(pool,g,reception,input.day,input.day);assert.equal(list.length,1);assert.equal(list[0].actor.name,reception.name);assert.equal(list[0].employeeId,'e2');
+ const other=await listOmissions(pool,g,{...reception,role:'TRAINER',employeeId:'e3'},input.day,input.day);assert.equal(other.length,0);
+ assert.equal((await store.attendance(g,input.day,input.day,undefined,'ADMIN')).records.length,0);
 });

@@ -114,3 +114,8 @@ body { font-family: var(--tp-body); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Personal account panel, shared by all roles. */
+.account-trigger{cursor:pointer;border:1px solid #ddd;font:inherit;font-weight:700}.account-trigger:focus-visible{outline:3px solid #b35a00;outline-offset:3px}
+dialog.account-dialog{width:min(420px,calc(100vw - 32px));max-height:85dvh;overflow:auto;box-sizing:border-box;padding:28px;border:1px solid #ddd;border-radius:16px;background:#fffdfa;color:#22323d}
+.account-dialog::backdrop{background:#10182080}.account-dialog h2{font-size:24px;margin:0 0 16px;overflow-wrap:anywhere}.account-dialog p{margin:10px 0;overflow-wrap:anywhere}.account-dialog a,.account-dialog button{display:block;width:100%;box-sizing:border-box;margin-top:14px;padding:12px 16px;border:1px solid #ddd;border-radius:8px;font:inherit;text-align:left;color:#22323d;background:white;text-decoration:none;cursor:pointer}

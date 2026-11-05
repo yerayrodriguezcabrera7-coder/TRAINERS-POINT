@@ -27,7 +27,7 @@
     ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias del equipo','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
     ['Turnos','calendar','/gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos','settings','/gestion.html?section=roles'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Caja','cash','/caja.html'], ['Informes','report'], ['Cuadro de mando','chart'],
-    ['Historial de eventos','history'], ['Configuración','settings'],
+    ['Historial de eventos','history'], ['Configuración','settings','/configuracion.html'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
     ['Buzón de consultas','chat']
   ];
@@ -52,7 +52,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Día a día',['Mis reservas','Inicio','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Productos','Caja']],['Equipo',['Profesionales','Turnos','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos']]];
+  const groups=[['Día a día',['Mis reservas','Inicio','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Productos','Caja']],['Equipo',['Profesionales','Turnos','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos','Configuración']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -106,9 +106,9 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
-        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
-        CLIENT: ['mis-reservas.html'],
+        RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+        TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+        CLIENT: ['mis-reservas.html', 'configuracion.html'],
       };
       const allowed = allowedByRole[me.role];
       if (allowed !== null) {
@@ -148,13 +148,29 @@
         const center = host.querySelector('.app-menu-center');
         if (center) center.hidden = true;
       }
+      const roleName = {ADMIN:'Administración',RECEPTION:'Recepción',TRAINER:'Entrenador / Trabajador',CLIENT:'Cliente'}[me.role] || me.role;
+      const loginUrl = ['ADMIN','RECEPTION'].includes(me.role) ? '/login.html?portal=office' : me.role === 'CLIENT' ? '/login.html?portal=client' : '/login.html';
+      let avatar = document.querySelector('.topbar .profile-avatar');
+      if (!avatar && document.querySelector('.topbar')) { avatar=document.createElement('div'); avatar.className='profile-avatar'; document.querySelector('.topbar').append(avatar); }
+      if (avatar) {
+        const button=document.createElement('button');button.type='button';button.className='profile-avatar account-trigger';button.textContent='TP';button.setAttribute('aria-label','Mi cuenta: '+me.name+' · '+roleName);button.setAttribute('aria-haspopup','dialog');avatar.replaceWith(button);
+        const dialog=document.createElement('dialog');dialog.className='account-dialog';dialog.setAttribute('aria-label','Mi cuenta');
+        const title=document.createElement('h2');title.textContent=me.name;
+        const username=document.createElement('p');username.textContent='Usuario: '+(me.username || 'Cuenta del centro');
+        const role=document.createElement('p');role.textContent='Perfil: '+roleName;
+        const settings=document.createElement('a');settings.href='/configuracion.html';settings.textContent='Mi configuración';
+        const password=document.createElement('a');password.href='/change-password.html';password.textContent='Cambiar mi contraseña';
+        const logout=document.createElement('button');logout.type='button';logout.textContent='Cerrar sesión';logout.onclick=async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href=loginUrl;}};
+        const close=document.createElement('button');close.type='button';close.textContent='Volver';close.onclick=()=>dialog.close();
+        dialog.append(title,username,role,settings,password,logout,close);document.body.append(dialog);button.onclick=()=>dialog.showModal();
+      }
       const footer=document.createElement('div');footer.className='app-menu-account';
       const label=document.createElement('small');label.textContent=me.name;
-      const link=document.createElement('a');link.href='login.html';link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';
+      const link=document.createElement('a');link.href=loginUrl;link.textContent=me.id==='bootstrap'?'Acceso del equipo':'Cerrar sesión';
       link.addEventListener('click',async event=>{
         event.preventDefault();
         try{await fetch('/api/logout',{method:'POST',headers:{Authorization:'Bearer '+token}});}finally{
-          sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href='login.html';
+          sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href=loginUrl;
         }
       });footer.append(label,link);host.append(footer);
     } catch (_) { /* The page shows connection errors. */ }

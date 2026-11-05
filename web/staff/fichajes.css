@@ -382,3 +382,8 @@
 }
 
 .export-help { flex-basis: 100%; color: var(--tp-muted, #637168); line-height: 1.5; }
+
+.clock-author{display:block;margin-top:6px;max-width:290px;line-height:1.5;color:#52636b}
+
+.omission-history{padding:20px;margin-top:20px;border-top:1px solid #ddd}.omission-record{padding:16px;margin:12px 0;border:1px solid #ddd;border-radius:8px;overflow-wrap:anywhere}.omission-record p{white-space:pre-wrap}
+#omission-dialog{width:min(580px,calc(100vw - 32px));padding:24px;box-sizing:border-box;max-height:90dvh;overflow:auto;border:1px solid #ddd;border-radius:12px;background:#fff}#omission-dialog::backdrop{background:#0008}#omission-form{display:grid;gap:16px}#omission-form label:not(.omission-check){display:grid;gap:8px}#omission-form :is(input[type=date],select,textarea){width:100%;box-sizing:border-box;padding:10px;font:inherit;border:1px solid #bbb;border-radius:8px}#omission-error{color:#a22}.omission-check{display:flex;align-items:flex-start;gap:10px}

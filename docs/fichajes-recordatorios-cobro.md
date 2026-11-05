@@ -2,7 +2,7 @@
 
 ## Exportar fichajes
 
-En Fichajes → Historial, selecciona Desde, Hasta y trabajador y pulsa **Exportar informe CSV**. El archivo abre en Excel y contiene identificador, trabajador, fechas, horas con desplazamiento horario, duración completa de la jornada, duración dentro del período y estado. Se conservan los filtros y permisos: administración puede consultar la plantilla; cada trabajador y recepción consultan sus propios fichajes. El intervalo máximo es 93 días por descarga.
+En Fichajes → Historial, selecciona Desde, Hasta y trabajador y pulsa **Exportar informe CSV**. El archivo abre en Excel y contiene identificador, trabajador, fechas, horas con desplazamiento horario, duración completa de la jornada, duración dentro del período y estado. Se conservan los filtros y permisos: administración y recepción pueden consultar la plantilla; cada entrenador consulta solo sus propios fichajes. El intervalo máximo es 93 días por descarga.
 
 Las jornadas abiertas se identifican sin inventar una hora de salida ni un total definitivo. Las jornadas que cruzan medianoche conservan las horas reales y distinguen el tiempo dentro del período. No se exportan coordenadas GPS. La descarga vuelve a consultar el servidor; no depende de tener cargado previamente el historial.
 

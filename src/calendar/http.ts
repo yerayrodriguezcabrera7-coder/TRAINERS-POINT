@@ -8,6 +8,7 @@ import { serveRuntime } from "../http/runtime";
 import { Access,Identity,initialPassword } from "./access";
 import { ApiError } from "./model";
 import { Store } from "./store";
+import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
 async function body(req: IncomingMessage) {
   let text = "";
@@ -232,11 +233,16 @@ export function server(
           send(res, 200, { ...s, clientDebts, clientPackageAlerts: clientPackageAlertsMap });
           return;
         }
+        if (path === '/api/attendance/omissions') {
+          if(req.method==='POST'){send(res,201,await saveOmission(store.pool,gym,identity,await body(req)));return;}
+          if(req.method==='GET'){send(res,200,await listOmissions(store.pool,gym,identity,url.searchParams.get('from')||'',url.searchParams.get('to')||''));return;}
+          throw new ApiError(405,'Operación no permitida.');
+        }
         if (req.method === "GET" && path === "/api/attendance/export") {
           if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");
           const requested = url.searchParams.get("employeeId") || undefined;
-          if (identity.role !== "ADMIN" && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
-          const report = await store.attendance(gym, url.searchParams.get("from")!, url.searchParams.get("to")!, identity.role === "ADMIN" ? requested : identity.employeeId || "unassigned", identity.role);
+          if (!["ADMIN","RECEPTION"].includes(identity.role) && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
+          const report = await store.attendance(gym, url.searchParams.get("from")!, url.searchParams.get("to")!, ["ADMIN","RECEPTION"].includes(identity.role) ? requested : identity.employeeId || "unassigned", identity.role);
           res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": `attachment; filename="fichajes-${report.from}-${report.to}.csv"` });
           res.end(attendanceCsv(report));
           return;
@@ -249,7 +255,7 @@ export function server(
               gym,
               url.searchParams.get("from") || undefined,
               url.searchParams.get("to") || undefined,
-              identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned",
+              ["ADMIN","RECEPTION"].includes(identity.role) ? undefined : identity.employeeId || "unassigned",
               identity.role,
             ),
           );
@@ -257,8 +263,8 @@ export function server(
         }
         if (req.method === "POST" && path === "/api/attendance/clock") {
           const raw = await body(req);
-          if (identity.role !== "ADMIN" && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
-          send(res, 201, await store.clock(gym, raw));
+          if (!["ADMIN","RECEPTION"].includes(identity.role) && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
+          send(res, 201, await store.clock(gym, raw, identity));
           return;
         }
         if (req.method === "GET" && path === "/api/clients") {
