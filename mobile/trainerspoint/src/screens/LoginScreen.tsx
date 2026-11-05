@@ -24,7 +24,7 @@ interface LoginScreenProps {
 export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess, onBack }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [portal, setPortal] = useState<"TRAINER" | "CLIENT">("CLIENT");
+  const [portal, setPortal] = useState<"TRAINER" | "CLIENT" | "OFFICE">("CLIENT");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mustChange, setMustChange] = useState(false);
@@ -80,28 +80,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess, o
 
         {/* Selector de perfil / portal */}
         {!mustChange && <View style={styles.portalToggle}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            disabled={loading}
-            accessibilityState={{ selected: portal === "CLIENT" }}
-            style={[styles.portalButton, portal === "CLIENT" && styles.portalButtonActive]}
-            onPress={() => setPortal("CLIENT")}
-          >
-            <Text style={[styles.portalText, portal === "CLIENT" && styles.portalTextActive]}>
-              Cliente
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            accessibilityRole="button"
-            disabled={loading}
-            accessibilityState={{ selected: portal === "TRAINER" }}
-            style={[styles.portalButton, portal === "TRAINER" && styles.portalButtonActive]}
-            onPress={() => setPortal("TRAINER")}
-          >
-            <Text style={[styles.portalText, portal === "TRAINER" && styles.portalTextActive]}>
-              Entrenador / Trabajador
-            </Text>
-          </TouchableOpacity>
+          {([
+            { value: "CLIENT", label: "Cliente" },
+            { value: "TRAINER", label: "Entrenador / Trabajador" },
+            { value: "OFFICE", label: "Recepción" },
+          ] as const).map(option => <TouchableOpacity
+            key={option.value} accessibilityRole="button" disabled={loading}
+            accessibilityState={{ selected: portal === option.value }}
+            style={[styles.portalButton, portal === option.value && styles.portalButtonActive]}
+            onPress={() => { setPortal(option.value); setError(""); }}
+          ><Text style={[styles.portalText, portal === option.value && styles.portalTextActive]}>{option.label}</Text></TouchableOpacity>)}
         </View>}
 
         <View style={styles.form}>
@@ -199,14 +187,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   portalToggle: {
-    flexDirection: "row",
+    flexDirection: "column",
+    gap: 5,
     backgroundColor: trainersPointTheme.colors.surfaceSubtle,
     borderRadius: 10,
     padding: 4,
     marginBottom: 20,
   },
   portalButton: {
-    flex: 1,
+    minHeight: 44,
+    justifyContent: "center",
     paddingVertical: 10,
     paddingHorizontal: 6,
     alignItems: "center",

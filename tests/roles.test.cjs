@@ -181,6 +181,23 @@ test("Roles y permisos: RBAC en servidor, aislamiento entre entrenadores, fichaj
     const rec = await login("reception", "Reception-personal-password-123");
     const cli = await login("client", "Client-personal-password-123");
 
+    // Staff mobile endpoint enforces the token's role; query params cannot broaden it.
+    const mobileWorker = await req("mobile/calendar?employeeId=e3&role=RECEPTION", t1);
+    assert.equal(mobileWorker.status, 200);
+    const mobileWorkerData = await mobileWorker.json();
+    assert.ok(mobileWorkerData.bookings.length > 0);
+    assert.ok(mobileWorkerData.bookings.every(b => b.employeeId === 'e2'));
+    assert.ok(mobileWorkerData.employees.every(e => e.id === 'e2'));
+    assert.equal(mobileWorkerData.users, undefined);
+    assert.equal(mobileWorkerData.clientDebts, undefined);
+    assert.equal(mobileWorkerData.bookings[0].history, undefined);
+    const mobileReception = await req("mobile/calendar", rec);
+    assert.equal(mobileReception.status, 200);
+    assert.equal((await mobileReception.json()).bookings.length, 2);
+    assert.equal((await req("mobile/calendar", cli)).status, 403);
+    assert.equal((await req("mobile/calendar", 'invalid-token')).status, 401);
+    assert.equal((await req("config", rec, "PUT", { config: cfg, revision: 0 })).status, 403);
+
     // ==========================================
     // REQUISITO: El cliente no accede a nada de gestión
     // ==========================================

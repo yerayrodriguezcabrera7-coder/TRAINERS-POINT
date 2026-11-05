@@ -90,7 +90,7 @@ test('availability includes trainer, room and service; agenda uses reservations,
   assert.equal(query.get('roomId'), 'room');
   assert.equal(query.get('serviceId'), 'service');
   await api.getStaffCalendar();
-  assert.equal(calls[1].url, 'https://gym.example/api/state');
+  assert.equal(calls[1].url, 'https://gym.example/api/mobile/calendar');
 });
 
 test('worker attendance retains the booking version for concurrent change protection', async () => {
@@ -114,6 +114,13 @@ test('the agenda excludes cancelled, finished and past sessions and sorts upcomi
   ];
   assert.deepEqual(upcomingBookings({ bookings }, now).map(booking => booking.id), ['today', 'next']);
   assert.deepEqual(upcomingBookings(null, now), []);
+});
+
+test('non-API requests preserve Metro next middleware instead of crashing the dev server', () => {
+  const apiProxy = require('./metro-api-proxy.cjs');
+  let delegated = false;
+  apiProxy((req, res, next) => next())({ url: '/favicon.ico' }, {}, () => { delegated = true; });
+  assert.equal(delegated, true);
 });
 
 test('local web API proxy forwards auth and rejects foreign browser origins', async t => {

@@ -50,15 +50,19 @@ export interface Booking {
   version: number;
   centerName?: string;
   centerAddress?: string;
+  centerId?: string;
+  needsReschedule?: boolean;
   status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
   notes?: string;
 }
 
 export interface CalendarData {
   bookings: Booking[];
-  services: Array<{ id: string; name: string }>;
+  services: Array<{ id: string; name: string; color?: string }>;
   employees: Array<{ id: string; name: string }>;
   rooms: Array<{ id: string; name: string }>;
+  clients?: Array<{ id: string; name: string; email?: string; phone?: string; status?: string }>;
+  centers?: Array<{ id: string; name: string }>;
 }
 
 export interface SlotQuery {

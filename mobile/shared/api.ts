@@ -66,7 +66,7 @@ export class ApiClient {
     return this.request("/api/password/change", { method: "POST", body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
   }
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }
-  getStaffCalendar() { return this.request<CalendarData>("/api/state"); }
+  getStaffCalendar() { return this.request<CalendarData>("/api/mobile/calendar"); }
   getClientSlots(query: SlotQuery) {
     const params = new URLSearchParams({ ...query });
     return this.request<Array<{ start: string; end: string }>>(`/api/client-slots?${params}`);

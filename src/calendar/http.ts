@@ -10,6 +10,7 @@ import { ApiError } from "./model";
 import { Store } from "./store";
 import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
+import { mobileStaffView, staffClientIds } from "./mobile-view";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -132,6 +133,11 @@ export function server(
             throw new ApiError(403, "Tu perfil no tiene acceso a las funciones de gestión.");
           }
 
+          if (req.method === "GET" && path === "/api/mobile/calendar") {
+            send(res, 200, mobileStaffView(await store.state(gym), identity));
+            return;
+          }
+
           if (req.method === "GET" && path === "/api/manage") {
             const s = await store.state(gym);
           const [clientDebts, clientPackageAlertsMap] = await Promise.all([
@@ -218,11 +224,12 @@ export function server(
             store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
           ]);
           if (identity.role === "TRAINER") {
+            const visibleIds = staffClientIds(s, identity);
             const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
             send(res, 200, {
               ...s,
-              clientDebts,
-              clientPackageAlerts: clientPackageAlertsMap,
+              clientDebts: Object.fromEntries(Object.entries(clientDebts).filter(([id]) => visibleIds.has(id))),
+              clientPackageAlerts: Object.fromEntries(Object.entries(clientPackageAlertsMap).filter(([id]) => visibleIds.has(id))),
               bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking),
               employees: s.employees.filter((e: any) => e.id === identity.employeeId),
               clients: s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId),

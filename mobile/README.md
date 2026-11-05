@@ -35,3 +35,5 @@ En desarrollo web, Metro reenvía `/api` al servidor configurado para evitar err
 Detalles del arreglo y comprobaciones: [correcciones de mobile](CORRECCIONES.md).
 
 Funcionamiento del acceso y alta de cuentas: [acceso de usuarios](ACCESO_USUARIOS.md).
+
+Vistas de trabajador y recepción y límites de cada perfil: [roles móviles](ROLES_MOVILES.md).

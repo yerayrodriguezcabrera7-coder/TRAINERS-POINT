@@ -11,8 +11,10 @@ export function AccessHelp({ visible, onClose }: { visible: boolean; onClose: ()
       <Text style={styles.text}>Introduce el usuario y la contraseña provisional que te han entregado. Si el centro lo ha indicado, tendrás que elegir una contraseña nueva antes de continuar.</Text>
       <Text style={styles.heading}>He olvidado mi contraseña</Text>
       <Text style={styles.text}>Contacta con recepción para que comprueben tu identidad. Administración podrá restablecer tu acceso y darte una contraseña provisional. No compartas tu contraseña personal.</Text>
-      <Text style={styles.heading}>Soy de administración o recepción</Text>
-      <Text style={styles.text}>Utiliza el panel de gestión del centro. Esta entrada móvil corresponde a clientes y entrenadores / trabajadores.</Text>
+      <Text style={styles.heading}>Soy trabajador o de recepción</Text>
+      <Text style={styles.text}>Selecciona tu perfil antes de entrar. El trabajador consulta su agenda y sus clientes; recepción ve las agendas del centro, los clientes y las reservas pendientes. Los permisos los comprueba el servidor.</Text>
+      <Text style={styles.heading}>Administración del centro</Text>
+      <Text style={styles.text}>La configuración, las cuentas y los permisos se siguen gestionando en el panel web.</Text>
       <Pressable accessibilityRole="button" style={styles.close} onPress={onClose}><Text style={styles.closeText}>Entendido, volver al acceso</Text></Pressable>
     </ScrollView></View></View>
   </Modal>;

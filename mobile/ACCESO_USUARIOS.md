@@ -19,7 +19,7 @@ No se han creado usuarios nuevos ni cambiado contraseñas de personas durante es
 ## Cómo entra la persona
 
 1. Abre la app y pulsa **Entrar a mi cuenta**.
-2. Selecciona **Cliente** o **Entrenador / Trabajador** según su cuenta.
+2. Selecciona **Cliente**, **Entrenador / Trabajador** o **Recepción** según su cuenta.
 3. Introduce el usuario y la contraseña facilitados por el centro.
 4. Si la contraseña es provisional, elige una nueva y la repite antes de continuar. El servidor exige un mínimo de 12 caracteres y que sea distinta de la anterior.
 5. La app consulta la identidad validada y muestra la agenda correspondiente. Los clientes solo reciben sus propias reservas; el servidor limita la agenda de cada trabajador.
@@ -46,7 +46,7 @@ Este proceso es manual. No hay un envío automático por SMS, teléfono, WhatsAp
 
 La contraseña no se guarda en archivos ni en el almacenamiento del navegador. El token de sesión solo se mantiene en memoria y el servidor lo valida. Al cerrar o recargar la app se debe iniciar sesión de nuevo; el servidor establece un límite de sesión de 12 horas y permite invalidarla al salir.
 
-Administración y recepción continúan utilizando el panel web. La aplicación móvil no concede permisos de gestión por elegir un botón: el servidor comprueba el perfil de la cuenta y decide qué información puede devolver.
+Recepción puede consultar las agendas, los clientes y los pendientes desde la app. La creación o edición de reservas y la configuración continúan en el panel web. La aplicación móvil no concede permisos por elegir un botón: el servidor comprueba el perfil de la cuenta y decide qué información puede devolver. Detalles: [roles móviles](ROLES_MOVILES.md).
 
 En la cuenta real se consulta la agenda existente. Los bonos, renovaciones, pagos y avisos de la demostración siguen siendo ilustrativos y no forman parte del acceso real implementado aquí.
 

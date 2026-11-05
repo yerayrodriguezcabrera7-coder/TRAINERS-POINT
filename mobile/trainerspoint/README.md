@@ -36,9 +36,12 @@ El contenido de la demostración utiliza un cliente ficticio y precios ilustrati
 - `src/AccountApp.tsx`: sesión de la cuenta real, caducidad y cierre.
 - `src/screens/WelcomeScreen.tsx`, `LoginScreen.tsx` y `AccessHelp.tsx`: bienvenida, acceso y ayuda.
 - `src/screens/HomeScreen.tsx`: agenda de la persona autenticada, con datos del servidor.
+- `src/screens/StaffScreen.tsx`: consultas del trabajador y de recepción, con agenda por día, clientes y pendientes según el rol.
 - `../shared/`: API, tipos, configuración, selección de reservas y pruebas compartidas. La vista previa no realiza llamadas al servidor.
 
 Funcionamiento para el centro y los usuarios: [informe del acceso](../ACCESO_USUARIOS.md). Capturas: [bienvenida](docs/vista-bienvenida.png) y [formulario de acceso](docs/vista-acceso.png).
+
+Permisos y funcionamiento de cada perfil: [roles móviles](../ROLES_MOVILES.md). Las consultas de personal usan `/api/mobile/calendar`; el servidor limita los datos antes de enviarlos a la app.
 
 ## Validación local
 

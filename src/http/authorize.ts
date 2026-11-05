@@ -30,7 +30,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       }
     }
     if (!identity) {
-      const calendarOnlyRoutes = ["/api/client-calendar", "/api/client-slots", "/api/leaves", "/api/recoveries", "/api/me", "/api/logout", "/api/password/change", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
+      const calendarOnlyRoutes = ["/api/mobile/calendar", "/api/client-calendar", "/api/client-slots", "/api/leaves", "/api/recoveries", "/api/me", "/api/logout", "/api/password/change", "/api/manage", "/api/state", "/api/attendance", "/api/bookings", "/api/config", "/api/slots"];
       const isCalendarOnly = calendarOnlyRoutes.some(p => url.pathname === p || url.pathname.startsWith(p + "/"));
       if (isCalendarOnly && calendarHandler) {
         await calendarHandler(request, response);

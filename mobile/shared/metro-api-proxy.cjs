@@ -2,13 +2,13 @@
 const http = require('node:http');
 const https = require('node:https');
 
-module.exports = function apiProxy(next, target = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3000') {
+module.exports = function apiProxy(middleware, target = process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3000') {
   const backend = new URL(target);
   if (!['http:', 'https:'].includes(backend.protocol) || backend.username || backend.password) {
     throw new Error('EXPO_PUBLIC_API_URL debe ser HTTP/HTTPS y no contener credenciales.');
   }
-  return (req, res) => {
-    if (!req.url?.startsWith('/api/')) return next(req, res);
+  return (req, res, next) => {
+    if (!req.url?.startsWith('/api/')) return middleware(req, res, next);
     // Only local development clients and their own browser origin may use this proxy.
     const host = req.headers.host || '';
     const localHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(host);
