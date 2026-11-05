@@ -59,6 +59,70 @@ export interface ServicePackage {
   isActive: boolean;
 }
 
+export type ServiceCategory = "GIMNASIO" | "CABINA";
+
+export interface ServicePackOption {
+  sessions: number;
+  price: number;
+  pricePerSession: number;
+  discountPercent?: number;
+}
+
+export interface ServiceOffering {
+  id: string;
+  name: string;
+  category: ServiceCategory;
+  durationMin: number; // 15, 30, 60
+  basePricePerSession: number;
+  description: string;
+  packs: ServicePackOption[];
+}
+
+export interface CartItem {
+  cartItemId: string;
+  serviceId: string;
+  serviceName: string;
+  category: ServiceCategory;
+  durationMin: number;
+  sessions: number;
+  unitPrice: number;
+  totalPrice: number;
+  isCustomQuantity: boolean;
+}
+
+export interface CheckoutOrder {
+  id: string;
+  ticketNumber: string;
+  createdAt: string;
+  items: CartItem[];
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+  paymentMethod: "TARJETA" | "BIZUM" | "EFECTIVO";
+  centersAllowed: string[];
+}
+
+export interface GymCenter {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  phone?: string;
+}
+
+export interface ClientVoucher {
+  id: string;
+  serviceId: string;
+  serviceName: string;
+  category: ServiceCategory;
+  durationMin: number;
+  totalSessions: number;
+  remainingSessions: number;
+  purchasedAt: string;
+  expiresAt: string;
+  allowedCenters: string[];
+}
+
 export interface TrainingPlan {
   id: string;
   clientId: string;

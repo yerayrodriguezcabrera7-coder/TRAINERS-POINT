@@ -1,224 +1,591 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   Alert,
 } from "react-native";
-import { cobosuTheme } from "../../shared/theme";
-import { ApiClient } from "../../shared/api";
-import { Identity } from "../../shared/types";
 
-interface HomeScreenProps {
-  api: ApiClient;
-  user: Identity;
-  onLogout: () => void;
+export interface UserVoucher {
+  id: string;
+  serviceName: string;
+  code: string;
+  durationMin: number;
+  remainingSessions: number;
+  totalSessions: number;
+  expiresAt: string;
+  isLow: boolean;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ api, user, onLogout }) => {
-  const [loading, setLoading] = useState(false);
-  const [calendar, setCalendar] = useState<any>(null);
+interface HomeScreenProps {
+  userName?: string;
+  onPressBuyMore?: () => void;
+  onLogout?: () => void;
+}
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getClientCalendar();
-      setCalendar(data);
-    } catch (e: any) {
-      Alert.alert("Aviso", e.message || "No se pudieron obtener las reservas.");
-    } finally {
-      setLoading(false);
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  userName = "YERAY",
+  onPressBuyMore,
+  onLogout,
+}) => {
+  const [vouchers] = useState<UserVoucher[]>([
+    {
+      id: "v-1",
+      code: "BONO-GYM-01",
+      serviceName: "Entrenamiento en Gimnasio",
+      durationMin: 60,
+      remainingSessions: 2,
+      totalSessions: 10,
+      expiresAt: "28/11/2026",
+      isLow: true,
+    },
+    {
+      id: "v-2",
+      code: "BONO-CAB-02",
+      serviceName: "Cabina de Recuperación",
+      durationMin: 30,
+      remainingSessions: 5,
+      totalSessions: 5,
+      expiresAt: "15/01/2027",
+      isLow: false,
+    },
+  ]);
+
+  const handleBuyMore = () => {
+    if (onPressBuyMore) {
+      onPressBuyMore();
+    } else {
+      Alert.alert(
+        "Compra de Bonos",
+        "Paso siguiente: catálogo de bonos con selector y carrito."
+      );
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const totalRemaining = vouchers.reduce((sum, v) => sum + v.remainingSessions, 0);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Bienvenido/a,</Text>
-          <Text style={styles.userName}>{user.name || user.username}</Text>
-          <Text style={styles.gymTag}>COBOSU TRAINING</Text>
+    <View style={styles.root}>
+      {/* 1. BARRA SUPERIOR ARQUITECTÓNICA */}
+      <View style={styles.topBar}>
+        <View style={styles.brandBlock}>
+          <Text style={styles.brandTitle}>COBOSU</Text>
+          <Text style={styles.brandSub}>CENTRO DE RENDIMIENTO</Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
-          <Text style={styles.logoutText}>Cerrar sesión</Text>
-        </TouchableOpacity>
+
+        <View style={styles.accountBlock}>
+          <View style={styles.statusBox}>
+            <View style={styles.statusSquare} />
+            <Text style={styles.statusText}>ACTIVO</Text>
+          </View>
+          {onLogout && (
+            <TouchableOpacity onPress={onLogout} style={styles.logoutBtn}>
+              <Text style={styles.logoutText}>SALIR</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Tarjeta de socio */}
-      <View style={styles.memberCard}>
-        <Text style={styles.memberCardEyebrow}>ESTADO DEL SOCIO</Text>
-        <Text style={styles.memberCardTitle}>Tu Plan Activo</Text>
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 2. PANEL PRINCIPAL: FICHA TÉCNICA DEL SOCIO */}
+        <View style={styles.panelBlock}>
+          {/* Fila superior: ID y Sedes */}
+          <View style={styles.panelHeaderRow}>
+            <Text style={styles.memberIdLabel}>SOCIO // {userName.toUpperCase()}</Text>
+            <Text style={styles.locationTag}>VIZCAYA · INDEPENDENCIA</Text>
+          </View>
 
-        {loading ? (
-          <ActivityIndicator color="#fff" style={{ marginVertical: 16 }} />
-        ) : (
-          <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeNumber}>
-                {calendar?.upcoming?.length ?? 1}
-              </Text>
-              <Text style={styles.badgeLabel}>Próxima sesión</Text>
-            </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeNumber}>Activo</Text>
-              <Text style={styles.badgeLabel}>Estado de cuota</Text>
+          {/* Cifra de sesiones */}
+          <View style={styles.metricSection}>
+            <Text style={styles.metricSub}>TOTAL DISPONIBLE</Text>
+            <View style={styles.metricRow}>
+              <Text style={styles.metricNumber}>{totalRemaining}</Text>
+              <Text style={styles.metricUnit}>SESIONES</Text>
             </View>
           </View>
-        )}
+
+          {/* Resumen en cuadrícula nítida */}
+          <View style={styles.gridSummary}>
+            <View style={styles.gridCol}>
+              <Text style={styles.gridColLabel}>BONOS ACTIVOS</Text>
+              <Text style={styles.gridColValue}>{vouchers.length}</Text>
+            </View>
+            <View style={styles.gridBorder} />
+            <View style={styles.gridCol}>
+              <Text style={styles.gridColLabel}>CENTROS HABILITADOS</Text>
+              <Text style={styles.gridColValue}>AMBAS SEDES</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* 3. BOTÓN PRINCIPAL GEOMÉTRICO: COMPRAR MÁS BONOS */}
+        <TouchableOpacity style={styles.ctaButton} onPress={handleBuyMore} activeOpacity={0.85}>
+          <Text style={styles.ctaButtonText}>COMPRAR MÁS BONOS</Text>
+          <Text style={styles.ctaButtonArrow}>→</Text>
+        </TouchableOpacity>
+
+        {/* 4. SECCIÓN TÉCNICA: DESGLOSE DE BONOS */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>ESTADO DE TUS BONOS</Text>
+          <Text style={styles.sectionIndex}>{vouchers.length} REGISTROS</Text>
+        </View>
+
+        {vouchers.map((v) => {
+          const percent = (v.remainingSessions / v.totalSessions) * 100;
+
+          return (
+            <View key={v.id} style={styles.voucherItem}>
+              {/* Cabecera del bono */}
+              <View style={styles.voucherTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.voucherCode}>{v.code} · {v.durationMin} MIN</Text>
+                  <Text style={styles.voucherName}>{v.serviceName}</Text>
+                </View>
+
+                {/* Recuadro de sesiones con esquina recta */}
+                <View style={[styles.countBox, v.isLow && styles.countBoxAlert]}>
+                  <Text style={[styles.countNum, v.isLow && styles.countNumAlert]}>
+                    {v.remainingSessions}
+                  </Text>
+                  <Text style={[styles.countTotal, v.isLow && styles.countTotalAlert]}>
+                    / {v.totalSessions}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Barra de progreso de línea fina milimétrica (2px) */}
+              <View style={styles.hairlineTrack}>
+                <View
+                  style={[
+                    styles.hairlineFill,
+                    { width: `${Math.max(4, percent)}%` },
+                    v.isLow && styles.hairlineFillAlert,
+                  ]}
+                />
+              </View>
+
+              {/* Alerta de renovación con borde rectangular técnico */}
+              {v.isLow ? (
+                <View style={styles.alertBox}>
+                  <Text style={styles.alertIndicator}>!</Text>
+                  <Text style={styles.alertText}>
+                    Te quedan solo {v.remainingSessions} sesiones. Renueva tu bono para asegurar continuidad de reserva.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Caducidad: {v.expiresAt}</Text>
+                  <Text style={styles.metaLabel}>Consumidas: {v.totalSessions - v.remainingSessions}</Text>
+                </View>
+              )}
+
+              {/* Pie de acción directa */}
+              <View style={styles.voucherFooter}>
+                <Text style={styles.voucherFooterNote}>
+                  Válido indistintamente en Vizcaya o Independencia
+                </Text>
+                <TouchableOpacity onPress={handleBuyMore} style={styles.rechargeBtn}>
+                  <Text style={styles.rechargeBtnText}>RECARGAR</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {/* 5. NAVEGACIÓN INFERIOR DE LÍNEA PURA */}
+      <View style={styles.navBar}>
+        <TouchableOpacity style={styles.navItem}>
+          <Text style={styles.navLabelActive}>INICIO</Text>
+          <View style={styles.navDotActive} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={handleBuyMore}>
+          <Text style={styles.navLabel}>BONOS</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => Alert.alert("Reservar", "Próximo paso: calendario de citas.")}
+        >
+          <Text style={styles.navLabel}>RESERVAR</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.navItem} onPress={onLogout}>
+          <Text style={styles.navLabel}>CUENTA</Text>
+        </TouchableOpacity>
       </View>
-
-      {/* Menú de acciones */}
-      <Text style={styles.sectionTitle}>Servicios de Sala</Text>
-      <View style={styles.grid}>
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Reservas", "Abriendo calendario de citas...")}>
-          <Text style={styles.icon}>📅</Text>
-          <Text style={styles.cardTitle}>Reservar Cita</Text>
-          <Text style={styles.cardDesc}>Elige tu sesión semanal</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Rutina", "Cargando tus ejercicios asignados...")}>
-          <Text style={styles.icon}>💪</Text>
-          <Text style={styles.cardTitle}>Mi Entrenamiento</Text>
-          <Text style={styles.cardDesc}>Rutinas, series y pesos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Progreso", "Cargando histórico de peso y medidas...")}>
-          <Text style={styles.icon}>📈</Text>
-          <Text style={styles.cardTitle}>Mi Evolución</Text>
-          <Text style={styles.cardDesc}>Peso, medidas corporales</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => Alert.alert("Cobosu Contacto", "Llamar o escribir a recepción...")}>
-          <Text style={styles.icon}>💬</Text>
-          <Text style={styles.cardTitle}>Atención al Socio</Text>
-          <Text style={styles.cardDesc}>Dudas o cambios de cita</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: cobosuTheme.colors.background,
+    backgroundColor: "#09090b", // Fondo negro carbón neutro
   },
-  content: {
-    padding: 20,
-    paddingTop: 50,
-  },
-  header: {
+  topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
+    alignItems: "flex-end",
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 16,
+    backgroundColor: "#09090b",
+    borderBottomWidth: 1,
+    borderColor: "#18181b",
   },
-  greeting: {
-    fontSize: 13,
-    color: cobosuTheme.colors.textMuted,
+  brandBlock: {
+    gap: 2,
   },
-  userName: {
+  brandTitle: {
     fontSize: 24,
-    fontWeight: "800",
-    color: cobosuTheme.colors.text,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 4,
+    lineHeight: 26,
   },
-  gymTag: {
-    fontSize: 11,
+  brandSub: {
+    fontSize: 8,
     fontWeight: "700",
-    color: cobosuTheme.colors.primary,
-    marginTop: 3,
-    letterSpacing: 0.5,
+    color: "#a1a1aa",
+    letterSpacing: 2,
   },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  accountBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  statusBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     borderWidth: 1,
-    borderColor: cobosuTheme.colors.border,
-    backgroundColor: "#ffffff",
+    borderColor: "#27272a",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 2, // Esquinas rectas
+  },
+  statusSquare: {
+    width: 6,
+    height: 6,
+    backgroundColor: "#22c55e",
+  },
+  statusText: {
+    color: "#e4e4e7",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  logoutBtn: {
+    paddingVertical: 4,
   },
   logoutText: {
-    fontSize: 12,
-    color: cobosuTheme.colors.danger,
-    fontWeight: "600",
-  },
-  memberCard: {
-    backgroundColor: cobosuTheme.colors.primary,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  memberCardEyebrow: {
-    color: "#93c5fd",
-    fontSize: 11,
+    color: "#71717a",
+    fontSize: 10,
     fontWeight: "700",
     letterSpacing: 1,
   },
-  memberCardTitle: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "700",
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 40,
+    maxWidth: 640,
+    width: "100%",
+    alignSelf: "center",
+  },
+  panelBlock: {
+    backgroundColor: "#121215",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 4, // Sin formas redondeadas infantiles
+    padding: 20,
+    marginBottom: 14,
+  },
+  panelHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderColor: "#1f1f23",
+    paddingBottom: 12,
+  },
+  memberIdLabel: {
+    color: "#e4e4e7",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  locationTag: {
+    color: "#dc2626", // Rojo Cobosu técnico
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  metricSection: {
+    paddingVertical: 18,
+  },
+  metricSub: {
+    color: "#71717a",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+  },
+  metricRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 10,
     marginTop: 4,
   },
-  badgeRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-  },
-  badge: {
-    backgroundColor: "rgba(255, 255, 255, 0.12)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    minWidth: 120,
-  },
-  badgeNumber: {
-    fontSize: 20,
-    fontWeight: "800",
+  metricNumber: {
+    fontSize: 54,
+    fontWeight: "900",
     color: "#ffffff",
+    letterSpacing: -1,
+    lineHeight: 56,
   },
-  badgeLabel: {
-    fontSize: 11,
-    color: "#bfdbfe",
-    marginTop: 2,
+  metricUnit: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#a1a1aa",
+    letterSpacing: 1.5,
+  },
+  gridSummary: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderColor: "#1f1f23",
+    paddingTop: 14,
+  },
+  gridCol: {
+    flex: 1,
+  },
+  gridColLabel: {
+    color: "#71717a",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  gridColValue: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginTop: 3,
+  },
+  gridBorder: {
+    width: 1,
+    backgroundColor: "#1f1f23",
+    marginHorizontal: 16,
+  },
+  ctaButton: {
+    backgroundColor: "#dc2626", // Rojo Cobosu con presencia nítida
+    borderRadius: 4, // Esquinas arquitectónicas rectas
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 28,
+  },
+  ctaButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  ctaButtonArrow: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderColor: "#18181b",
+    paddingBottom: 8,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#a1a1aa",
+    letterSpacing: 1.8,
+  },
+  sectionIndex: {
+    fontSize: 10,
     fontWeight: "700",
-    color: cobosuTheme.colors.text,
+    color: "#52525b",
+    letterSpacing: 1,
+  },
+  voucherItem: {
+    backgroundColor: "#121215",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 4, // Recto y limpio
+    padding: 16,
     marginBottom: 12,
   },
-  grid: {
+  voucherTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 12,
   },
-  card: {
-    backgroundColor: cobosuTheme.colors.surface,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: cobosuTheme.colors.border,
+  voucherCode: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#dc2626",
+    letterSpacing: 1.5,
   },
-  icon: {
-    fontSize: 24,
-    marginBottom: 6,
-  },
-  cardTitle: {
+  voucherName: {
     fontSize: 15,
-    fontWeight: "700",
-    color: cobosuTheme.colors.text,
+    fontWeight: "800",
+    color: "#ffffff",
+    marginTop: 3,
+    letterSpacing: 0.3,
   },
-  cardDesc: {
+  countBox: {
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+    borderRadius: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 3,
+  },
+  countBoxAlert: {
+    borderColor: "#eab308",
+    backgroundColor: "rgba(234, 179, 8, 0.08)",
+  },
+  countNum: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#ffffff",
+  },
+  countNumAlert: {
+    color: "#eab308",
+  },
+  countTotal: {
+    fontSize: 10,
+    color: "#71717a",
+    fontWeight: "700",
+  },
+  countTotalAlert: {
+    color: "#ca8a04",
+  },
+  hairlineTrack: {
+    height: 2, // Fino y preciso en vez de barra gruesa redondeada
+    backgroundColor: "#27272a",
+    marginVertical: 14,
+  },
+  hairlineFill: {
+    height: "100%",
+    backgroundColor: "#dc2626",
+  },
+  hairlineFillAlert: {
+    backgroundColor: "#eab308",
+  },
+  alertBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderLeftWidth: 2,
+    borderColor: "#eab308",
+    paddingLeft: 10,
+    marginBottom: 12,
+  },
+  alertIndicator: {
+    color: "#eab308",
+    fontWeight: "900",
     fontSize: 12,
-    color: cobosuTheme.colors.textMuted,
-    marginTop: 2,
+    marginTop: -1,
+  },
+  alertText: {
+    color: "#d4d4d8",
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "500",
+    flex: 1,
+  },
+  metaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  metaLabel: {
+    color: "#71717a",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  voucherFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderColor: "#1a1a1f",
+    paddingTop: 12,
+  },
+  voucherFooterNote: {
+    color: "#52525b",
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  rechargeBtn: {
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+    borderRadius: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  rechargeBtnText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  navBar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#09090b",
+    borderTopWidth: 1,
+    borderColor: "#18181b",
+    paddingVertical: 14,
+    paddingBottom: 24,
+  },
+  navItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  navLabelActive: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  navDotActive: {
+    width: 14,
+    height: 2,
+    backgroundColor: "#dc2626",
+    marginTop: 4,
+  },
+  navLabel: {
+    color: "#52525b",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 2,
   },
 });
-

@@ -23,9 +23,12 @@ export const trainersPointTheme = {
 
 export const cobosuTheme = {
   colors: {
-    primary: "#1e3a8a",       // Azul característico / profesional
-    primaryAccent: "#ff7f0a", // Acento naranja Trainers Point
-    secondary: "#0284c7",
+    primary: "#dc2626",       // Rojo corporativo Cobosu
+    primaryDark: "#991b1b",   // Rojo oscuro para cabeceras y destacados
+    primaryLight: "#fef2f2",  // Fondo suave rojizo
+    primaryBorder: "#fca5a5", // Borde rojizo suave
+    primaryAccent: "#ef4444", // Acento rojo vivo
+    secondary: "#1e293b",     // Gris oscuro carbón para contrastes neutros
     background: "#f8fafc",
     surface: "#ffffff",
     surfaceSubtle: "#f1f5f9",
