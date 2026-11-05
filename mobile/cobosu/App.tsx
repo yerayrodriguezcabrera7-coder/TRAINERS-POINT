@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView, StyleSheet } from "react-native";
-import { ApiClient } from "./shared/api";
-import { Identity } from "./shared/types";
+import { ApiClient } from "../shared/api";
+import { Identity } from "../shared/types";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 

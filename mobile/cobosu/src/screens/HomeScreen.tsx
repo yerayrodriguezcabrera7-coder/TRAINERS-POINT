@@ -8,9 +8,9 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { cobosuTheme } from "../../shared/theme";
-import { ApiClient } from "../../shared/api";
-import { Identity } from "../../shared/types";
+import { cobosuTheme } from "../../../shared/theme";
+import { ApiClient } from "../../../shared/api";
+import { Identity } from "../../../shared/types";
 
 interface HomeScreenProps {
   api: ApiClient;
