@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView, StyleSheet } from "react-native";
 import { HomeScreen, UserVoucher } from "./src/screens/HomeScreen";
@@ -6,6 +6,8 @@ import { BuyVouchersScreen, CartItem } from "./src/screens/BuyVouchersScreen";
 import { BookingScreen, Appointment } from "./src/screens/BookingScreen";
 
 type ActiveView = "HOME" | "BUY" | "BOOKING";
+
+const BACKEND_URL = "http://localhost:3000";
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ActiveView>("HOME");
@@ -50,6 +52,24 @@ export default function App() {
     },
   ]);
 
+  // Sincronizar con el calendario del servidor al inicio
+  useEffect(() => {
+    const fetchCalendar = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/cobosu/calendar`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.appointments && data.appointments.length > 0) {
+            setAppointments(data.appointments);
+          }
+        }
+      } catch {
+        // En caso de que el backend no esté listo, mantenemos las citas iniciales
+      }
+    };
+    fetchCalendar();
+  }, []);
+
   // Siguiente cita confirmada
   const nextAppt = appointments.find((a) => a.status === "CONFIRMADA") || null;
 
@@ -69,8 +89,8 @@ export default function App() {
     setVouchers((prev) => [...newVouchers, ...prev]);
   };
 
-  // 2. Confirmar nueva reserva (descuenta 1 sesión del bono)
-  const handleConfirmBooking = (newAppt: Appointment) => {
+  // 2. Confirmar nueva reserva (descuenta 1 sesión del bono y sincroniza con el calendario de recepción)
+  const handleConfirmBooking = async (newAppt: Appointment) => {
     setAppointments((prev) => [newAppt, ...prev]);
 
     // Descontar 1 sesión del bono correspondiente
@@ -91,10 +111,35 @@ export default function App() {
         return v;
       })
     );
+
+    // Guardar en la base de datos del calendario para que aparezca en el software de recepción
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/cobosu/bookings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          centerId: newAppt.centerId,
+          serviceId: newAppt.serviceId,
+          date: newAppt.dateStr,
+          timeSlot: newAppt.timeSlot,
+          notes: `Reserva app móvil Cobosu - ${newAppt.serviceName}`
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        if (created.booking?.id) {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === newAppt.id ? { ...a, id: created.booking.id } : a))
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("Backend del calendario no contactado, reserva guardada en local:", err);
+    }
   };
 
-  // 3. Cancelar reserva (restituye 1 sesión al bono)
-  const handleCancelAppointment = (appointmentId: string) => {
+  // 3. Cancelar reserva (restituye 1 sesión al bono y anula en recepción)
+  const handleCancelAppointment = async (appointmentId: string) => {
     const appt = appointments.find((a) => a.id === appointmentId);
     setAppointments((prev) => prev.filter((a) => a.id !== appointmentId));
 
@@ -116,6 +161,15 @@ export default function App() {
           return v;
         })
       );
+    }
+
+    try {
+      await fetch(`${BACKEND_URL}/api/cobosu/bookings/${encodeURIComponent(appointmentId)}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      console.warn("Backend del calendario no contactado:", err);
     }
   };
 

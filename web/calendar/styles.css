@@ -54,3 +54,36 @@
   font-size: 12px;
   text-decoration: underline;
 }
+
+/* Brand badges for Cobosu & Trainers Point */
+.booking-brand-pill {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.booking-brand-pill.brand-cobosu {
+  background: #dc2626;
+  color: #ffffff;
+}
+.booking-brand-pill.brand-tp {
+  background: #ff7f0a;
+  color: #ffffff;
+}
+.event.brand-cobosu {
+  border-left-color: #dc2626 !important;
+}
+.event.brand-tp {
+  border-left-color: #ff7f0a !important;
+}
+.month-event.brand-cobosu {
+  border-left-color: #dc2626 !important;
+}
+.month-event.brand-tp {
+  border-left-color: #ff7f0a !important;
+}

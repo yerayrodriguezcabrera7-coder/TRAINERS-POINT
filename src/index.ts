@@ -14,6 +14,7 @@ import { serveRuntime } from "./http/runtime";
 import { prisma } from "./lib/prisma";
 import { progressMigration } from "./progress-migration";
 import { centersRoutes } from './routes/centers';
+import { cobosuCalendarRoutes } from './routes/cobosu-calendar';
 import { trainingPlansRoutes } from './routes/training-plans';
 import { clientsRoutes } from './routes/clients';
 import { financeRoutes } from './routes/finance';
@@ -40,10 +41,12 @@ function hasTrustedOrigin(request: IncomingMessage, port: number): boolean {
   if (!origin) {
     return true;
   }
-  return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}` || origin === deployment.publicOrigin;
+  return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}` || origin === "http://localhost:8081" || origin === "http://127.0.0.1:8081" || origin === deployment.publicOrigin;
 }
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
   const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, hasTrustedOrigin };
+  if (await cobosuCalendarRoutes(request, response, url, context))
+    return;
   if (await authorize(request, response, url, context))
     return;
   for (const route of [trainingPlansRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
@@ -56,6 +59,18 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   sendError(response, 404, "No se encontró el recurso.");
 }
 const server = createServer(async (request, response) => {
+  const origin = request.headers.origin;
+  if (origin && (origin.includes("8081") || origin.includes(`:${port}`) || origin.includes("127.0.0.1") || origin.includes("localhost"))) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-calendar-gym");
+    response.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  if (request.method === "OPTIONS") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   if (!isLocalRequest(request)) {
     sendError(response, 403, "La aplicación solo acepta conexiones locales.");
     return;

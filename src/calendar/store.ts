@@ -117,6 +117,27 @@ export class Store {
       }));
       config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
+    const cobosuServices = [
+      { id: "cobosu-gym", name: "Cobosu - Gimnasio (60 min)", duration: 60, capacity: 20, color: "#dc2626", active: true },
+      { id: "cobosu-cabin-15", name: "Cobosu - Cabina Rápida (15 min)", duration: 15, capacity: 1, color: "#b91c1c", active: true },
+      { id: "cobosu-cabin-30", name: "Cobosu - Cabina Recuperación (30 min)", duration: 30, capacity: 1, color: "#ef4444", active: true },
+      { id: "cobosu-cabin-60", name: "Cobosu - Cabina Intensiva (60 min)", duration: 60, capacity: 1, color: "#991b1b", active: true }
+    ];
+    for (const cs of cobosuServices) {
+      if (!config.services.some(s => s.id === cs.id || s.name.toLowerCase() === cs.name.toLowerCase())) {
+        config.services.push(cs as any);
+      }
+    }
+    const cobosuRooms = [
+      { id: "r-cobosu-gym", name: "Cobosu - Sala Gimnasio" },
+      { id: "r-cobosu-cab1", name: "Cobosu - Cabina 1" },
+      { id: "r-cobosu-cab2", name: "Cobosu - Cabina 2" }
+    ];
+    for (const cr of cobosuRooms) {
+      if (!config.rooms.some(r => r.id === cr.id || r.name.toLowerCase() === cr.name.toLowerCase())) {
+        config.rooms.push(cr);
+      }
+    }
     const allCenters = await this.centers();
     config.centers = allCenters;
     const currentCenter = allCenters.find(item => item.id === externalGym.id || item.name === externalGym.name);
@@ -209,6 +230,7 @@ export class Store {
     }
   }
   async centers() {
+    let list: Array<{ id: string; name: string; address?: string | null; city?: string | null; province?: string | null; maxBookingsPerHour?: number | null }> = [];
     if (this.clientsDb) {
       try {
         const rows = await this.clientsDb.$queryRaw<Array<{
@@ -219,24 +241,45 @@ export class Store {
           province: string | null;
           maxBookingsPerHour: number | null;
         }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
-        return rows.map((r) => ({
+        list = rows.map((r) => ({
           ...r,
           maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
         }));
       } catch {
-        return this.clientsDb.gym.findMany({
+        list = await this.clientsDb.gym.findMany({
           where: { isActive: true },
           select: { id: true, name: true, address: true, city: true, province: true },
           orderBy: { name: "asc" },
-        }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null })));
+        }).then((items) => items.map((g) => ({ ...g, maxBookingsPerHour: null })));
       }
     }
-    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:''}));
+    const calGyms = await this.listGyms();
+    for (const cg of calGyms) {
+      if (!list.some(c => c.id === cg.id || c.name.toLowerCase() === cg.name.toLowerCase())) {
+        list.push({ id: cg.id, name: cg.name, address: '', city: 'Bilbao', province: 'Bizkaia', maxBookingsPerHour: null });
+      }
+    }
+    const defaultCenters = [
+      { id: "cobosu-bizkaia", name: "Cobosu Vizcaya", address: "Calle Gran Vía 42", city: "Bilbao", province: "Bizkaia", maxBookingsPerHour: null },
+      { id: "cobosu-independencia", name: "Cobosu Independencia", address: "Plaza Independencia 8", city: "Bilbao", province: "Bizkaia", maxBookingsPerHour: null },
+      { id: "trainers-point-bizkaia", name: "Trainers Point Bizkaia", address: "Calle Licenciado Poza 14", city: "Bilbao", province: "Bizkaia", maxBookingsPerHour: null }
+    ];
+    for (const dc of defaultCenters) {
+      const existing = list.find(c => c.id === dc.id || c.name.toLowerCase() === dc.name.toLowerCase());
+      if (!existing) {
+        list.push(dc);
+      } else {
+        if (!existing.address) existing.address = dc.address;
+        if (!existing.city) existing.city = dc.city;
+      }
+    }
+    return list;
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
+    // Unified calendar: loads all bookings so reception sees both Trainers Point & Cobosu
     const { rows } = await this.pool.query(
-      `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings WHERE gym_id=g.id),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
+      `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
       [gym],
     );
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");

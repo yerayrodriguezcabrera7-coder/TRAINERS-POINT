@@ -197,6 +197,19 @@ function updateRenewalDetail(){
  box.hidden=false;
  box.innerHTML=`<strong>⚠️ Aviso de bono · ${escapeHTML(alert.serviceName)}</strong><p>${escapeHTML(alert.message)}. Ofrece la renovación del bono al cliente.</p><a href="/clientes/ficha.html?id=${encodeURIComponent(id)}">Ver bono en la ficha del cliente ↗</a>`;
 }
+function getBookingBrand(b) {
+  const service = lookup('services', b.serviceId);
+  const sName = (service.name || b.serviceName || '').toLowerCase();
+  const cName = (b.centerName || b.centerId || '').toLowerCase();
+  const notes = (b.notes || '').toLowerCase();
+  const isCobosu = cName.includes('cobosu') || sName.includes('cobosu') || sName.includes('cabina') || notes.includes('cobosu');
+  return {
+    isCobosu,
+    brandName: isCobosu ? 'COBOSU' : 'TRAINERS POINT',
+    color: isCobosu ? '#dc2626' : '#ff7f0a',
+    badgeClass: isCobosu ? 'brand-cobosu' : 'brand-tp'
+  };
+}
 function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
 
 function renderTimeGrid(dates, bookings, employees) {
@@ -233,13 +246,14 @@ function renderTimeGrid(dates, bookings, employees) {
       const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
       const width = 100 / count;
       const left = lane * width;
-      const currentEmployee = lookup('employees', b.employeeId);
-      const color = lookup('employees',b.employeeId).color || '#7b858d';
+      const brand = getBookingBrand(b);
+      const color = brand.color;
       const soft = `${color}18`;
-      const clientName = lookup('clients', b.clientId).name;
-      const serviceName = lookup('services', b.serviceId).name;
-      const roomName = lookup('rooms', b.roomId).name;
-      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
+      const clientName = lookup('clients', b.clientId).name || b.clientName || 'Cliente';
+      const serviceName = lookup('services', b.serviceId).name || b.serviceName || 'Servicio';
+      const roomName = lookup('rooms', b.roomId).name || b.roomName || 'Espacio';
+      const brandBadge = `<span class="booking-brand-pill ${brand.badgeClass}">${brand.isCobosu ? 'COBOSU' : 'TRAINERS POINT'}</span>`;
+      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''} ${brand.badgeClass}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${brandBadge}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
     });
     if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
     html += '</div>';
@@ -260,8 +274,9 @@ function renderMonth(bookings) {
     const dayBookings = byDay.get(date)||[];
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
-      const color = lookup('services', b.serviceId).color || '#317b9b';
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      const brand = getBookingBrand(b);
+      const color = brand.color;
+      return `<button class="month-event ${b.status} ${brand.badgeClass}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot" style="background:${color}"></span><span><strong style="color:${color};font-size:9px">[${brand.isCobosu ? 'COBOSU' : 'TP'}]</strong> ${b.start} ${escapeHTML(lookup('clients', b.clientId).name || b.clientName || 'Cliente')}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name || b.serviceName || 'Servicio')} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;

@@ -13,9 +13,9 @@
 <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script><link rel="stylesheet" href="/booking-payment.css"><script src="/booking-payment.js" defer></script><link rel="stylesheet" href="/training-plans.css"><script src="/training-plans.js" defer></script></head>
 <body>
 
-  <div class="app-shell"><aside data-app-menu="" aria-label="Navegación del centro"></aside><main id="main" class="main-content"><header class="topbar"><div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Calendario del equipo</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header><section class="page-content">
+  <div class="app-shell"><aside data-app-menu="" aria-label="Navegación del centro"></aside><main id="main" class="main-content"><header class="topbar"><div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Calendario Unificado</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point & Cobosu" style="background:#dc2626;font-size:10px;font-weight:800;letter-spacing:-0.5px">TP·CB</div></div></header><section class="page-content">
     <header class="page-heading">
-      <div><div class="eyebrow">TRAINERS POINT / OPERATIVA DEL CENTRO</div><h1>Calendario del equipo<span style="color:var(--red)">.</span></h1><p id="today-label"></p></div>
+      <div><div class="eyebrow" style="letter-spacing:1px"><span style="color:#ff7f0a;font-weight:800">TRAINERS POINT</span> &amp; <span style="color:#dc2626;font-weight:800">COBOSU</span> / AGENDA DE RECEPCIÓN</div><h1>Calendario del equipo<span style="color:var(--red)">.</span></h1><p id="today-label"></p></div>
       <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">＋</span> Nueva reserva</button></div>
     </header>
     <div id="mode-banner" class="local-banner"><span class="local-dot"></span><strong id="mode-title">Cargando calendario</strong><span id="mode-description">Comprobando el almacenamiento…</span></div>
@@ -34,7 +34,7 @@
       </div>
       <div class="filter-row">
         <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Centro de trabajo<select id="center-filter"><option value="all">Todos los centros</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label>Sala<select id="room-filter"><option value="all">Todos los espacios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button></div>
-        <div class="legend" aria-label="Estados"><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
+        <div class="legend" aria-label="Estados y Marcas"><span style="color:#dc2626;font-weight:700"><i class="dot" style="background:#dc2626"></i> Cobosu</span><span style="color:#ff7f0a;font-weight:700"><i class="dot" style="background:#ff7f0a"></i> Trainers Point</span><span style="opacity:0.3">|</span><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
       </div>
       <div id="calendar" class="calendar-scroll" aria-label="Cuadrante de reservas"></div>
       <footer class="calendar-footer"><span><i class="closed-swatch"></i> Fuera de apertura o turno</span><span id="result-count" aria-live="polite"></span><span>Selecciona un hueco para reservar <span aria-hidden="true">↗</span></span></footer>
