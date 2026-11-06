@@ -3,6 +3,7 @@ import { createHash,randomBytes,randomUUID,scrypt,timingSafeEqual } from "node:c
 import { Pool } from "pg";
 import { z } from "zod";
 import { ApiError } from "./model";
+import type { CognitoIdentity } from "../cloud/cognito";
 
 const SCRYPT_N = 131072;
 const SCRYPT_R = 8;
@@ -96,6 +97,12 @@ DROP INDEX IF EXISTS calendar.users_gym_client;
 CREATE UNIQUE INDEX IF NOT EXISTS users_gym_client ON calendar.users(gym_id, client_id) WHERE client_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS calendar.sessions (
  token_hash text PRIMARY KEY, user_id text NOT NULL REFERENCES calendar.users(id), expires_at timestamptz NOT NULL);
+ALTER TABLE calendar.sessions ADD COLUMN IF NOT EXISTS external_issuer text;
+ALTER TABLE calendar.sessions ADD COLUMN IF NOT EXISTS external_subject text;
+CREATE TABLE IF NOT EXISTS calendar.external_identities (
+ gym_id text NOT NULL REFERENCES calendar.gyms(id), issuer text NOT NULL, subject text NOT NULL,
+ user_id text NOT NULL REFERENCES calendar.users(id) ON DELETE CASCADE,
+ PRIMARY KEY(gym_id,issuer,subject), UNIQUE(gym_id,issuer,user_id));
 CREATE INDEX IF NOT EXISTS sessions_user ON calendar.sessions(user_id);`;
 
 export class Access {
@@ -383,6 +390,29 @@ export class Access {
     await this.pool.query("INSERT INTO calendar.sessions(token_hash,user_id,expires_at) VALUES($1,$2,now()+interval '12 hours')", [digest(token),row.id]);
     return { token, role: row.role, mustChangePassword: row.must_change_password };
   }
+  async loginWithCognito(gym: string, identity: CognitoIdentity, portal?: "CLIENT" | "TRAINER" | "OFFICE") {
+    if (!identity.subject || !identity.issuer || !Number.isFinite(identity.expiresAt) || identity.expiresAt <= Date.now())
+      throw new ApiError(401, "El acceso de Cognito ha caducado.");
+    const row = (await this.pool.query(`SELECT u.* FROM calendar.external_identities e
+      JOIN calendar.users u ON u.id=e.user_id AND u.gym_id=e.gym_id
+      WHERE e.gym_id=$1 AND e.issuer=$2 AND e.subject=$3 AND u.enabled`,
+    [gym,identity.issuer,identity.subject])).rows[0];
+    if (!row) throw new ApiError(403, "Recepción debe vincular tu cuenta del centro antes de que puedas acceder con Cognito.");
+    if (portal && !(portal === "OFFICE" ? ["ADMIN","RECEPTION"].includes(row.role) : row.role === portal))
+      throw new ApiError(403, "Esta cuenta pertenece a otro acceso. Utiliza la entrada correspondiente a tu perfil.");
+    const token = randomBytes(32).toString("hex");
+    await this.pool.query("DELETE FROM calendar.sessions WHERE expires_at < now()");
+    await this.pool.query(`INSERT INTO calendar.sessions(token_hash,user_id,expires_at,external_issuer,external_subject)
+      VALUES($1,$2,$3,$4,$5)`, [digest(token),row.id,new Date(Math.min(identity.expiresAt,Date.now()+12*60*60_000)),identity.issuer,identity.subject]);
+    try {
+      // Reuse the exact same active employee/client and tenant checks as local sessions.
+      const user = await this.identify(gym,token);
+      return { token, role: user.role, mustChangePassword: false };
+    } catch (error) {
+      await this.logout(token);
+      throw error;
+    }
+  }
   async changePassword(gym: string, token: string, raw: unknown) {
     const input = z.object({
       currentPassword: z.string().min(1).max(128),
@@ -396,10 +426,11 @@ export class Access {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
-      const row = (await db.query(`SELECT u.id,u.password_hash FROM calendar.sessions s
+      const row = (await db.query(`SELECT u.id,u.password_hash,s.external_issuer FROM calendar.sessions s
         JOIN calendar.users u ON u.id=s.user_id
         WHERE s.token_hash=$1 AND s.expires_at>now() AND u.gym_id=$2 AND u.enabled FOR UPDATE OF u`, [tokenHash,gym])).rows[0];
       if (!row) throw new ApiError(401, "Inicia sesión para continuar.");
+      if (row.external_issuer) throw new ApiError(403, "Cambia la contraseña desde el acceso de Cognito.");
       if (!(await verifyPassword(input.currentPassword, row.password_hash)))
         throw new ApiError(400, "La contraseña actual no es correcta.");
       if (input.currentPassword === input.newPassword)
@@ -443,19 +474,22 @@ export class Access {
     }
   }
   async identify(gym: string, token: string): Promise<Identity> {
-    const row = (await this.pool.query(`SELECT u.*,g.config FROM calendar.sessions s
+    const row = (await this.pool.query(`SELECT u.*,g.config,s.external_issuer FROM calendar.sessions s
       JOIN calendar.users u ON u.id=s.user_id JOIN calendar.gyms g ON g.id=u.gym_id
-      WHERE s.token_hash=$1 AND s.expires_at>now() AND u.gym_id=$2 AND u.enabled`, [digest(token),gym])).rows[0];
+      WHERE s.token_hash=$1 AND s.expires_at>now() AND u.gym_id=$2 AND u.enabled
+      AND (s.external_issuer IS NULL OR EXISTS (SELECT 1 FROM calendar.external_identities e
+        WHERE e.gym_id=u.gym_id AND e.user_id=u.id AND e.issuer=s.external_issuer AND e.subject=s.external_subject))`, [digest(token),gym])).rows[0];
     if (!row) throw new ApiError(401, "Inicia sesión para continuar.");
+    const mustChangePassword = !row.external_issuer && row.must_change_password;
     if (row.role === "CLIENT") {
       const client = (row.client_id ? await this.findExternalClient(gym,row.client_id) : null) ||
         row?.config.clients.find((c: any) => c.id === row.client_id);
       if (!client || client.status === "BLOCKED") throw new ApiError(401, "Inicia sesión para continuar.");
-      return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword: row.must_change_password };
+      return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword };
     }
     const employee = row?.config.employees.find((e: any) => e.id === row.employee_id);
     if (!employee || employee.active === false) throw new ApiError(401, "Inicia sesión para continuar.");
-    return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword: row.must_change_password };
+    return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword };
   }
   async logout(token: string) {
     await this.pool.query("DELETE FROM calendar.sessions WHERE token_hash=$1", [digest(token)]);

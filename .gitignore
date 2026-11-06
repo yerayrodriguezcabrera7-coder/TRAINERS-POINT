@@ -8,6 +8,7 @@ dist
 
 backups/
 deploy/.env
+deploy/aws/.env
 *.dump
 
 # Mobile (Expo / React Native)

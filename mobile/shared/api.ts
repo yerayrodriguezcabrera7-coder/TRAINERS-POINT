@@ -1,4 +1,6 @@
 import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery } from "./types";
+import type { CognitoAuth } from "./cognito";
+export { CognitoPasswordRequired } from "./cognito";
 
 export interface ApiClientConfig {
   baseUrl: string;
@@ -7,10 +9,12 @@ export interface ApiClientConfig {
   setToken?: (token: string | null) => Promise<void>;
   onUnauthorized?: () => void;
   timeoutMs?: number;
+  cognito?: CognitoAuth;
 }
 
 export class ApiClient {
   private gymId?: string;
+  private loginPortal?: LoginRequest["portal"];
   constructor(private readonly config: ApiClientConfig) { this.gymId = config.gymId; }
   setGymId(gymId: string) { this.gymId = gymId.trim() || undefined; }
   getGymId() { return this.gymId || "Centro configurado en el servidor"; }
@@ -29,6 +33,7 @@ export class ApiClient {
         ...options, headers, signal: controller.signal,
       });
       if (response.status === 401 && authenticated) {
+        this.config.cognito?.clear();
         await this.config.setToken?.(null);
         this.config.onUnauthorized?.();
       }
@@ -52,17 +57,47 @@ export class ApiClient {
   }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
+    this.loginPortal = credentials.portal;
+    await this.config.setToken?.(null);
+    if (this.config.cognito) {
+      const accessToken = await this.config.cognito.login(credentials.username,credentials.password);
+      return this.exchangeCognito(accessToken);
+    }
     const result = await this.request<LoginResponse>("/api/login", { method: "POST", body: JSON.stringify(credentials) }, false);
     if (!result.token) throw new Error("El servidor no ha devuelto una sesión válida.");
     await this.config.setToken?.(result.token);
     return result;
   }
+  private async exchangeCognito(accessToken: string): Promise<LoginResponse> {
+    try {
+      const result = await this.request<LoginResponse>("/api/cognito/login", {
+        method: "POST", body: JSON.stringify({ accessToken, portal: this.loginPortal }),
+      }, false);
+      if (!result.token) throw new Error("El servidor no ha devuelto una sesión válida.");
+      await this.config.setToken?.(result.token);
+      return result;
+    } catch (error) { this.config.cognito?.clear(); throw error; }
+  }
   async logout(): Promise<void> {
     try { await this.request("/api/logout", { method: "POST" }); }
-    finally { await this.config.setToken?.(null); }
+    finally { this.config.cognito?.clear(); await this.config.setToken?.(null); }
   }
   getMe() { return this.request<Identity>("/api/me"); }
-  changePassword(currentPassword: string, newPassword: string, confirmPassword: string) {
+  async cancelLogin() {
+    this.loginPortal = undefined;
+    this.config.cognito?.clear();
+    await this.config.setToken?.(null);
+  }
+  async changePassword(currentPassword: string, newPassword: string, confirmPassword: string) {
+    if (newPassword.length < 12 || newPassword !== confirmPassword)
+      throw new Error("Escribe una contraseña nueva de al menos 12 caracteres y repítela igual.");
+    if (this.config.cognito) {
+      if (this.config.cognito.hasPasswordChallenge()) {
+        await this.exchangeCognito(await this.config.cognito.completePassword(newPassword));
+        return { ok: true };
+      }
+      return this.config.cognito.changePassword(currentPassword,newPassword);
+    }
     return this.request("/api/password/change", { method: "POST", body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
   }
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }

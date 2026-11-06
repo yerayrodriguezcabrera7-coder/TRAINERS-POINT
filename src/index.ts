@@ -22,6 +22,8 @@ import { servicesRoutes } from './routes/services';
 import { runtimeConfig } from "./runtime-config";
 import { configuredProvider } from "./reminders/provider";
 import { ReminderWorker } from "./reminders/worker";
+import { createCognitoVerifier } from "./cloud/cognito";
+import { databaseConfig } from "./cloud/database";
 const deployment = runtimeConfig();
 const host = deployment.host, port = deployment.port;
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
@@ -131,11 +133,12 @@ const server = createServer(async (request, response) => {
   }
 });
 async function start(): Promise<void> {
+  const cognito = createCognitoVerifier();
   const calendarDatabaseUrl = process.env.CALENDAR_DATABASE_URL || process.env.DATABASE_URL;
-  const pool = new Pool({ connectionString: calendarDatabaseUrl });
+  const pool = new Pool(databaseConfig(calendarDatabaseUrl).pg);
   const crmPool = calendarDatabaseUrl === process.env.DATABASE_URL
     ? pool
-    : new Pool({ connectionString: process.env.DATABASE_URL });
+    : new Pool(databaseConfig(process.env.DATABASE_URL).pg);
   calendarPool = pool;
   const store = new Store(pool, prisma);
   calendarAccess = new Access(pool, prisma);
@@ -192,7 +195,7 @@ async function start(): Promise<void> {
   }
   const token = process.env.CALENDAR_ADMIN_TOKEN || randomBytes(24).toString("hex");
   calendarBootstrapToken = token;
-  const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: !deployment.production });
+  const calendar = createCalendarServer(store, gym, token, { exposeAdminToken: !deployment.production, cognito });
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
   const stopReminders = new ReminderWorker(pool, configuredProvider()).start();

@@ -15,11 +15,14 @@
     "demo": "npm run build && node scripts/demo.cjs",
     "start:production": "node dist/index.js",
     "admin:create": "node scripts/create-admin.cjs",
+    "aws:link-user": "node scripts/link-cognito.cjs",
+    "aws:check": "node scripts/check-aws.cjs",
     "db:backup": "node scripts/database-backup.cjs",
     "db:restore": "node scripts/database-backup.cjs restore"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
+    "aws-jwt-verify": "^5.2.1",
     "dotenv": "^16.4.5",
     "luxon": "^3.7.2",
     "pg": "^8.23.1",

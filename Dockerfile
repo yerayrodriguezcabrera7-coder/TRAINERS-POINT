@@ -23,6 +23,9 @@ COPY --chown=node:node package.json ./
 COPY --chown=node:node web ./web
 COPY --chown=node:node public ./public
 COPY --chown=node:node scripts/create-admin.cjs ./scripts/create-admin.cjs
+COPY --chown=node:node scripts/link-cognito.cjs ./scripts/link-cognito.cjs
+COPY --chown=node:node scripts/check-aws.cjs ./scripts/check-aws.cjs
+COPY --chown=node:node deploy/aws/api-gateway.json ./deploy/aws/api-gateway.json
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

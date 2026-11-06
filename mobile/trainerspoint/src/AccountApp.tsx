@@ -8,6 +8,7 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { StaffScreen } from "./screens/StaffScreen";
 import { apiBaseUrl } from "../../shared/config";
+import { mobileCognito } from "../../shared/cognito";
 
 export default function AccountApp({ onBack }: { onBack: () => void }) {
   const [currentUser, setCurrentUser] = useState<Identity | null>(null);
@@ -17,6 +18,7 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
     return new ApiClient({
       baseUrl: apiBaseUrl(Platform.OS, process.env.EXPO_PUBLIC_API_URL),
       gymId: process.env.EXPO_PUBLIC_GYM_ID?.trim() || undefined,
+      cognito: mobileCognito(process.env.EXPO_PUBLIC_AUTH_PROVIDER, process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID, process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID),
       getToken: async () => token,
       setToken: async value => { token = value; },
       onUnauthorized: () => { setCurrentUser(null); setLoginKey(value => value + 1); },

@@ -59,3 +59,7 @@ El directorio `.calendar-dev/` contiene la base local persistente y sus credenci
 ## Puesta en marcha en la empresa
 
 La [guía de puesta en marcha](docs/puesta-en-marcha.md) explica la instalación con HTTPS, la primera cuenta de administración, las copias de seguridad y una jornada de prueba con el tutor. Los cobros actuales registran dinero recibido; los cargos bancarios online necesitan un proveedor y credenciales de la empresa.
+
+## Integración opcional con AWS
+
+La conexión opcional con Cognito, RDS PostgreSQL y la plantilla de API Gateway están documentadas en [deploy/aws/README.md](deploy/aws/README.md). Están desactivadas por defecto y no crean servicios de pago. Web y app conservan el servidor y la base compartidos.

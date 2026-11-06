@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { cobosuTheme } from "../../../shared/theme";
-import { ApiClient } from "../../../shared/api";
+import { ApiClient, CognitoPasswordRequired } from "../../../shared/api";
 import type { Identity } from "../../../shared/types";
 
 interface LoginScreenProps {
@@ -55,6 +55,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
       const me = await api.getMe();
       onLoginSuccess(me);
     } catch (error: unknown) {
+      if (error instanceof CognitoPasswordRequired) { setMustChange(true); return; }
       setError(error instanceof Error ? error.message : "No se ha podido iniciar sesión.");
     } finally {
       setLoading(false);
@@ -101,6 +102,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ api, onLoginSuccess })
             <TextInput accessibilityLabel="Nueva contraseña" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry editable={!loading} />
             <Text style={styles.label}>Repite la nueva contraseña</Text>
             <TextInput accessibilityLabel="Repite la nueva contraseña" style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry editable={!loading} />
+            <TouchableOpacity accessibilityRole="button" disabled={loading} onPress={() => { void api.cancelLogin(); setMustChange(false); setPassword(""); setNewPassword(""); setConfirmPassword(""); setError(""); }} style={{ minHeight: 44, justifyContent: "center" }}><Text>Volver a iniciar sesión</Text></TouchableOpacity>
           </>}
           {!!error && <Text accessibilityRole="alert" style={{ color: "#a52c20", marginVertical: 12 }}>{error}</Text>}
 

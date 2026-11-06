@@ -1,21 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
-
-// The development database currently presents a self-signed certificate.
-// Keep production certificate verification strict, while making the local
-// `npm run dev` command work with the existing DATABASE_URL.
-if (process.env.NODE_ENV !== "production" && process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.DATABASE_URL.replace(
-    /([?&])sslmode=require(&|$)/,
-    "$1sslmode=no-verify$2",
-  );
-}
+import { databaseConfig } from "../cloud/database";
 
 declare global {
   var prisma: PrismaClient | undefined;
 }
 
-export const prisma = globalThis.prisma ?? new PrismaClient();
+export const prisma = globalThis.prisma ?? new PrismaClient({ datasourceUrl: databaseConfig(process.env.DATABASE_URL).prismaUrl });
 
 if (process.env.NODE_ENV !== "production") {
   globalThis.prisma = prisma;

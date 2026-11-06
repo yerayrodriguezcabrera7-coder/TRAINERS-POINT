@@ -12,6 +12,7 @@ require.extensions['.ts'] = (module, filename) => {
 const { ApiClient } = require('./api.ts');
 const { apiBaseUrl } = require('./config.ts');
 const { upcomingBookings } = require('./calendar.ts');
+const { mobileCognito, CognitoPasswordRequired } = require('./cognito.ts');
 const realFetch = global.fetch;
 test.afterEach(() => { global.fetch = realFetch; });
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -20,6 +21,69 @@ function capture(result = {}) {
   global.fetch = async (url, options) => { calls.push({ url, ...options, body: options.body ? JSON.parse(options.body) : null }); return json(result); };
   return calls;
 }
+
+test('Cognito is opt-in and only accepts a public app client configuration', () => {
+  assert.equal(mobileCognito(),undefined);
+  assert.equal(mobileCognito('local'),undefined);
+  assert.throws(() => mobileCognito('unknown'),/local o cognito/);
+  assert.throws(() => mobileCognito('cognito'),/Falta configurar/);
+});
+
+test('Cognito login exchanges the access token without sending passwords or AWS tokens to calendar endpoints', async () => {
+  const calls = [], saved = [];
+  global.fetch = async (url,options) => {
+    calls.push({url,...options,body:JSON.parse(options.body)});
+    return json(calls.length === 1 ? { AuthenticationResult:{AccessToken:'verified-access-token',IdToken:'unused-id-token'} } :
+      { token:'local-session',role:'TRAINER',mustChangePassword:false });
+  };
+  const api = new ApiClient({baseUrl:'https://gym.example',cognito:mobileCognito('cognito','eu-south-2_TestPool','testclient123'),setToken:async t=>saved.push(t)});
+  await api.login({username:'worker',password:'PersonalPassword123!',portal:'TRAINER'});
+  assert.equal(calls[0].url,'https://cognito-idp.eu-south-2.amazonaws.com/');
+  assert.equal(calls[0].body.AuthFlow,'USER_PASSWORD_AUTH');
+  assert.equal(calls[0].body.AuthParameters.PASSWORD,'PersonalPassword123!');
+  assert.equal(calls[1].url,'https://gym.example/api/cognito/login');
+  assert.deepEqual(calls[1].body,{accessToken:'verified-access-token',portal:'TRAINER'});
+  assert.deepEqual(saved,[null,'local-session']);
+});
+
+test('Cognito provisional password challenge creates no local session until completed', async () => {
+  const calls = [], saved = [];
+  global.fetch = async (url,options) => {
+    calls.push({url,...options,body:JSON.parse(options.body)});
+    return json(calls.length===1 ? {ChallengeName:'NEW_PASSWORD_REQUIRED',Session:'challenge-session',ChallengeParameters:{requiredAttributes:'[]',USER_ID_FOR_SRP:'canonical-user'}} :
+      calls.length===2 ? {AuthenticationResult:{AccessToken:'new-access'}} : {token:'local-session',role:'CLIENT',mustChangePassword:false});
+  };
+  const api = new ApiClient({baseUrl:'https://gym.example',cognito:mobileCognito('cognito','eu-south-2_TestPool','testclient123'),setToken:async t=>saved.push(t)});
+  await assert.rejects(api.login({username:'client',password:'Temporary123!',portal:'CLIENT'}),CognitoPasswordRequired);
+  assert.deepEqual(saved,[null]); assert.equal(calls.length,1);
+  await assert.rejects(api.changePassword('Temporary123!','different','not matching'),/repítela/);
+  assert.equal(calls.length,1);
+  await api.changePassword('Temporary123!','NewPassword123!','NewPassword123!');
+  assert.equal(calls[1].headers['X-Amz-Target'],'AWSCognitoIdentityProviderService.RespondToAuthChallenge');
+  assert.deepEqual(calls[1].body.ChallengeResponses,{USERNAME:'canonical-user',NEW_PASSWORD:'NewPassword123!'});
+  assert.equal(calls[2].body.portal,'CLIENT'); assert.deepEqual(saved,[null,'local-session']);
+});
+
+test('Rejected Cognito tokens never create a local session or fall back to password login', async () => {
+  const calls = [], saved = [];
+  global.fetch = async (url,options) => {
+    calls.push(url);
+    return calls.length===1 ? json({AuthenticationResult:{AccessToken:'unlinked'}}) : json({error:'Cuenta no vinculada'},403);
+  };
+  const api = new ApiClient({baseUrl:'https://gym.example',cognito:mobileCognito('cognito','eu-south-2_TestPool','testclient123'),setToken:async t=>saved.push(t)});
+  await assert.rejects(api.login({username:'client',password:'Secret',portal:'CLIENT'}),/no vinculada/);
+  assert.deepEqual(saved,[null]); assert.equal(calls.length,2);
+  assert.equal(calls.includes('https://gym.example/api/login'),false);
+});
+
+test('Cognito reports unsupported verification and authentication failures without exposing AWS responses', async () => {
+  const cognito = mobileCognito('cognito','eu-south-2_TestPool','testclient123');
+  global.fetch = async () => json({ChallengeName:'SOFTWARE_TOKEN_MFA',Session:'private'});
+  await assert.rejects(cognito.login('user','password'),/verificación adicional/);
+  assert.equal(cognito.hasPasswordChallenge(),false);
+  global.fetch = async () => json({__type:'NotAuthorizedException',message:'private AWS diagnostic'},400);
+  await assert.rejects(cognito.login('user','password'),error => /incorrectos/.test(error.message) && !/private/.test(error.message));
+});
 
 test('iPhone and Android use the correct local host, and secrets cannot be embedded in the URL', () => {
   assert.equal(apiBaseUrl('ios'), 'http://127.0.0.1:3000');

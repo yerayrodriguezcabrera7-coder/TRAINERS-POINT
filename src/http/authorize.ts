@@ -4,7 +4,7 @@ import type { ApiContext } from './api-context';
 import { sendError } from "./json";
 export async function authorize(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
   const { calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym } = context;
-  const isPublic = url.pathname === "/api/health" || url.pathname === "/api/login" || url.pathname.startsWith("/api/public/");
+  const isPublic = url.pathname === "/api/health" || url.pathname === "/api/login" || url.pathname === "/api/cognito/login" || url.pathname.startsWith("/api/public/");
   if (!isPublic && calendarAccess) {
     const bearer = (request.headers.authorization || "").replace(/^Bearer /, "");
     let selectedGym = (request.headers["x-calendar-gym"] as string) || currentConfiguredGym;

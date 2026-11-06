@@ -11,6 +11,7 @@ import { Store } from "./store";
 import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
 import { mobileStaffView, staffClientIds } from "./mobile-view";
+import type { CognitoVerifier } from "../cloud/cognito";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -40,7 +41,7 @@ export function server(
   store: Store,
   defaultGym: string,
   token: string,
-  options: { exposeAdminToken?: boolean } = {},
+  options: { exposeAdminToken?: boolean; cognito?: CognitoVerifier } = {},
 ) {
   if (token.length < 24)
     throw new Error("CALENDAR_ADMIN_TOKEN debe tener al menos 24 caracteres.");
@@ -57,14 +58,19 @@ export function server(
       }
       if (path.startsWith("/api/")) {
         if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
-        if (req.method === "POST" && path === "/api/login") {
+        if (req.method === "POST" && (path === "/api/login" || path === "/api/cognito/login")) {
           const key = req.socket.remoteAddress || "unknown";
           const now = Date.now();
           for (const [k,v] of attempts) if (v.until < now) attempts.delete(k);
           const attempt = attempts.get(key) || { count: 0, until: now + 15 * 60_000 };
           if (attempt.count >= 20) throw new ApiError(429, "Demasiados intentos. Espera 15 minutos.");
           attempt.count++; attempts.set(key,attempt);
-          send(res,200,await access.login(gym,await body(req)));
+          const raw = await body(req);
+          if (path === "/api/cognito/login") {
+            if (!options.cognito) throw new ApiError(503, "El acceso con Cognito todavía no está activado en este centro.");
+            const input = z.object({ accessToken: z.string().min(1).max(16384), portal: z.enum(["CLIENT","TRAINER","OFFICE"]).optional() }).parse(raw);
+            send(res,200,await access.loginWithCognito(gym,await options.cognito(input.accessToken),input.portal));
+          } else send(res,200,await access.login(gym,raw));
           attempts.delete(key);
           return;
         }
