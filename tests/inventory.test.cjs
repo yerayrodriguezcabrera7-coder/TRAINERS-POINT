@@ -478,3 +478,62 @@ test('Recordatorios: fallo ambiguo no repite; rechazo temporal se reintenta; mod
  await retry.run(new Date('2033-01-14T09:06:00Z'));assert.equal(retries,2);
  await new ReminderWorker({query:()=>{throw Error('No debe consultar ni enviar');}},null).run(now);
 });
+
+test('Reposición en tienda: recepción puede anotar qué falta para pedir, listar, marcar pedidos y reponer stock al recibir', async () => {
+  const gym = randomUUID();
+  const p = await inventory.saveProduct(gym, { name: 'Batido Proteico Chocolate', price: 3.5, stock: 2 });
+
+  // Recepcionista anota que falta pedir el batido
+  const req1 = await inventory.saveRestockRequest(gym, { id: 'usr-recep', name: 'Laura Recepción' }, {
+    productId: p.id,
+    quantity: 20,
+    notes: 'Quedan solo 2 en la nevera'
+  });
+  assert.equal(req1.productId, p.id);
+  assert.equal(req1.quantity, 20);
+  assert.equal(req1.status, 'PENDIENTE');
+  assert.equal(req1.requestedByName, 'Laura Recepción');
+
+  // Recepcionista anota un producto que no está en el catálogo todavía
+  const req2 = await inventory.saveRestockRequest(gym, { id: 'usr-recep', name: 'Laura Recepción' }, {
+    productName: 'Toallas microfibra TP',
+    quantity: 15,
+    notes: 'Varios socios han pedido toallas del gimnasio'
+  });
+  assert.equal(req2.productId, null);
+  assert.equal(req2.productName, 'Toallas microfibra TP');
+  assert.equal(req2.quantity, 15);
+  assert.equal(req2.status, 'PENDIENTE');
+
+  // Listar solicitudes
+  const pending = await inventory.restockRequests(gym, 'PENDIENTE');
+  assert.equal(pending.length, 2);
+
+  // Marcar como pedido al proveedor
+  const ordered = await inventory.updateRestockRequest(gym, { id: 'usr-recep' }, req1.id, { status: 'PEDIDO' });
+  assert.equal(ordered.status, 'PEDIDO');
+
+  // Marcar como recibido e incrementar stock
+  const received = await inventory.updateRestockRequest(gym, { id: 'usr-recep', name: 'Laura Recepción' }, req1.id, {
+    status: 'RECIBIDO',
+    addToStock: true
+  });
+  assert.equal(received.status, 'RECIBIDO');
+  assert.ok(received.resolvedAt);
+
+  // Comprobar que el producto ahora tiene 22 unidades (2 iniciales + 20 del pedido recibido)
+  const products = await inventory.products(gym);
+  const updatedP = products.find(prod => prod.id === p.id);
+  assert.equal(updatedP.stock, 22);
+
+  // Comprobar permisos: RECEPTION tiene permiso para 'restock'
+  assert.doesNotThrow(() => inventoryPermission({ role: 'RECEPTION' }, 'restock'));
+  assert.doesNotThrow(() => inventoryPermission({ role: 'ADMIN' }, 'restock'));
+  assert.throws(() => inventoryPermission({ role: 'TRAINER' }, 'restock'), /permiso/);
+  assert.throws(() => inventoryPermission({ role: 'CLIENT' }, 'restock'), /permiso/);
+
+  // Eliminar la segunda solicitud
+  await inventory.removeRestockRequest(gym, req2.id);
+  const remaining = await inventory.restockRequests(gym, 'ALL');
+  assert.equal(remaining.length, 1);
+});

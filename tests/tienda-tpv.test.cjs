@@ -56,6 +56,18 @@ test('Tienda TPV: la página HTML tiene la estructura correcta para venta físic
   // Diálogo de comprobante / ticket
   assert.ok(html.includes('id="receipt-dialog"'), 'Debe tener diálogo para imprimir/ver ticket');
   assert.ok(html.includes('id="open-cash-dialog"'), 'Debe tener diálogo para abrir caja');
+
+  // Sección y diálogo de reposición ("poner desde recepcion que falta para pedirlo")
+  assert.ok(html.includes('id="btn-quick-restock"'), 'Debe tener botón de acceso rápido para anotar lo que falta');
+  assert.ok(html.includes('id="tab-restock"'), 'Debe tener pestaña de Falta para pedir');
+  assert.ok(html.includes('id="badge-restock-count"'), 'Debe mostrar el contador de productos que faltan');
+  assert.ok(html.includes('id="panel-restock"'), 'Debe tener panel de productos que faltan para pedir');
+  assert.ok(html.includes('id="btn-catalog-restock"'), 'Debe permitir anotar falta desde la barra del catálogo');
+  assert.ok(html.includes('id="restock-requests-tbody"'), 'Debe tener tabla para listar lo que falta');
+  assert.ok(html.includes('id="restock-dialog"'), 'Debe tener diálogo para anotar lo que falta para pedir');
+  assert.ok(html.includes('id="restock-product-select"'), 'Debe permitir seleccionar producto del catálogo o externo');
+  assert.ok(html.includes('id="restock-quantity"'), 'Debe permitir especificar la cantidad a pedir');
+  assert.ok(html.includes('id="btn-submit-restock"'), 'Debe tener botón para guardar el aviso para pedir');
 });
 
 test('Tienda TPV: asset-catalog y menu incluyen las rutas de la tienda', () => {
@@ -189,6 +201,144 @@ test('Tienda TPV: simulación de ticket, cálculo de cambio y arqueo con caja', 
   assert.ok(doc.getElementById('badge-dispatched-units').textContent.includes('14'), 'Total de 14 unidades salidas (10 agua + 4 barrita)');
   assert.ok(doc.getElementById('dispatched-products-tbody').textContent.includes('Agua mineral'));
   assert.ok(doc.getElementById('dispatched-products-tbody').textContent.includes('10 uds'));
+
+  dom.window.close();
+});
+
+test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que falta para pedir', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  // Dialog mocks
+  w.HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function() { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', description: 'Bebida fría', unitPrice: 1.50, stock: 20, isActive: true },
+    { id: 'p2', name: 'Batido Whey Vainilla', description: 'Suplemento proteico', unitPrice: 3.50, stock: 0, isActive: true } // Agotado
+  ];
+
+  let restockList = [
+    {
+      id: 'restock-1',
+      productId: 'p2',
+      productName: 'Batido Whey Vainilla',
+      quantity: 12,
+      status: 'PENDIENTE',
+      notes: 'Agotado en mostrador, clientes preguntan',
+      requestedBy: 'usr-1',
+      requestedByName: 'Recepcionista Turno Mañana',
+      createdAt: '2026-11-09T09:00:00Z',
+      product: { id: 'p2', name: 'Batido Whey Vainilla', stock: 0, unitPrice: 3.50, isActive: true }
+    }
+  ];
+
+  let lastCreatedPayload = null;
+  let lastUpdatedStatus = null;
+
+  w.fetch = async (url, opts = {}) => {
+    if (url === '/api/me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION' }) };
+    if (url === '/api/inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (url === '/api/manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (url === '/api/cash/current') return { ok: true, json: async () => ({ session: null }) };
+    if (url === '/api/inventory/restock' && (!opts.method || opts.method === 'GET')) {
+      return { ok: true, json: async () => ({ requests: restockList }) };
+    }
+    if (url === '/api/inventory/restock' && opts.method === 'POST') {
+      lastCreatedPayload = JSON.parse(opts.body);
+      const newReq = {
+        id: 'restock-2',
+        productId: lastCreatedPayload.productId,
+        productName: lastCreatedPayload.productName,
+        quantity: lastCreatedPayload.quantity,
+        status: 'PENDIENTE',
+        notes: lastCreatedPayload.notes,
+        requestedBy: 'usr-1',
+        requestedByName: 'Recepcionista',
+        createdAt: new Date().toISOString(),
+        product: mockProducts.find(p => p.id === lastCreatedPayload.productId) || null
+      };
+      restockList.push(newReq);
+      return { ok: true, json: async () => newReq };
+    }
+    if (url.startsWith('/api/inventory/restock/') && opts.method === 'PATCH') {
+      const id = url.split('/').pop();
+      const body = JSON.parse(opts.body);
+      lastUpdatedStatus = body.status;
+      const target = restockList.find(r => r.id === id);
+      if (target) {
+        target.status = body.status;
+        if (body.addToStock && target.productId) {
+          const p = mockProducts.find(prod => prod.id === target.productId);
+          if (p) p.stock += target.quantity;
+        }
+      }
+      return { ok: true, json: async () => target };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // 1. Contador y badges iniciales
+  assert.equal(doc.getElementById('badge-restock-count').textContent, '1', 'Debe marcar 1 producto pendiente de pedir');
+  assert.equal(doc.getElementById('kpi-restock-pending').textContent, '1');
+
+  // 2. El producto p2 (Batido Whey) que ya tiene solicitud pendiente muestra la etiqueta "📋 Falta (12 uds)"
+  const cards = doc.querySelectorAll('.tpv-product-card');
+  assert.ok(cards[1].innerHTML.includes('Falta (12 uds)'), 'Debe mostrar en la tarjeta que ya está anotado que falta');
+
+  // 3. El producto p1 (Agua mineral) aún no está pedido -> debe tener el botón "⚠️ Falta para pedir"
+  const restockBtnP1 = cards[0].querySelector('.tpv-card-restock-btn');
+  assert.ok(restockBtnP1, 'Debe haber botón para anotar que falta el producto');
+
+  // Al pulsar "⚠️ Falta para pedir" en Agua mineral:
+  restockBtnP1.click();
+  const select = doc.getElementById('restock-product-select');
+  assert.equal(select.value, 'p1', 'El modal debe abrirse con el producto p1 preseleccionado');
+
+  // Simular anotar 24 botellas de agua que faltan
+  doc.getElementById('restock-quantity').value = '24';
+  doc.getElementById('restock-notes').value = 'Pedir para reponer la nevera del mostrador';
+  doc.getElementById('restock-form').requestSubmit();
+
+  await new Promise(r => setTimeout(r, 60));
+
+  assert.equal(lastCreatedPayload.productId, 'p1');
+  assert.equal(lastCreatedPayload.productName, 'Agua mineral 500ml');
+  assert.equal(lastCreatedPayload.quantity, 24);
+  assert.ok(lastCreatedPayload.notes.includes('nevera'));
+  assert.equal(doc.getElementById('badge-restock-count').textContent, '2', 'El contador debe subir a 2');
+
+  // 4. Cambiar a la pestaña de Falta para pedir
+  doc.getElementById('tab-restock').click();
+  assert.equal(doc.getElementById('panel-restock').hidden, false, 'El panel de reposición debe ser visible');
+
+  const rows = doc.querySelectorAll('#restock-requests-tbody tr');
+  assert.equal(rows.length, 2, 'Debe mostrar 2 filas de productos que faltan');
+
+  // 5. Marcar como pedido al proveedor
+  const orderBtn = doc.querySelector('.btn-mark-ordered');
+  assert.ok(orderBtn, 'Debe haber botón para marcar pedido');
+  orderBtn.click();
+
+  await new Promise(r => setTimeout(r, 60));
+  assert.equal(lastUpdatedStatus, 'PEDIDO', 'El estado debe haber cambiado a PEDIDO');
+
+  // 6. Marcar como recibido y comprobar actualización
+  const receivedBtn = doc.querySelector('.btn-mark-received');
+  assert.ok(receivedBtn, 'Debe haber botón para marcar como recibido');
+  receivedBtn.click();
+
+  await new Promise(r => setTimeout(r, 60));
+  assert.equal(lastUpdatedStatus, 'RECIBIDO', 'El estado debe haber cambiado a RECIBIDO');
 
   dom.window.close();
 });

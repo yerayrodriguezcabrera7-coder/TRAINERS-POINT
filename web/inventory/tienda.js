@@ -23,6 +23,8 @@
   let paymentMethod = 'EFECTIVO';
   let paymentMode = 'PAID';
   let lastCompletedSale = null;
+  let restockRequests = [];
+  let selectedRestockStatus = 'PENDIENTE';
 
   async function api(path, method = 'GET', body) {
     const res = await fetch('/api/' + path, {
@@ -53,19 +55,26 @@
       }
       $('btn-quick-new-product').hidden = me.role !== 'ADMIN';
 
-      const [prodRes, manageRes] = await Promise.all([
+      const [prodRes, manageRes, restockRes] = await Promise.all([
         api('inventory/products'),
-        api('manage')
+        api('manage'),
+        api('inventory/restock').catch(() => ({ requests: [] }))
       ]);
 
       products = prodRes.products || [];
       clients = manageRes.clients || [];
+      restockRequests = restockRes.requests || [];
 
       renderClientOptions();
       await refreshCashSession();
       renderCatalog();
       renderCart();
       updateDispatchedTab();
+      renderRestockSection();
+
+      if (window.location.hash === '#tab-restock') {
+        $('tab-restock')?.click();
+      }
     } catch (err) {
       showNotice(err.message, true);
     }
@@ -142,6 +151,11 @@
         ? `<span class="tpv-product-in-cart">${inCart} en ticket</span>`
         : '';
 
+      const pendingRestock = restockRequests.find(r => r.productId === p.id && r.status === 'PENDIENTE');
+      const restockActionBadge = pendingRestock
+        ? `<span class="tpv-badge-restock-pending" data-pid="${esc(p.id)}" title="Anotado para pedir: ${pendingRestock.quantity} uds">📋 Falta (${pendingRestock.quantity} uds)</span>`
+        : `<button class="tpv-card-restock-btn" type="button" data-restock-pid="${esc(p.id)}" title="Anotar que falta para pedir">⚠️ Falta para pedir</button>`;
+
       return `
         <article class="tpv-product-card ${isOut ? 'out-of-stock' : ''}" data-product-id="${esc(p.id)}">
           ${inCartBadge}
@@ -151,15 +165,34 @@
           </div>
           <div class="tpv-product-footer">
             <span class="tpv-product-price">${eur(p.unitPrice)}</span>
-            ${stockBadge}
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+              ${stockBadge}
+              ${restockActionBadge}
+            </div>
           </div>
         </article>
       `;
     }).join('');
 
+    // Click handler on restock buttons
+    grid.querySelectorAll('.tpv-card-restock-btn').forEach(btn => {
+      btn.onclick = e => {
+        e.stopPropagation();
+        openRestockModal(btn.dataset.restockPid);
+      };
+    });
+
+    grid.querySelectorAll('.tpv-badge-restock-pending').forEach(badge => {
+      badge.onclick = e => {
+        e.stopPropagation();
+        $('tab-restock')?.click();
+      };
+    });
+
     // Click handler on products
     grid.querySelectorAll('.tpv-product-card').forEach(card => {
-      card.onclick = () => {
+      card.onclick = (e) => {
+        if (e.target.closest('.tpv-card-restock-btn') || e.target.closest('.tpv-badge-restock-pending')) return;
         const pId = card.dataset.productId;
         const p = products.find(item => item.id === pId);
         if (!p || p.stock <= 0) return;
@@ -735,7 +768,8 @@
   const tabs = [
     { btn: $('tab-pos'), panel: $('panel-pos') },
     { btn: $('tab-dispatched'), panel: $('panel-dispatched') },
-    { btn: $('tab-balance'), panel: $('panel-balance') }
+    { btn: $('tab-balance'), panel: $('panel-balance') },
+    { btn: $('tab-restock'), panel: $('panel-restock') }
   ];
 
   tabs.forEach(({ btn, panel }) => {
@@ -747,6 +781,7 @@
       });
       if (btn === $('tab-dispatched')) updateDispatchedTab();
       if (btn === $('tab-balance')) updateBalanceUI();
+      if (btn === $('tab-restock')) renderRestockSection();
     };
   });
 
@@ -815,6 +850,264 @@
       const res = await api('inventory/products');
       products = res.products || [];
       renderCatalog();
+    } catch (err2) {
+      err.textContent = err2.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  // --- 13. MÓDULO: FALTA PARA PEDIR (REPOSICIÓN Y PEDIDOS DESDE RECEPCIÓN) ---
+  function openRestockModal(preselectedProductId = '') {
+    const sel = $('restock-product-select');
+    sel.innerHTML = `
+      <option value="">-- Seleccionar producto del catálogo --</option>
+      <option value="__custom__">➕ Otro artículo no registrado en catálogo</option>
+      ${products.map(p => `<option value="${esc(p.id)}" ${p.id === preselectedProductId ? 'selected' : ''}>${esc(p.name)} (Stock actual: ${p.stock})</option>`).join('')}
+    `;
+
+    if (preselectedProductId) {
+      sel.value = preselectedProductId;
+      $('restock-custom-wrap').hidden = true;
+      $('restock-custom-name').required = false;
+    } else {
+      sel.value = '';
+      $('restock-custom-wrap').hidden = true;
+      $('restock-custom-name').required = false;
+    }
+
+    $('restock-custom-name').value = '';
+    $('restock-quantity').value = '1';
+    $('restock-notes').value = '';
+    $('restock-form-error').textContent = '';
+    $('restock-dialog').showModal();
+  }
+
+  $('restock-product-select').onchange = () => {
+    const isCustom = $('restock-product-select').value === '__custom__';
+    $('restock-custom-wrap').hidden = !isCustom;
+    $('restock-custom-name').required = isCustom;
+    if (isCustom) $('restock-custom-name').focus();
+  };
+
+  $('btn-quick-restock').onclick = () => openRestockModal();
+  $('btn-catalog-restock').onclick = () => openRestockModal();
+  $('btn-open-restock-modal').onclick = () => openRestockModal();
+  $('btn-refresh-restock').onclick = async () => {
+    await refreshRestockRequests();
+    showNotice('Lista de pedidos y reposición actualizada.');
+  };
+
+  async function refreshRestockRequests() {
+    try {
+      const res = await api('inventory/restock');
+      restockRequests = res.requests || [];
+      renderRestockSection();
+      renderCatalog();
+    } catch (e) {
+      showNotice(e.message, true);
+    }
+  }
+
+  $('restock-filter-pills').querySelectorAll('.tpv-cat-pill').forEach(pill => {
+    pill.onclick = () => {
+      $('restock-filter-pills').querySelectorAll('.tpv-cat-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      selectedRestockStatus = pill.dataset.status;
+      renderRestockSection();
+    };
+  });
+
+  $('restock-search-input').oninput = () => {
+    renderRestockSection();
+  };
+
+  function renderRestockSection() {
+    const pending = restockRequests.filter(r => r.status === 'PENDIENTE');
+    const ordered = restockRequests.filter(r => r.status === 'PEDIDO');
+    const received = restockRequests.filter(r => r.status === 'RECIBIDO');
+
+    $('badge-restock-count').textContent = pending.length;
+    $('kpi-restock-pending').textContent = pending.length;
+    $('kpi-restock-ordered').textContent = ordered.length;
+    $('kpi-restock-received').textContent = received.length;
+
+    const query = ($('restock-search-input')?.value || '').trim().toLowerCase();
+
+    const filtered = restockRequests.filter(r => {
+      if (selectedRestockStatus !== 'ALL' && r.status !== selectedRestockStatus) return false;
+      if (!query) return true;
+      const haystack = `${r.productName} ${r.notes || ''} ${r.requestedByName || ''} ${r.status}`.toLowerCase();
+      return haystack.includes(query);
+    });
+
+    const tbody = $('restock-requests-tbody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#7e8b92">No hay registros de reposición para este filtro.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(r => {
+      const isLinked = !!r.productId;
+      const prodName = isLinked
+        ? `<strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#6b767d">(${eur(r.product?.unitPrice || 0)})</span>`
+        : `<strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#b25e00;font-weight:600">(Artículo no en catálogo)</span>`;
+
+      let stockDisplay = '—';
+      if (isLinked) {
+        const currentStock = r.product ? Number(r.product.stock) : 0;
+        stockDisplay = currentStock <= 0
+          ? '<span style="color:#af241d;font-weight:700">Agotado (0)</span>'
+          : `<span style="font-weight:600">${currentStock} uds</span>`;
+      }
+
+      let statusBadge = '';
+      if (r.status === 'PENDIENTE') {
+        statusBadge = '<span class="restock-pill-badge pending">⏳ Falta pedir</span>';
+      } else if (r.status === 'PEDIDO') {
+        statusBadge = '<span class="restock-pill-badge ordered">🚚 Pedido al proveedor</span>';
+      } else if (r.status === 'RECIBIDO') {
+        statusBadge = '<span class="restock-pill-badge received">✅ Recibido y repuesto</span>';
+      } else {
+        statusBadge = '<span class="restock-pill-badge cancelled">Anulado</span>';
+      }
+
+      let actionsHtml = '';
+      if (r.status === 'PENDIENTE') {
+        actionsHtml = `
+          <button class="btn-restock-action info-subtle btn-mark-ordered" data-id="${esc(r.id)}" type="button" title="Marcar como ya pedido al proveedor">🚚 Marcar pedido</button>
+          <button class="btn-restock-action primary-subtle btn-mark-received" data-id="${esc(r.id)}" type="button" title="Marcar como recibido">✅ Recibido</button>
+          <button class="btn-restock-action danger-subtle btn-delete-restock" data-id="${esc(r.id)}" type="button" title="Eliminar de la lista">🗑️</button>
+        `;
+      } else if (r.status === 'PEDIDO') {
+        actionsHtml = `
+          <button class="btn-restock-action primary-subtle btn-mark-received" data-id="${esc(r.id)}" type="button" title="Marcar como recibido">✅ Recibido</button>
+          <button class="btn-restock-action btn-mark-pending" data-id="${esc(r.id)}" type="button" title="Devolver a pendientes">⏳ Pendiente</button>
+          <button class="btn-restock-action danger-subtle btn-delete-restock" data-id="${esc(r.id)}" type="button" title="Eliminar de la lista">🗑️</button>
+        `;
+      } else {
+        actionsHtml = `
+          <span style="font-size:11px;color:#267359;margin-right:6px">Completado</span>
+          <button class="btn-restock-action danger-subtle btn-delete-restock" data-id="${esc(r.id)}" type="button" title="Eliminar registro">🗑️</button>
+        `;
+      }
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600">${dateFormat(r.createdAt)}</div>
+            <div style="font-size:11px;color:#6b767d">${timeFormat(r.createdAt)}</div>
+          </td>
+          <td>${prodName}</td>
+          <td><strong style="font-size:14px">${r.quantity}</strong> uds</td>
+          <td>${stockDisplay}</td>
+          <td><span style="font-size:12px;color:#435158">${esc(r.requestedByName || r.requestedBy || 'Recepción')}</span></td>
+          <td><span style="font-size:12px;color:#55636a">${esc(r.notes || '—')}</span></td>
+          <td>${statusBadge}</td>
+          <td style="text-align:right;white-space:nowrap">${actionsHtml}</td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('.btn-mark-ordered').forEach(btn => {
+      btn.onclick = async () => {
+        try {
+          await api(`inventory/restock/${btn.dataset.id}`, 'PATCH', { status: 'PEDIDO' });
+          showNotice('Producto marcado como pedido al proveedor.');
+          await refreshRestockRequests();
+        } catch (e) {
+          showNotice(e.message, true);
+        }
+      };
+    });
+
+    tbody.querySelectorAll('.btn-mark-pending').forEach(btn => {
+      btn.onclick = async () => {
+        try {
+          await api(`inventory/restock/${btn.dataset.id}`, 'PATCH', { status: 'PENDIENTE' });
+          showNotice('Producto devuelto a pendiente de pedir.');
+          await refreshRestockRequests();
+        } catch (e) {
+          showNotice(e.message, true);
+        }
+      };
+    });
+
+    tbody.querySelectorAll('.btn-mark-received').forEach(btn => {
+      btn.onclick = async () => {
+        const item = restockRequests.find(r => r.id === btn.dataset.id);
+        let addToStock = false;
+        if (item && item.productId) {
+          addToStock = window.confirm(`¿El pedido de "${item.productName}" ha llegado? Pulsa Aceptar para sumar ${item.quantity} uds al stock de la tienda, o Cancelar para solo marcarlo recibido.`);
+        }
+        try {
+          await api(`inventory/restock/${btn.dataset.id}`, 'PATCH', { status: 'RECIBIDO', addToStock });
+          showNotice(addToStock ? `Producto recibido y ${item.quantity} uds añadidas al stock.` : 'Producto marcado como recibido.');
+          const prodRes = await api('inventory/products');
+          products = prodRes.products || [];
+          await refreshRestockRequests();
+        } catch (e) {
+          showNotice(e.message, true);
+        }
+      };
+    });
+
+    tbody.querySelectorAll('.btn-delete-restock').forEach(btn => {
+      btn.onclick = async () => {
+        if (!window.confirm('¿Deseas eliminar este registro de falta para pedir?')) return;
+        try {
+          await api(`inventory/restock/${btn.dataset.id}`, 'DELETE');
+          showNotice('Registro eliminado.');
+          await refreshRestockRequests();
+        } catch (e) {
+          showNotice(e.message, true);
+        }
+      };
+    });
+  }
+
+  $('restock-form').onsubmit = async e => {
+    e.preventDefault();
+    const btn = $('btn-submit-restock');
+    btn.disabled = true;
+    const err = $('restock-form-error');
+    err.textContent = '';
+
+    try {
+      const pSelectVal = $('restock-product-select').value;
+      const isCustom = pSelectVal === '__custom__';
+      let productId = null;
+      let productName = '';
+
+      if (isCustom) {
+        productName = $('restock-custom-name').value.trim();
+        if (!productName) throw new Error('Escribe el nombre del artículo o producto que falta.');
+      } else {
+        if (!pSelectVal) throw new Error('Selecciona un producto del catálogo o elige otro artículo.');
+        productId = pSelectVal;
+        const p = products.find(item => item.id === productId);
+        productName = p ? p.name : '';
+      }
+
+      const qty = parseInt($('restock-quantity').value, 10);
+      if (isNaN(qty) || qty < 1) throw new Error('Indica una cantidad válida a pedir (mínimo 1).');
+
+      const priority = $('restock-priority').value;
+      let notes = $('restock-notes').value.trim();
+      if (priority === 'ALTA') {
+        notes = (notes ? `[URGENTE] ${notes}` : '[URGENTE]').trim();
+      }
+
+      await api('inventory/restock', 'POST', {
+        productId,
+        productName,
+        quantity: qty,
+        notes
+      });
+
+      $('restock-dialog').close();
+      showNotice(`Anotado correctamente: ${qty} uds de "${productName}" para pedir.`);
+      await refreshRestockRequests();
     } catch (err2) {
       err.textContent = err2.message;
     } finally {

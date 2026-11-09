@@ -45,6 +45,7 @@
               <span id="cash-status-text">Comprobando caja…</span>
             </span>
             <button id="btn-quick-open-cash" class="primary" hidden="">Abrir caja hoy</button>
+            <button id="btn-quick-restock" class="outline-button" type="button" style="display:inline-flex;align-items:center;gap:6px">📋 Falta para pedir</button>
             <button id="btn-quick-new-product" class="outline-button">＋ Nuevo producto</button>
             <a href="/caja.html" class="outline-button" style="text-decoration:none">Ir a Caja</a>
           </div>
@@ -63,6 +64,9 @@
           <button id="tab-balance" class="tpv-tab-btn" type="button" aria-pressed="false">
             💰 Cuadre con Caja (Arqueo)
           </button>
+          <button id="tab-restock" class="tpv-tab-btn" type="button" aria-pressed="false">
+            📋 Falta para pedir <span id="badge-restock-count" class="badge-count">0</span>
+          </button>
         </nav>
 
         <!-- SECCIÓN 1: MOSTRADOR DE VENTA (TPV) -->
@@ -73,6 +77,7 @@
               <div class="tpv-search-box">
                 <input id="product-search" type="search" placeholder="🔍 Buscar producto por nombre o código…" aria-label="Buscar producto">
               </div>
+              <button id="btn-catalog-restock" class="outline-button" type="button" title="Anotar producto que falta para pedir">📝 Anotar falta</button>
               <button id="btn-refresh-products" class="outline-button" type="button">Actualizar</button>
             </div>
 
@@ -330,6 +335,71 @@
           </div>
         </section>
 
+        <!-- SECCIÓN 4: FALTA PARA PEDIR (REPOSICIÓN Y PEDIDOS) -->
+        <section id="panel-restock" class="tpv-section-card" hidden="">
+          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+            <div>
+              <h2>Productos que faltan para pedir (Reposición)</h2>
+              <p style="color:#5e6b72">Control desde recepción de productos agotados o pedidos pendientes de solicitar al proveedor.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <button id="btn-open-restock-modal" class="primary" type="button">＋ Anotar lo que falta</button>
+              <button id="btn-refresh-restock" class="outline-button" type="button">Actualizar lista</button>
+            </div>
+          </header>
+
+          <div class="tpv-kpi-row">
+            <article class="tpv-kpi-card">
+              <small>PENDIENTES DE PEDIR</small>
+              <strong id="kpi-restock-pending" style="color:#af241d">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">Artículos que faltan y hay que pedir</p>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>YA PEDIDOS AL PROVEEDOR</small>
+              <strong id="kpi-restock-ordered" style="color:#2a63cd">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">En camino / pendientes de entrega</p>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>RECIBIDOS / REPUESTOS</small>
+              <strong id="kpi-restock-received" style="color:#267359">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">Completados recientemente</p>
+            </article>
+          </div>
+
+          <!-- Filtros y buscador -->
+          <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:24px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="tpv-category-pills" id="restock-filter-pills" role="toolbar" style="margin:0">
+              <button class="tpv-cat-pill active" data-status="PENDIENTE" type="button">Pendientes de pedir</button>
+              <button class="tpv-cat-pill" data-status="PEDIDO" type="button">Ya pedidos</button>
+              <button class="tpv-cat-pill" data-status="RECIBIDO" type="button">Recibidos</button>
+              <button class="tpv-cat-pill" data-status="ALL" type="button">Todos</button>
+            </div>
+            <div style="flex:1;max-width:320px;min-width:200px">
+              <input id="restock-search-input" type="search" placeholder="🔍 Buscar por producto, notas o persona…" style="width:100%;padding:8px 12px;border:1px solid #ced5d0;border-radius:6px;font-size:13px">
+            </div>
+          </div>
+
+          <div class="cash-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha y hora</th>
+                  <th>Producto que falta</th>
+                  <th>Cant. a pedir</th>
+                  <th>Stock en tienda</th>
+                  <th>Anotado por</th>
+                  <th>Notas / Motivo</th>
+                  <th>Estado</th>
+                  <th style="text-align:right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="restock-requests-tbody">
+                <tr><td colspan="8">Cargando lista de reposición…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
       </section>
     </main>
   </div>
@@ -440,6 +510,44 @@
       <footer class="dialog-actions">
         <button type="button" data-close="new-product-dialog">Cerrar</button>
         <button class="primary">Guardar producto</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- DIALOG: ANOTAR LO QUE FALTA PARA PEDIR -->
+  <dialog id="restock-dialog" aria-labelledby="restock-dialog-title">
+    <form id="restock-form">
+      <header class="dialog-heading">
+        <h2 id="restock-dialog-title">Anotar producto que falta para pedir</h2>
+        <button type="button" data-close="restock-dialog" aria-label="Cerrar">×</button>
+      </header>
+      <div class="form-grid">
+        <label class="full">Producto de la tienda
+          <select id="restock-product-select" required="">
+            <option value="">-- Seleccionar producto del catálogo --</option>
+            <option value="__custom__">➕ Otro artículo no registrado en catálogo</option>
+          </select>
+        </label>
+        <label id="restock-custom-wrap" class="full" hidden="">Nombre del artículo o producto que falta
+          <input id="restock-custom-name" maxlength="200" placeholder="Ej. Agua con gas 500ml, Barritas de avena...">
+        </label>
+        <label>Cantidad que falta / a pedir (uds)
+          <input id="restock-quantity" type="number" min="1" max="10000" step="1" required="" value="1">
+        </label>
+        <label>Prioridad
+          <select id="restock-priority">
+            <option value="NORMAL">Normal</option>
+            <option value="ALTA">Urgente (agotado o solicitado por cliente)</option>
+          </select>
+        </label>
+        <label class="full">Observaciones / Motivo (opcional)
+          <textarea id="restock-notes" maxlength="1000" placeholder="Ej. Se ha agotado en la nevera; socio preguntó si traeremos más..."></textarea>
+        </label>
+      </div>
+      <p id="restock-form-error" role="alert" style="color:#af241d;font-size:12px;margin:8px 0 0"></p>
+      <footer class="dialog-actions">
+        <button type="button" data-close="restock-dialog">Cancelar</button>
+        <button class="primary" type="submit" id="btn-submit-restock">Guardar aviso para pedir</button>
       </footer>
     </form>
   </dialog>
