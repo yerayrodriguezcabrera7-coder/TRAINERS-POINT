@@ -5,6 +5,9 @@ async function fetchUserRole() {
     if (res.ok) {
       const me = await res.json();
       currentUserRole = me.role;
+      if (currentUserRole === 'ADMIN') {
+        document.querySelector("#delete-client")?.removeAttribute("hidden");
+      }
       if (currentUserRole === 'TRAINER') {
         document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
         document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
@@ -698,6 +701,29 @@ gymForm.addEventListener("submit", async (event) => {
     gymFeedback.textContent = error instanceof Error ? error.message : "No se pudo cambiar el centro.";
   } finally {
     submit.disabled = false;
+  }
+});
+
+document.querySelector("#delete-client")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const clientName = document.querySelector("#profile-name").textContent;
+  if (!window.confirm(`¿Eliminar la ficha de ${clientName}? Esta acción no se puede deshacer.`)) return;
+  button.disabled = true;
+  button.textContent = "Eliminando…";
+  try {
+    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo eliminar el cliente.");
+    window.location.assign(returnFilter
+      ? `/clientes?filtro=${encodeURIComponent(returnFilter)}`
+      : "/clientes");
+  } catch (error) {
+    showProfileToast(error instanceof Error ? error.message : "No se pudo eliminar el cliente.");
+    button.disabled = false;
+    button.textContent = "Eliminar cliente";
   }
 });
 

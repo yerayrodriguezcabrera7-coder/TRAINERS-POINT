@@ -6,6 +6,50 @@ import { prisma } from "../lib/prisma";
 import { isRecord, parseClientInput, parseMeasurementInput, phoneDigits, validStatuses } from "../validation/records";
 export async function clientsRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
   const { port, currentConfiguredGym, calendarPool, hasTrustedOrigin } = context;
+  const clientDeleteMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)$/i);
+  if (request.method === "DELETE" && clientDeleteMatch) {
+    if (!hasTrustedOrigin(request, port)) {
+      sendError(response, 403, "Origen de la solicitud no permitido.");
+      return true;
+    }
+    if ((request as any).identity?.role !== "ADMIN") {
+      sendError(response, 403, "Solo administración puede eliminar clientes.");
+      return true;
+    }
+    const clientId = clientDeleteMatch[1];
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+      sendError(response, 400, "El cliente no es válido.");
+      return true;
+    }
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true, _count: { select: { bookings: true, servicePackages: true } } },
+    });
+    if (!client) {
+      sendError(response, 404, "No se encontró el cliente.");
+      return true;
+    }
+    if (client._count.bookings || client._count.servicePackages) {
+      sendError(response, 409, "No se puede eliminar un cliente con sesiones o bonos registrados. Puedes cambiar su estado a baja.");
+      return true;
+    }
+    try {
+      await prisma.client.delete({ where: { id: clientId } });
+    }
+    catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        sendError(response, 409, "No se puede eliminar este cliente porque tiene registros asociados.");
+        return true;
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        sendError(response, 404, "No se encontró el cliente.");
+        return true;
+      }
+      throw error;
+    }
+    sendJson(response, 200, { deleted: true });
+    return true;
+  }
   if (request.method === "GET" && url.pathname === "/api/clients/duplicates") {
     const email = url.searchParams.get("email")?.trim().toLowerCase().slice(0, 254) ?? "";
     const phone = url.searchParams.get("phone")?.trim().slice(0, 40) ?? "";

@@ -275,6 +275,20 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
 
 /* Bono management in client profile */
 .profile-heading-actions { display: flex; align-items: center; gap: 10px; }
+.profile-delete-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--tp-radius-md);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.profile-delete-button:hover { border-color: #ffaaa0; background: #7d2a24; }
+.profile-delete-button:disabled { cursor: wait; opacity: 0.65; }
 .header-bono-btn {
   border: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.12);

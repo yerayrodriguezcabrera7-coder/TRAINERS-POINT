@@ -487,8 +487,10 @@ test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica d
   const profileHtml = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.html'), 'utf8');
   const profileJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.js'), 'utf8');
   const profileCss = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.css'), 'utf8');
+  const clientsRoute = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'clients.ts'), 'utf8');
 
   // Comprobar elementos HTML en la ficha
+  assert.ok(profileHtml.includes('id="delete-client"'), 'Debe existir el botón para eliminar al cliente');
   assert.ok(profileHtml.includes('id="open-add-bono"'), 'Debe existir botón para abrir el modal de añadir bono');
   assert.ok(profileHtml.includes('id="add-bono-dialog"'), 'Debe existir el diálogo modal de asignación de bono');
   assert.ok(profileHtml.includes('id="bono-service-select"'), 'Debe existir selector de servicio');
@@ -499,13 +501,18 @@ test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica d
 
   // Comprobar lógica en el script JS de la ficha
   assert.ok(profileJs.includes('/api/services?activeOnly=true') || profileJs.includes('/api/services'), 'Debe cargar el catálogo de servicios');
+  assert.ok(profileJs.includes('method: "DELETE"'), 'Debe enviar la petición de eliminación del cliente');
+  assert.ok(profileJs.includes("currentUserRole === 'ADMIN'"), 'El botón de eliminar solo debe mostrarse a administración');
   assert.ok(profileJs.includes('/service-packages'), 'Debe enviar POST al endpoint de service-packages');
   assert.ok(profileJs.includes('updateBonoCalculation'), 'Debe calcular automáticamente el precio por sesión');
   assert.ok(profileJs.includes('loadPurchaseHistory'), 'Debe recargar el historial de compras tras guardar el bono');
 
   // Comprobar estilos CSS
   assert.ok(profileCss.includes('.add-bono-dialog'), 'Debe contener estilos para el diálogo de bonos');
+  assert.ok(profileCss.includes('.profile-delete-button'), 'Debe contener estilos para el botón de eliminar cliente');
   assert.ok(profileCss.includes('.bono-calc-callout'), 'Debe contener estilos para el bloque de cálculo de bonos');
+  assert.ok(clientsRoute.includes('Solo administración puede eliminar clientes.'), 'La API debe limitar la eliminación a administración');
+  assert.ok(clientsRoute.includes('No se puede eliminar un cliente con sesiones o bonos registrados.'), 'La API debe conservar clientes con historial de sesiones o bonos');
 });
 
 test('Clientes y Bonos: Directorio de clientes incluye botón de asignación rápida y auto-completado', () => {
