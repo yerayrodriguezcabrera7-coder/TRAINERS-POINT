@@ -86,6 +86,14 @@ export function server(
             !(await access.needsSetup(gym))
           )
             identity = await access.identify(gym,bearer);
+
+          // Helper: check page-level permissions (only restricts when custom pagePermissions are set)
+          const hasPage = (pageKey: string): boolean => {
+            if (identity.role === "ADMIN") return true;
+            if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
+            return identity.pagePermissions.includes(pageKey);
+          };
+
           const admin = identity.role === "ADMIN";
           const reception = identity.role === "RECEPTION";
           const trainer = identity.role === "TRAINER";
@@ -111,6 +119,7 @@ export function server(
             send(res,200,workerBooking(await store.workerAction(gym,decodeURIComponent(workerAction[1]),identity,await body(req))));return;
           }
           if (path === "/api/recoveries" && req.method === "GET") {
+            if (!hasPage("recuperaciones.html")) throw new ApiError(403, "No tienes acceso a las recuperaciones.");
             const items = await store.recoveries(gym);
             send(res,200,trainer ? items.filter(r=>r.employeeId===identity.employeeId) : client ? items.filter(r=>r.clientId===identity.clientId) : items); return;
           }
@@ -211,12 +220,14 @@ export function server(
             return;
           }
           if (req.method === "GET" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
             const leaves = await store.leaves(gym, identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned");
             const employees = (await store.state(gym)).employees as Array<{ id: string; name: string }>;
             send(res, 200, leaves.map((leave: any) => ({ ...leave, employeeName: employees.find((employee) => employee.id === leave.employeeId)?.name || "Empleado" })));
             return;
           }
           if (req.method === "POST" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
             if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
             send(res, 201, await store.requestLeave(gym, identity.employeeId, await body(req)));
             return;
@@ -261,11 +272,13 @@ export function server(
           return;
         }
         if (path === '/api/attendance/omissions') {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
           if(req.method==='POST'){send(res,201,await saveOmission(store.pool,gym,identity,await body(req)));return;}
           if(req.method==='GET'){send(res,200,await listOmissions(store.pool,gym,identity,url.searchParams.get('from')||'',url.searchParams.get('to')||''));return;}
           throw new ApiError(405,'Operación no permitida.');
         }
         if (req.method === "GET" && path === "/api/attendance/export") {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
           if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");
           const requested = url.searchParams.get("employeeId") || undefined;
           if (!["ADMIN","RECEPTION"].includes(identity.role) && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
