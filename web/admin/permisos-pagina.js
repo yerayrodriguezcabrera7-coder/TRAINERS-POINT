@@ -39,6 +39,29 @@
     CLIENT: ['mis-reservas.html', 'configuracion.html'],
   };
 
+  const PRESETS = [
+    {
+      id: 'trainer_std',
+      label: 'Entrenador estándar',
+      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+    },
+    {
+      id: 'trainer_sales',
+      label: 'Entrenador + Ventas/Caja',
+      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html', 'productos.html', 'caja.html'],
+    },
+    {
+      id: 'reception_full',
+      label: 'Recepción completa',
+      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html'],
+    },
+    {
+      id: 'clock_only',
+      label: 'Solo fichaje y turnos',
+      pages: ['fichajes.html', 'ausencias.html', 'gestion.html?section=shifts', 'configuracion.html'],
+    },
+  ];
+
   let manageData = null;
   let searchQuery = '';
   let toastTimer = null;
@@ -146,6 +169,15 @@
           </div>
           ` : ''}
 
+          <div class="perms-presets-bar" style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 11px; flex-wrap: wrap;">
+            <span style="color: var(--tp-muted); font-weight: 600;">⚡ Plantillas rápidas:</span>
+            ${PRESETS.map(preset => `
+              <button type="button" class="button button-outline button-small perms-preset-btn" data-preset-id="${esc(preset.id)}" style="padding: 2px 8px; font-size: 11px; border-radius: 12px;">
+                ${esc(preset.label)}
+              </button>
+            `).join('')}
+          </div>
+
           <div class="perms-grid" data-user-id="${esc(user.id)}">
             ${PAGES.map(page => {
               const isDefault = rolePages.includes(page.key);
@@ -222,6 +254,31 @@
             setTimeout(() => { statusEl.hidden = true; }, 4000);
           }
           showToast(`Permisos de ${sourceName} cargados en el formulario.`);
+        });
+
+        // Botones de plantillas rápidas
+        card.querySelectorAll('.perms-preset-btn').forEach(presetBtn => {
+          presetBtn.addEventListener('click', () => {
+            const presetId = presetBtn.dataset.presetId;
+            const preset = PRESETS.find(p => p.id === presetId);
+            if (!preset) return;
+
+            const checkboxes = [...card.querySelectorAll('input[type="checkbox"]')];
+            checkboxes.forEach(cb => {
+              const isChecked = preset.pages.includes(cb.dataset.pageKey);
+              cb.checked = isChecked;
+              cb.closest('.perms-toggle')?.classList.toggle('is-checked', isChecked);
+            });
+
+            const statusEl = card.querySelector('.perms-status');
+            if (statusEl) {
+              statusEl.textContent = `✓ Plantilla "${preset.label}" aplicada. Pulsa "Guardar permisos" para confirmar.`;
+              statusEl.className = 'perms-status';
+              statusEl.hidden = false;
+              setTimeout(() => { statusEl.hidden = true; }, 4000);
+            }
+            showToast(`Plantilla "${preset.label}" cargada.`);
+          });
         });
 
         // Select all / none / role
