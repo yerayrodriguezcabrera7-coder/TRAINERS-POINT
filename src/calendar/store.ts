@@ -98,8 +98,8 @@ export class Store {
     if (services.length) {
       const saved = config.services;
       const savedById = new Map(saved.map(service => [service.id, service]));
-      const serviceIds = new Set(services.map(service => service.id));
-      config.services = services.map(service => ({
+      const defaultPalette = ["#ff7f0a", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#f59e0b", "#06b6d4", "#6366f1"];
+      config.services = services.map((service, index) => ({
         ...savedById.get(service.id),
         id: service.id,
         name: service.name,
@@ -114,8 +114,8 @@ export class Store {
         validityWeeks: service.validityWeeks,
         recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
         conditions: service.conditions,
+        color: savedById.get(service.id)?.color || defaultPalette[index % defaultPalette.length],
       }));
-      config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
     const allCenters = await this.centers();
     config.centers = allCenters;

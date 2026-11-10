@@ -156,13 +156,13 @@ function visibleBookings() {
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
-  fillSelect('employee-filter', data.employees, '<option value="all">Ver todos</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
-  fillSelect('service-filter', data.services, '<option value="all">Todos los servicios</option>');
+  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
+  fillSelect('service-filter', data.services.filter(s => s.active !== false), '<option value="all">Todos los servicios</option>');
   fillSelect('room-filter', data.rooms, '<option value="all">Todos los espacios</option>');
-  fillSelect('booking-employee', data.employees,serverMode?'<option value="">Sin asignar</option>':'');
+  fillSelect('booking-employee', data.employees.filter(e => e.active !== false),serverMode?'<option value="">Sin asignar</option>':'');
   fillSelect('center-filter',data.centers||[], '<option value="all">Todos los centros</option>');
   fillSelect('booking-center',data.centers||[{id:'local',name:'Centro actual'}]);
-  fillSelect('booking-service', data.services);
+  fillSelect('booking-service', data.services.filter(s => s.active !== false));
   fillSelect('booking-room', data.rooms);
   for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room'],['center-filter','center']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
   if (currentUser?.role === 'TRAINER') {
