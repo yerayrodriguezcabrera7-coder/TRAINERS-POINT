@@ -54,3 +54,129 @@
   font-size: 12px;
   text-decoration: underline;
 }
+
+.add-trainer-day-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #dce4e8;
+  background: #ffffff;
+  color: #243b43;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 6px;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.add-trainer-day-btn:hover {
+  background: #eb5a46;
+  border-color: #eb5a46;
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.employee-heading[data-shift-employee] {
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-direction: column;
+  gap: 2px;
+  height: 44px;
+}
+.employee-heading[data-shift-employee]:hover {
+  background: #f4f8fa;
+}
+.employee-heading-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+.employee-shift-tag {
+  font-size: 8px;
+  color: var(--muted);
+  font-weight: 500;
+  background: #f0f4f6;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.2px;
+}
+.employee-shift-tag.is-off {
+  color: #c84e42;
+  background: #fdedec;
+}
+
+.repeat-week-btn {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 7px 12px;
+  min-height: 34px;
+}
+.repeat-week-btn.is-empty-week {
+  background: #eb5a46;
+  color: #ffffff;
+  border-color: #eb5a46;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(235, 90, 70, 0.3);
+  animation: pulse-soft 2s infinite;
+}
+@keyframes pulse-soft {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.empty-day-heading {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafbfc;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 0 4px;
+}
+.add-trainer-pill-btn {
+  border: 1px dashed #b9c8ce;
+  background: #ffffff;
+  color: #55707d;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.add-trainer-pill-btn:hover {
+  border-color: #eb5a46;
+  color: #eb5a46;
+  background: #fff5f3;
+}
+.empty-day-column {
+  height: 2016px;
+  background: repeating-linear-gradient(135deg, #f9fafb, #f9fafb 10px, #f4f6f7 10px, #f4f6f7 11px);
+  position: relative;
+  border-right: 1px solid var(--line);
+}
+.empty-day-placeholder {
+  position: sticky;
+  top: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.small-btn {
+  padding: 6px 12px;
+  min-height: 28px;
+  font-size: 11px;
+}

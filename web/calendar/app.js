@@ -199,51 +199,129 @@ function updateRenewalDetail(){
 }
 function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
 
+function employeesForDate(date, dayBookings, allEmployees) {
+  if (state.employee !== 'all') {
+    if (state.employee === '__unassigned') {
+      return [{ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
+    }
+    const emp = allEmployees.find(e => e.id === state.employee);
+    return emp ? [emp] : [];
+  }
+
+  const scheduled = allEmployees.filter(emp => {
+    if (emp.id === '__unassigned') return false;
+    const shift = emp.shifts?.find(s => s.date === date);
+    return Boolean(shift && shift.periods && shift.periods.length > 0);
+  });
+
+  const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
+  for (const emp of allEmployees) {
+    if (bookingEmpIds.has(emp.id) && !scheduled.some(s => s.id === emp.id)) {
+      scheduled.push(emp);
+    }
+  }
+
+  if (serverMode && currentUser?.role !== 'TRAINER' && dayBookings.some(b => !b.employeeId)) {
+    scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule });
+  }
+
+  return scheduled;
+}
+
 function renderTimeGrid(dates, bookings, employees) {
   const selected = lookup('services',state.service), duration = selected.duration || 30;
   const byColumn = new Map();
   for(const booking of bookings){const key=booking.date+'\0'+(booking.employeeId||'__unassigned');if(!byColumn.has(key))byColumn.set(key,[]);byColumn.get(key).push(booking);}
-  const columns = dates.length * employees.length;
-  const minWidth = state.view === 'day' ? 190 : employees.length === 1 ? 145 : 108;
-  let html = `<div class="time-grid" style="grid-template-columns:58px repeat(${columns},minmax(${minWidth}px,1fr))"><div class="corner" style="grid-column:1;grid-row:1 / 3;top:0">HORA</div>`;
-  dates.forEach((date, i) => {
-    const today = date === todayKey();
-    html += `<div class="day-heading ${today ? 'today' : ''}" style="grid-column:${2 + i * employees.length} / span ${employees.length};grid-row:1"><span class="day-name">${prettyDate(date, { weekday: 'short' })}</span><strong>${C.parseDate(date).getDate()}</strong><span>${prettyDate(date, { month: 'short' })}</span></div>`;
-    employees.forEach((employee, j) => { html += `<div class="employee-heading" style="grid-column:${2 + i * employees.length + j};grid-row:2;--employee-color:${employee.color}"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>`; });
+
+  let currentCol = 2;
+  const dateLayouts = dates.map(date => {
+    const dayBookings = bookings.filter(b => b.date === date);
+    const dayEmps = employeesForDate(date, dayBookings, employees);
+    const span = Math.max(1, dayEmps.length);
+    const startCol = currentCol;
+    currentCol += span;
+    return { date, dayBookings, dayEmps, startCol, span };
   });
-  html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length:24}, (_, hour) => `<div class="hour-label">${C.timeLabel(hour * 60)}</div>`).join('') + '</div>';
-  dates.forEach((date, i) => employees.forEach((employee, j) => {
-    html += `<div class="time-column ${date === todayKey() ? 'is-today' : ''}" style="grid-column:${2 + i * employees.length + j};grid-row:3">`;
-    const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && date >= leave.startDate && date <= leave.endDate);
-    const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id)||employee.id==='__unassigned';
-    const dayLabel = prettyDate(date, { day: 'numeric', month: 'long' });
-    for (let slot = 0; slot < 48; slot++) {
-      const start = slot * 30;
-      const serviceOpen = !selected?.schedule || C.isOpen(date,start,start+duration,selected.schedule);
-      const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee,date,start,start+duration,data.schedule);
-      const label = `${dayLabel}, ${C.timeLabel(start)}, ${employee.name}`;
-      html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
+
+  const totalGridCols = currentCol - 2;
+  const minWidth = state.view === 'day' ? 190 : 130;
+
+  let html = `<div class="time-grid" style="grid-template-columns:58px repeat(${Math.max(totalGridCols, 1)},minmax(${minWidth}px,1fr))"><div class="corner" style="grid-column:1;grid-row:1 / 3;top:0">HORA</div>`;
+
+  dateLayouts.forEach(d => {
+    const today = d.date === todayKey();
+    html += `<div class="day-heading ${today ? 'today' : ''}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+      <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
+      <strong>${C.parseDate(d.date).getDate()}</strong>
+      <span>${prettyDate(d.date, { month: 'short' })}</span>
+      ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">＋</button>` : ''}
+    </div>`;
+  });
+
+  dateLayouts.forEach(d => {
+    if (d.dayEmps.length === 0) {
+      html += `<div class="employee-heading empty-day-heading" style="grid-column:${d.startCol};grid-row:2">
+        ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-pill-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : '<span style="color:var(--muted);font-size:10px;">Sin turnos</span>'}
+      </div>`;
+    } else {
+      d.dayEmps.forEach((employee, j) => {
+        const periods = C.employeePeriods(employee, d.date, data.schedule);
+        const shiftText = periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre');
+        const isOff = !periods.length && employee.id !== '__unassigned';
+        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned';
+        html += `<div class="employee-heading" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+          <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
+          <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
+        </div>`;
+      });
     }
-    const dayBookings = byColumn.get(date+'\0'+employee.id)||[];
-    const placed = C.layoutEvents(dayBookings);
-    placed.forEach(({ event: b, lane, count }) => {
-      const startMin = C.minutes(b.start);
-      const endMin = C.minutes(b.end);
-      const top = startMin * 1.4;
-      const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
-      const width = 100 / count;
-      const left = lane * width;
-      const currentEmployee = lookup('employees', b.employeeId);
-      const color = lookup('employees',b.employeeId).color || '#7b858d';
-      const soft = `${color}18`;
-      const clientName = lookup('clients', b.clientId).name;
-      const serviceName = lookup('services', b.serviceId).name;
-      const roomName = lookup('rooms', b.roomId).name;
-      html += `<button class="event ${b.status} ${!b.employeeId?'unassigned':''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName||'Centro actual')} · ${escapeHTML(lookup('employees',b.employeeId).name)}${b.needsReschedule?' · REPROGRAMAR':''}</div></button>`;
-    });
-    if (date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
-    html += '</div>';
-  }));
+  });
+
+  html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length:24}, (_, hour) => `<div class="hour-label">${C.timeLabel(hour * 60)}</div>`).join('') + '</div>';
+
+  dateLayouts.forEach(d => {
+    if (d.dayEmps.length === 0) {
+      html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol};grid-row:3">
+        <div class="empty-day-placeholder">
+          <span>Sin turnos planificados</span>
+          ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="button secondary small-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : ''}
+        </div>
+      </div>`;
+    } else {
+      d.dayEmps.forEach((employee, j) => {
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol + j};grid-row:3">`;
+        const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
+        const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
+        const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
+        for (let slot = 0; slot < 48; slot++) {
+          const start = slot * 30;
+          const serviceOpen = !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
+          const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule);
+          const label = `${dayLabel}, ${C.timeLabel(start)}, ${employee.name}`;
+          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
+        }
+        const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
+        const placed = C.layoutEvents(dayColBookings);
+        placed.forEach(({ event: b, lane, count }) => {
+          const startMin = C.minutes(b.start);
+          const endMin = C.minutes(b.end);
+          const top = startMin * 1.4;
+          const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
+          const width = 100 / count;
+          const left = lane * width;
+          const color = lookup('employees', b.employeeId).color || '#7b858d';
+          const soft = `${color}18`;
+          const clientName = lookup('clients', b.clientId).name;
+          const serviceName = lookup('services', b.serviceId).name;
+          const roomName = lookup('rooms', b.roomId).name;
+          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+        });
+        if (d.date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
+        html += '</div>';
+      });
+    }
+  });
+
   return `${html}</div>`;
 }
 
@@ -285,6 +363,7 @@ function render(updatePeriodTitle = false) {
   $('clear-filters').hidden=['employee','service','room'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
+  checkRepeatWeekButton();
   document.querySelectorAll('[data-view]').forEach(button => {
     const active = button.dataset.view === state.view;
     button.classList.toggle('active', active);
@@ -584,6 +663,210 @@ $('schedule-form').addEventListener('submit',async event => {
   $('schedule-dialog').close();render();toast(persisted?'Horario actualizado.':'Horario actualizado solo en esta sesión.');
 });
 
+function checkRepeatWeekButton() {
+  const btn = $('repeat-week-btn');
+  if (!btn) return;
+  if (!serverMode || currentUser?.role === 'TRAINER' || state.view !== 'week') {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  const monday = C.monday(state.date);
+  const weekDates = Array.from({ length: 7 }, (_, i) => C.addDays(monday, i));
+  const activeGym = currentGymId();
+  const hasBookings = data.bookings.some(b => weekDates.includes(b.date) && (!b.centerId || b.centerId === activeGym || activeGym === 'local') && b.status !== 'cancelled');
+  const hasCustomShifts = data.employees.some(e => (e.shifts || []).some(s => weekDates.includes(s.date)));
+  const isEmpty = !hasBookings && !hasCustomShifts;
+  if (isEmpty) {
+    btn.classList.add('is-empty-week');
+    btn.textContent = '⚡ Repetir misma semana anterior';
+    btn.title = 'Esta semana está vacía. Clic para clonar la planificación de turnos de la semana anterior.';
+  } else {
+    btn.classList.remove('is-empty-week');
+    btn.textContent = '🔄 Repetir semana anterior';
+    btn.title = 'Clonar la planificación de turnos de la semana anterior a esta semana.';
+  }
+}
+
+if ($('repeat-week-btn')) {
+  $('repeat-week-btn').addEventListener('click', async () => {
+    const monday = C.monday(state.date);
+    const prevMonday = C.addDays(monday, -7);
+    const prevSunday = C.addDays(prevMonday, 6);
+    const curSunday = C.addDays(monday, 6);
+    const prevRange = `${prettyDate(prevMonday, {day:'numeric', month:'short'})} al ${prettyDate(prevSunday, {day:'numeric', month:'short'})}`;
+    const curRange = `${prettyDate(monday, {day:'numeric', month:'short'})} al ${prettyDate(curSunday, {day:'numeric', month:'short'})}`;
+
+    if (!confirm(`¿Copiar la planificación de turnos de la semana anterior (${prevRange}) a esta semana (${curRange})?`)) return;
+
+    try {
+      $('repeat-week-btn').disabled = true;
+      await api('calendar/shifts/copy-week', 'POST', { fromMonday: prevMonday, toMonday: monday });
+      await refreshServer(true);
+      toast('Planificación de turnos copiada de la semana anterior.');
+    } catch (err) {
+      toast('No se pudo copiar la semana: ' + err.message);
+    } finally {
+      $('repeat-week-btn').disabled = false;
+    }
+  });
+}
+
+function openShiftEditor(employeeId, date) {
+  if (currentUser?.role === 'TRAINER') return;
+  $('shift-error').hidden = true;
+  $('shift-date').value = date;
+
+  const activeEmployees = data.employees.filter(e => e.active !== false && e.id !== '__unassigned');
+  const alreadyWorking = activeEmployees.filter(e => {
+    const s = e.shifts?.find(shift => shift.date === date);
+    return Boolean(s && s.periods && s.periods.length > 0);
+  });
+  const alreadyWorkingIds = new Set(alreadyWorking.map(e => e.id));
+  const availableToSchedule = activeEmployees.filter(e => !alreadyWorkingIds.has(e.id));
+
+  if (!employeeId && availableToSchedule.length === 0) {
+    toast('Todos los entrenadores ya están planificados para este día.');
+    return;
+  }
+
+  fillSelect('shift-employee', employeeId ? activeEmployees : availableToSchedule);
+
+  const selectedEmpId = employeeId || availableToSchedule[0]?.id;
+  if (!selectedEmpId) {
+    toast('No hay entrenadores disponibles para planificar este día.');
+    return;
+  }
+
+  $('shift-employee').value = selectedEmpId;
+  $('shift-employee').disabled = !!employeeId;
+
+  const emp = lookup('employees', selectedEmpId);
+  const formattedDate = prettyDate(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  $('shift-title').textContent = employeeId ? `Turno de ${emp.name}` : 'Añadir entrenador al día';
+  $('shift-subtitle').textContent = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
+
+  $('shift-delete-btn').hidden = !employeeId;
+  $('shift-delete-btn').textContent = `Quitar de este día`;
+
+  syncShiftFields();
+  $('shift-dialog').showModal();
+}
+
+function syncShiftFields() {
+  const empId = $('shift-employee').value;
+  const date = $('shift-date').value;
+  const emp = lookup('employees', empId);
+  const hours = C.hoursFor(date, data.schedule);
+  const customShift = emp?.shifts?.find(s => s.date === date);
+
+  if (customShift) {
+    if (customShift.periods && customShift.periods.length > 0) {
+      $('shift-off').checked = false;
+      $('shift-open').value = customShift.periods[0].open;
+      $('shift-close').value = customShift.periods[customShift.periods.length - 1].close;
+    } else {
+      $('shift-off').checked = true;
+      $('shift-open').value = hours.open || '09:00';
+      $('shift-close').value = hours.close || '21:00';
+    }
+  } else {
+    $('shift-off').checked = false;
+    $('shift-open').value = hours.open || '09:00';
+    $('shift-close').value = hours.close || '14:00';
+  }
+
+  const isOff = $('shift-off').checked;
+  $('shift-open').disabled = isOff;
+  $('shift-close').disabled = isOff;
+}
+
+if ($('shift-employee')) $('shift-employee').addEventListener('change', syncShiftFields);
+if ($('shift-off')) $('shift-off').addEventListener('change', () => {
+  const isOff = $('shift-off').checked;
+  $('shift-open').disabled = isOff;
+  $('shift-close').disabled = isOff;
+});
+
+if ($('shift-form')) {
+  $('shift-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    $('shift-error').hidden = true;
+    const empId = $('shift-employee').value;
+    const date = $('shift-date').value;
+    const isOff = $('shift-off').checked;
+    const open = $('shift-open').value;
+    const close = $('shift-close').value;
+
+    if (!isOff && C.minutes(open) >= C.minutes(close)) {
+      formError('shift-error', 'La hora de fin debe ser posterior a la de inicio.');
+      return;
+    }
+
+    const periods = isOff ? [] : [{ open, close }];
+
+    if (serverMode) {
+      try {
+        $('shift-submit-btn').disabled = true;
+        await api('calendar/shifts', 'POST', { employeeId: empId, date, periods });
+        $('shift-dialog').close();
+        await refreshServer(true);
+        toast(isOff ? 'Guardado como día libre para este entrenador.' : 'Turno de trabajo guardado correctamente.');
+      } catch (err) {
+        formError('shift-error', err.message);
+      } finally {
+        $('shift-submit-btn').disabled = false;
+      }
+    } else {
+      const emp = data.employees.find(e => e.id === empId);
+      if (emp) {
+        emp.shifts = emp.shifts || [];
+        const idx = emp.shifts.findIndex(s => s.date === date);
+        if (idx >= 0) emp.shifts[idx].periods = periods;
+        else emp.shifts.push({ date, periods });
+        saveData();
+        render();
+      }
+      $('shift-dialog').close();
+      toast('Turno guardado.');
+    }
+  });
+}
+
+if ($('shift-delete-btn')) {
+  $('shift-delete-btn').addEventListener('click', async () => {
+    const empId = $('shift-employee').value;
+    const date = $('shift-date').value;
+    const emp = lookup('employees', empId);
+    if (!confirm(`¿Quitar a ${emp?.name || 'este entrenador'} de la planificación de este día?`)) return;
+
+    if (serverMode) {
+      try {
+        $('shift-delete-btn').disabled = true;
+        await api('calendar/shifts', 'POST', { employeeId: empId, date, periods: null });
+        $('shift-dialog').close();
+        await refreshServer(true);
+        toast(`${emp?.name || 'Entrenador'} quitado de este día.`);
+      } catch (err) {
+        formError('shift-error', err.message);
+      } finally {
+        $('shift-delete-btn').disabled = false;
+      }
+    } else {
+      const empRecord = data.employees.find(e => e.id === empId);
+      if (empRecord && empRecord.shifts) {
+        const idx = empRecord.shifts.findIndex(s => s.date === date);
+        if (idx >= 0) empRecord.shifts.splice(idx, 1);
+        saveData();
+        render();
+      }
+      $('shift-dialog').close();
+      toast('Entrenador quitado de este día.');
+    }
+  });
+}
+
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',() => $(button.dataset.close).close()));
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => {state.view = button.dataset.view;render(true);}));
 for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
@@ -599,6 +882,18 @@ function navigate(direction) {
 $('previous').addEventListener('click',() => navigate(-1));
 $('next').addEventListener('click',() => navigate(1));
 $('calendar').addEventListener('click',event => {
+  const addTrainerBtn = event.target.closest('[data-add-trainer-date]');
+  if (addTrainerBtn) {
+    event.stopPropagation();
+    openShiftEditor(null, addTrainerBtn.dataset.addTrainerDate);
+    return;
+  }
+  const empHeading = event.target.closest('[data-shift-employee]');
+  if (empHeading) {
+    event.stopPropagation();
+    openShiftEditor(empHeading.dataset.shiftEmployee, empHeading.dataset.shiftDate);
+    return;
+  }
   const booking=event.target.closest('[data-booking]');
   if (booking){showBooking(booking.dataset.booking);return;}
   const day=event.target.closest('[data-day]');

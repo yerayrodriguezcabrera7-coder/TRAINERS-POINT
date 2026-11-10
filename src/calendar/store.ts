@@ -718,4 +718,57 @@ export class Store {
       db.release();
     }
   }
+
+  async updateEmployeeShift(gym: string, employeeId: string, dateStr: string, periods: Array<{ open: string; close: string }> | null) {
+    return this.transaction(gym, async (db, c) => {
+      const employee = c.employees.find(e => e.id === employeeId);
+      if (!employee) throw new ApiError(404, "Empleado no encontrado.");
+      employee.shifts = employee.shifts || [];
+      const existingIdx = employee.shifts.findIndex(s => s.date === dateStr);
+      if (periods === null) {
+        if (existingIdx >= 0) employee.shifts.splice(existingIdx, 1);
+      } else {
+        const sorted = [...periods].sort((a,b) => a.open.localeCompare(b.open));
+        if (existingIdx >= 0) employee.shifts[existingIdx].periods = sorted;
+        else employee.shifts.push({ date: dateStr, periods: sorted });
+      }
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, employeeId, date: dateStr, periods };
+    });
+  }
+
+  async copyWeekShifts(gym: string, fromMonday: string, toMonday: string) {
+    return this.transaction(gym, async (db, c) => {
+      const fromDates: string[] = [];
+      const toDates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        fromDates.push(DateTime.fromISO(fromMonday).plus({ days: i }).toISODate()!);
+        toDates.push(DateTime.fromISO(toMonday).plus({ days: i }).toISODate()!);
+      }
+      for (const employee of c.employees) {
+        employee.shifts = employee.shifts || [];
+        for (let i = 0; i < 7; i++) {
+          const srcDate = fromDates[i];
+          const tgtDate = toDates[i];
+          const srcShift = employee.shifts.find(s => s.date === srcDate);
+          let periodsToCopy: Array<{ open: string; close: string }> = srcShift ? srcShift.periods : [];
+          if (!srcShift && employee.weeklyPeriods && employee.weeklyPeriods[i]?.length) {
+            periodsToCopy = employee.weeklyPeriods[i];
+          } else if (!srcShift && employee.schedule && !employee.schedule[i]?.closed) {
+            periodsToCopy = [{ open: employee.schedule[i].open, close: employee.schedule[i].close }];
+          } else if (!srcShift && c.schedule && !c.schedule[i]?.closed) {
+            periodsToCopy = [{ open: c.schedule[i].open, close: c.schedule[i].close }];
+          }
+          const tgtIdx = employee.shifts.findIndex(s => s.date === tgtDate);
+          if (tgtIdx >= 0) {
+            employee.shifts[tgtIdx].periods = [...periodsToCopy];
+          } else {
+            employee.shifts.push({ date: tgtDate, periods: [...periodsToCopy] });
+          }
+        }
+      }
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, fromMonday, toMonday };
+    });
+  }
 }

@@ -207,6 +207,32 @@ export function server(
             send(res, 200, { ok: true, pagePermissions: pages, permissionsAudit: auditEntry });
             return;
           }
+          if (path === "/api/calendar/shifts" && req.method === "POST") {
+            if (!admin && !reception) throw new ApiError(403, "No tienes permiso para modificar turnos.");
+            const raw = await body(req);
+            const input = z.object({
+              employeeId: z.string().min(1),
+              date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+              periods: z.array(z.object({
+                open: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+                close: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+              })).nullable(),
+            }).parse(raw);
+            const result = await store.updateEmployeeShift(gym, input.employeeId, input.date, input.periods);
+            send(res, 200, result);
+            return;
+          }
+          if (path === "/api/calendar/shifts/copy-week" && req.method === "POST") {
+            if (!admin && !reception) throw new ApiError(403, "No tienes permiso para planificar semanas.");
+            const raw = await body(req);
+            const input = z.object({
+              fromMonday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+              toMonday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            }).parse(raw);
+            const result = await store.copyWeekShifts(gym, input.fromMonday, input.toMonday);
+            send(res, 200, result);
+            return;
+          }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
             if (management[1] === "users" && (!admin || !hasPage("usuarios"))) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
