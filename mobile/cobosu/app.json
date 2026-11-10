@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Cobosu",
+    "slug": "cobosu",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cobosu.app"
+    },
+    "android": {
+      "package": "com.cobosu.app"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

@@ -1,0 +1,389 @@
+/*
+  Estilos específicos de Control Horario / Fichajes para Trainers Point.
+  Construido sobre clients.css (identidad de marca: carbón #111, papel cálido, acento naranja #ff7f0a).
+*/
+
+.page-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Aviso Legal informativo según Art. 34.9 ET y Art. 90 LOPDGDD */
+.legal-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-md);
+  background: var(--tp-surface);
+  color: var(--tp-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.legal-notice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--tp-accent);
+}
+
+.legal-notice strong {
+  color: var(--tp-ink);
+}
+
+.legal-notice p {
+  margin: 0;
+}
+
+.button-clock-out {
+  border-color: #e5c3be;
+  background: #fdf5f4;
+  color: var(--tp-urgent);
+  box-shadow: none;
+}
+
+.button-clock-out:hover {
+  border-color: var(--tp-urgent);
+  background: var(--tp-urgent);
+  color: #fff;
+}
+
+.attendance-card-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.2fr) minmax(260px, 1.8fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-md);
+  background: var(--tp-surface);
+  transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out;
+}
+
+.attendance-card-row:hover {
+  border-color: var(--tp-accent);
+  background: #fff8ef;
+}
+
+.attendance-card-row.is-working {
+  border-color: #c8dfcd;
+  background: #fafdfa;
+}
+
+.attendance-card-row.is-working:hover {
+  border-color: var(--tp-ok);
+  background: #f4faf5;
+}
+
+.employee-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.employee-avatar {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--tp-radius-md);
+  font-family: var(--tp-display);
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--emp-color, var(--tp-ink));
+  background: var(--emp-soft, var(--tp-surface-muted));
+  border: 1px solid color-mix(in srgb, var(--emp-color, #999) 30%, transparent);
+}
+
+.employee-names {
+  min-width: 0;
+}
+
+.employee-names strong {
+  display: block;
+  overflow: hidden;
+  color: var(--tp-ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-names small {
+  display: block;
+  margin-top: 3px;
+  color: var(--tp-muted);
+  font-size: 11px;
+}
+
+.employee-status-col {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.status-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timer-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attendance-timer {
+  font-family: var(--tp-display);
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-ink);
+  line-height: 1;
+}
+
+.attendance-timer.is-live {
+  color: var(--tp-ok);
+}
+
+.timer-caption {
+  color: var(--tp-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--tp-ok);
+  animation: pulse-ring 2s infinite ease-out;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(85, 112, 92, .6); }
+  70% { box-shadow: 0 0 0 6px rgba(85, 112, 92, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(85, 112, 92, 0); }
+}
+
+.employee-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.employee-actions .button {
+  min-width: 128px;
+}
+
+/* Historial */
+.history-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.form-field-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--tp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+
+.form-field-inline input,
+.form-field-inline select {
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--tp-line);
+  border-radius: var(--tp-radius-md);
+  background: var(--tp-surface);
+  color: var(--tp-ink);
+  font-size: 12px;
+  outline: 0;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.form-field-inline select {
+  min-width: 200px;
+}
+
+.form-field-inline input:focus,
+.form-field-inline select:focus {
+  border-color: var(--tp-accent);
+  box-shadow: 0 0 0 2px rgba(255, 127, 10, .14);
+}
+
+.history-scroll-wrap {
+  overflow-x: auto;
+  padding: 0 22px 16px;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.attendance-table th {
+  height: 38px;
+  padding: 0 14px;
+  border-top: 1px solid var(--tp-line);
+  border-bottom: 1px solid var(--tp-line);
+  background: var(--tp-surface-muted);
+  color: var(--tp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.attendance-table td {
+  height: 54px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--tp-line);
+  color: var(--tp-ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attendance-table tbody tr:hover td {
+  background: #fffbf5;
+}
+
+.history-open-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: #e2ebe3;
+  color: var(--tp-ok);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.history-closed-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: var(--tp-surface-muted);
+  color: var(--tp-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.duration-cell {
+  font-family: var(--tp-display);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tp-ink);
+}
+
+/* Badges de Geolocalización Legal */
+.geo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--tp-radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.geo-badge svg {
+  flex: 0 0 auto;
+}
+
+.geo-badge.in-center {
+  background: #e2ebe3;
+  color: var(--tp-ok);
+}
+
+.geo-badge.off-center {
+  background: #fdf2e2;
+  color: var(--tp-warning);
+}
+
+.geo-badge.with-gps {
+  background: var(--tp-surface-muted);
+  color: var(--tp-ink);
+}
+
+.geo-badge.no-gps {
+  background: transparent;
+  color: var(--tp-muted);
+  border: 1px dashed var(--tp-line);
+}
+
+.map-link {
+  color: var(--tp-accent);
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+}
+
+.map-link:hover {
+  text-decoration: underline;
+}
+
+.read-only-tag {
+  color: var(--tp-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px dashed var(--tp-line);
+  border-radius: var(--tp-radius-sm);
+}
+
+@media (max-width: 900px) {
+  .attendance-card-row {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .employee-actions {
+    justify-content: stretch;
+  }
+  .employee-actions .button {
+    width: 100%;
+  }
+  .history-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .form-field-inline select {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.export-help { flex-basis: 100%; color: var(--tp-muted, #637168); line-height: 1.5; }
+
+.clock-author{display:block;margin-top:6px;max-width:290px;line-height:1.5;color:#52636b}
+
+.omission-history{padding:20px;margin-top:20px;border-top:1px solid #ddd}.omission-record{padding:16px;margin:12px 0;border:1px solid #ddd;border-radius:8px;overflow-wrap:anywhere}.omission-record p{white-space:pre-wrap}
+#omission-dialog{width:min(580px,calc(100vw - 32px));padding:24px;box-sizing:border-box;max-height:90dvh;overflow:auto;border:1px solid #ddd;border-radius:12px;background:#fff}#omission-dialog::backdrop{background:#0008}#omission-form{display:grid;gap:16px}#omission-form label:not(.omission-check){display:grid;gap:8px}#omission-form :is(input[type=date],select,textarea){width:100%;box-sizing:border-box;padding:10px;font:inherit;border:1px solid #bbb;border-radius:8px}#omission-error{color:#a22}.omission-check{display:flex;align-items:flex-start;gap:10px}

@@ -1,0 +1,72 @@
+services:
+  database:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trainers_point
+      POSTGRES_USER: trainers_point
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Configura DATABASE_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U trainers_point -d trainers_point']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build:
+      context: ..
+      target: build
+    environment:
+      DATABASE_URL: postgresql://trainers_point:${DATABASE_PASSWORD}@database:5432/trainers_point
+    command: [npx, prisma, migrate, deploy]
+    depends_on:
+      database:
+        condition: service_healthy
+  app:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://trainers_point:${DATABASE_PASSWORD}@database:5432/trainers_point
+      TRAINERS_POINT_DEV_ADMIN: 'false'
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Configura PUBLIC_ORIGIN}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - proxy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      PGHOST: database
+      PGDATABASE: trainers_point
+      PGUSER: trainers_point
+      PGPASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - ./backup-loop.sh:/scripts/backup-loop.sh:ro
+      - ./backups:/backups
+    command: [sh, /scripts/backup-loop.sh]
+    depends_on:
+      database:
+        condition: service_healthy
+volumes:
+  database:
+  certificates:
+  proxy_config:

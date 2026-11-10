@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Trainers Point",
+    "slug": "trainerspoint",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.trainerspoint.app"
+    },
+    "android": {
+      "package": "com.trainerspoint.app"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

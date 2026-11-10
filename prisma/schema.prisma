@@ -14,6 +14,33 @@ enum ClientStatus {
   BAJA
 }
 
+enum ClientSex {
+  MUJER
+  HOMBRE
+  NO_INDICA
+}
+
+enum ClientSource {
+  INSTAGRAM
+  RECOMENDACION
+  PASO_POR_LA_PUERTA
+  GOOGLE
+  OTRO
+}
+
+enum ContactPreference {
+  WHATSAPP
+  SMS
+  LLAMADA
+  EMAIL
+}
+
+enum ContactSlot {
+  MANANA
+  MEDIODIA
+  TARDE
+}
+
 enum ClientNoteCategory {
   OBJETIVO
   LESION
@@ -75,6 +102,13 @@ enum StockMovementType {
   DANO
 }
 
+enum RestockStatus {
+  PENDIENTE
+  PEDIDO
+  RECIBIDO
+  CANCELADO
+}
+
 enum SaleStatus {
   BORRADOR
   COMPLETADA
@@ -88,6 +122,7 @@ enum SaleLineType {
 }
 
 enum PaymentMethod {
+  BIZUM
   EFECTIVO
   TARJETA
   TRANSFERENCIA
@@ -123,6 +158,16 @@ enum InvoiceEventType {
   ERROR
 }
 
+
+enum ServiceModality {
+  INDIVIDUAL
+  DUAL
+}
+
+enum ServiceType {
+  PACK
+  SESION_INDIVIDUAL
+}
 model Client {
   id               String                 @id @default(uuid()) @db.Uuid
   firstName        String
@@ -130,11 +175,27 @@ model Client {
   email            String                 @unique
   phone            String
   dni              String?                @unique
+  address          String?
   birthDate        DateTime?              @db.Date
   status           ClientStatus           @default(LEAD)
   gymId            String                 @db.Uuid
   assignedWorkerId String?                @db.Uuid
   notes            String?
+  objective        String?
+  sex              ClientSex?
+  source            ClientSource?
+  sourceDetail      String?
+  preferredName     String?
+  contactPreference ContactPreference?
+  contactSlot       ContactSlot?
+  injuries          Json?
+  injuryNotes       String?
+  availability      Json?
+  sessionsPerWeek   Int?
+  firstSessionPreference DateTime?         @db.Timestamptz(3)
+  consentData       DateTime?              @db.Timestamptz(3)
+  consentMarketing  DateTime?              @db.Timestamptz(3)
+  consentPhotos     DateTime?              @db.Timestamptz(3)
   createdAt        DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime               @updatedAt @db.Timestamptz(3)
   gym              Gym                    @relation(fields: [gymId], references: [id], onDelete: Restrict)
@@ -144,10 +205,29 @@ model Client {
   bookings         Booking[]
   servicePackages  ClientServicePackage[]
   sales            Sale[]
+  measurements     ClientMeasurement[]
 
   @@index([status, lastName, firstName])
   @@index([gymId, status])
   @@index([assignedWorkerId])
+}
+
+model ClientMeasurement {
+  id        String   @id @default(uuid()) @db.Uuid
+  clientId  String   @db.Uuid
+  measuredAt DateTime @db.Date
+  weight    Decimal? @db.Decimal(6, 2)
+  hip       Decimal? @db.Decimal(6, 2)
+  waist     Decimal? @db.Decimal(6, 2)
+  leg       Decimal? @db.Decimal(6, 2)
+  chest     Decimal? @db.Decimal(6, 2)
+  arm       Decimal? @db.Decimal(6, 2)
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, measuredAt])
+  @@index([clientId, measuredAt])
 }
 
 model Gym {
@@ -156,6 +236,11 @@ model Gym {
   city      String?
   province  String?
   address   String?
+  photoData String?  @db.Text
+  latitude  Float?
+  longitude Float?
+  radiusMeters Int?    @default(200)
+  maxBookingsPerHour Int?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -274,22 +359,32 @@ model RolePermission {
 }
 
 model Service {
-  id          String                 @id @default(uuid()) @db.Uuid
-  name        String
-  description String?
-  durationMin Int
-  price       Decimal                @db.Decimal(10, 2)
-  isActive    Boolean                @default(true)
-  createdAt   DateTime               @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime               @updatedAt @db.Timestamptz(3)
-  bookings    Booking[]
-  packages    ClientServicePackage[]
-  saleLines   SaleLine[]
+  id                         String                 @id @default(uuid()) @db.Uuid
+  name                       String
+  description                String?
+  modality                   ServiceModality        @default(INDIVIDUAL)
+  type                       ServiceType            @default(SESION_INDIVIDUAL)
+  trainingCount              Int                    @default(1)
+  price                      Decimal                @db.Decimal(10, 2)
+  durationMin                Int                    @default(60)
+  validityWeeks              Int?
+  recommendedWeeklyFrequency Int?
+  conditions                 String?
+  isActive                   Boolean                @default(true)
+  createdAt                  DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt                  DateTime               @updatedAt @db.Timestamptz(3)
+  bookings                   Booking[]
+  packages                   ClientServicePackage[]
+  saleLines                  SaleLine[]
 
   @@index([isActive, name])
+  @@index([modality, type])
 }
 
 model ClientServicePackage {
+  saleId String? @unique @db.Uuid
+  sale Sale? @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  requestKey String? @unique
   id             String        @id @default(uuid()) @db.Uuid
   clientId       String        @db.Uuid
   serviceId      String        @db.Uuid
@@ -309,6 +404,10 @@ model ClientServicePackage {
 }
 
 model Booking {
+  saleId String? @unique @db.Uuid
+  sale Sale? @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  calendarGymId String?
+  paymentPending Boolean @default(false)
   id         String                @id @default(uuid()) @db.Uuid
   clientId   String                @db.Uuid
   serviceId  String                @db.Uuid
@@ -326,6 +425,7 @@ model Booking {
   package    ClientServicePackage? @relation(fields: [packageId], references: [id], onDelete: Restrict)
   employee   Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
+  @@index([calendarGymId])
   @@index([startTime, endTime, status])
   @@index([packageId, attendance])
   @@index([employeeId, startTime])
@@ -361,6 +461,9 @@ model TimeEntry {
 }
 
 model Product {
+  gymKey      String?
+  stock       Int             @default(0)
+  revision    Int             @default(1)
   id          String          @id @default(uuid()) @db.Uuid
   sku         String?         @unique
   name        String
@@ -369,10 +472,31 @@ model Product {
   isActive    Boolean         @default(true)
   createdAt   DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
-  movements   StockMovement[]
-  saleLines   SaleLine[]
+  movements       StockMovement[]
+  saleLines       SaleLine[]
+  restockRequests RestockRequest[]
 
   @@index([isActive, name])
+  @@index([gymKey])
+}
+
+model RestockRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  gymKey          String
+  productId       String?        @db.Uuid
+  product         Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName     String
+  quantity        Int            @default(1)
+  status          RestockStatus  @default(PENDIENTE)
+  notes           String?
+  requestedBy     String?
+  requestedByName String?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(3)
+  resolvedAt      DateTime?      @db.Timestamptz(3)
+
+  @@index([gymKey, status])
+  @@index([productId])
 }
 
 model StockMovement {
@@ -391,6 +515,17 @@ model StockMovement {
 }
 
 model Sale {
+  booking Booking?
+  servicePackage ClientServicePackage?
+  cashSessionId String? @db.Uuid
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  returnHistory Json @default("[]") @db.JsonB
+  paymentTracking  Boolean    @default(false)
+  requestFingerprint String?
+  returnKeys       String[]   @default([])
+  gymKey           String?
+  requestKey       String?    @unique
+  sellerAccountId  String?
   id               String     @id @default(uuid()) @db.Uuid
   clientId         String?    @db.Uuid
   sellerEmployeeId String?    @db.Uuid
@@ -408,11 +543,14 @@ model Sale {
   payments         Payment[]
   invoice          Invoice?
 
+  @@index([cashSessionId])
+  @@index([gymKey, soldAt])
   @@index([status, soldAt])
   @@index([clientId, soldAt])
 }
 
 model SaleLine {
+  returnedQuantity Int          @default(0)
   id           String       @id @default(uuid()) @db.Uuid
   saleId       String       @db.Uuid
   type         SaleLineType
@@ -435,6 +573,13 @@ model SaleLine {
 }
 
 model Payment {
+  cashSessionId String? @db.Uuid
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  historicalVerification Boolean @default(false)
+  kind String @default("COLLECTION")
+  note String?
+  requestKey String? @unique
+  actorAccountId String?
   id        String        @id @default(uuid()) @db.Uuid
   saleId    String        @db.Uuid
   method    PaymentMethod
@@ -445,6 +590,7 @@ model Payment {
   createdAt DateTime      @default(now()) @db.Timestamptz(3)
   sale      Sale          @relation(fields: [saleId], references: [id], onDelete: Restrict)
 
+  @@index([cashSessionId])
   @@index([saleId, status])
 }
 
@@ -500,4 +646,45 @@ model AuditLog {
 
   @@index([actorId, occurredAt])
   @@index([entityType, entityId, occurredAt])
+}
+
+
+model CashSession {
+  id String @id @default(uuid()) @db.Uuid
+  gymKey String
+  businessDate String @db.VarChar(10)
+  openedAt DateTime @default(now()) @db.Timestamptz(3)
+  openedBy String
+  openedByName String
+  openingAmount Decimal @db.Decimal(12, 2)
+  closedAt DateTime? @db.Timestamptz(3)
+  closedBy String?
+  closedByName String?
+  countedAmount Decimal? @db.Decimal(12, 2)
+  expectedAmount Decimal? @db.Decimal(12, 2)
+  difference Decimal? @db.Decimal(12, 2)
+  closingNote String?
+  revision Int @default(1)
+  requestKey String @unique
+  closeRequestKey String? @unique
+  summary Json? @db.JsonB
+  sales Sale[]
+  payments Payment[]
+  movements CashMovement[]
+  @@index([gymKey, openedAt])
+}
+
+model CashMovement {
+  id String @id @default(uuid()) @db.Uuid
+  sessionId String @db.Uuid
+  session CashSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  requestKey String @unique
+  direction String
+  category String
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  actorId String
+  actorName String
+  @@index([sessionId, createdAt])
 }

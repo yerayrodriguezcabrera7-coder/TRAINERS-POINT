@@ -1,0 +1,389 @@
+/*
+  Servicios - Trainers Point
+  Comparte la identidad visual y el sistema de diseño exacto de Clientes (clients.css):
+  carbón #111 y papel cálido #f7f4ee como base; naranja #ff7f0a como acento corporativo.
+*/
+
+/* Rejilla de tarjetas de catálogo - Diseño de tarjetas limpias y legibles */
+.services-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 16px;
+  padding: 22px;
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: var(--tp-surface, #fffdf9);
+  border: 1px solid var(--tp-line, #dcd5ca);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(17, 17, 17, 0.05);
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+  position: relative;
+}
+
+.service-card:hover {
+  border-color: var(--tp-accent, #ff7f0a);
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.08);
+}
+
+.service-card.is-inactive {
+  opacity: 0.65;
+  background: var(--tp-surface-muted, #eee9e1);
+  border-style: dashed;
+}
+
+.service-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.service-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.badge-active {
+  background: #edf6ef;
+  color: #477458;
+  border: 1px solid #cce5d3;
+}
+
+.badge-inactive {
+  background: #fdf2f2;
+  color: #a64842;
+  border: 1px solid #f8d7da;
+}
+
+.badge-modality {
+  background: #f7f4ee;
+  color: #435149;
+  border: 1px solid #dcd5ca;
+}
+
+.badge-type {
+  background: #fff8f0;
+  color: #c45e00;
+  border: 1px solid #fedec0;
+}
+
+.service-name {
+  margin: 0 0 6px;
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+  line-height: 1.25;
+}
+
+.service-description {
+  margin: 0 0 14px;
+  color: var(--tp-muted, #746d64);
+  font-size: 12px;
+  line-height: 1.45;
+  flex-grow: 1;
+}
+
+.service-price-box {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #f7f4ee;
+  border: 1px solid #e7dfd5;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+
+.price-main {
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--tp-accent, #ff7f0a);
+  line-height: 1;
+}
+
+.price-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tp-muted, #746d64);
+}
+
+.service-specs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ede7dc;
+  margin-bottom: 12px;
+}
+
+.spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spec-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tp-muted, #746d64);
+}
+
+.spec-value {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tp-ink, #24211e);
+}
+
+.spec-duration-4weeks {
+  color: var(--tp-accent, #ff7f0a);
+  font-weight: 700;
+}
+
+.service-conditions-box {
+  padding: 9px 12px;
+  background: #fbf9f5;
+  border: 1px solid #eae2d6;
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+
+.conditions-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tp-muted, #746d64);
+  margin-bottom: 3px;
+}
+
+.conditions-text {
+  margin: 0;
+  font-size: 11px;
+  color: var(--tp-muted, #746d64);
+  line-height: 1.4;
+}
+
+.service-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.button-toggle-status {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--tp-line, #dcd5ca);
+  border-radius: 6px;
+  color: var(--tp-muted, #746d64);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.button-toggle-status:hover {
+  border-color: #a64842;
+  color: #a64842;
+  background: #fdf2f2;
+}
+
+.button-edit-service {
+  padding: 6px 14px;
+  background: var(--tp-surface, #fffdf9);
+  border: 1px solid var(--tp-line, #dcd5ca);
+  border-radius: 6px;
+  color: var(--tp-ink, #24211e);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.button-edit-service:hover {
+  border-color: var(--tp-accent, #ff7f0a);
+  color: var(--tp-accent, #ff7f0a);
+  background: #fff8f0;
+}
+
+/* Panel de cálculo automático en diálogo */
+.calculated-rate-panel {
+  background: #fff8f0;
+  border: 1px solid #fedec0;
+  border-left: 4px solid var(--tp-accent, #ff7f0a);
+  border-radius: 8px;
+  padding: 12px 16px;
+  transition: all .15s ease;
+}
+
+.calculated-rate-panel.has-warning {
+  background: #fdf2f2;
+  border-color: #f8d7da;
+  border-left-color: var(--tp-urgent, #945b54);
+}
+
+.calc-panel-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.calc-label-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calc-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--tp-accent, #ff7f0a);
+}
+
+.calculated-rate-panel.has-warning .calc-badge {
+  color: var(--tp-urgent, #945b54);
+}
+
+.calc-label-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+}
+
+.calc-display-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.calc-figure-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.calc-figure {
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--tp-accent, #ff7f0a);
+  line-height: 1.1;
+}
+
+.calculated-rate-panel.has-warning .calc-figure {
+  color: var(--tp-urgent, #945b54);
+}
+
+.calc-unit {
+  font-size: 11.5px;
+  color: var(--tp-muted, #746d64);
+}
+
+.calc-formula {
+  font-size: 11px;
+  color: var(--tp-muted, #746d64);
+  text-align: right;
+  max-width: 320px;
+}
+
+.calculated-rate-panel.has-warning .calc-formula {
+  color: var(--tp-urgent, #945b54);
+}
+
+/* Validez fijada a 4 semanas solo */
+.validity-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.validity-input-wrap input {
+  padding-right: 125px !important;
+  background: #f7f4ee !important;
+  font-weight: 700 !important;
+  color: var(--tp-ink, #24211e) !important;
+}
+
+.validity-badge {
+  position: absolute;
+  right: 8px;
+  padding: 3px 8px;
+  background: #fff0df;
+  border: 1px solid #fedec0;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--tp-accent, #ff7f0a);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+/* Errores en inputs */
+.service-dialog input.is-invalid,
+.service-dialog select.is-invalid,
+.service-dialog textarea.is-invalid {
+  border-color: var(--tp-urgent, #945b54) !important;
+  background: #fff7f7 !important;
+  box-shadow: 0 0 0 2px rgba(148, 91, 84, 0.18) !important;
+}
+
+/* Estado vacío de la lista */
+.services-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--tp-muted, #746d64);
+}
+
+.services-empty h3 {
+  margin: 12px 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+}
+
+.services-empty p {
+  margin: 0;
+  font-size: 12px;
+  max-width: 360px;
+}
+
+@media (max-width: 768px) {
+  .services-list {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+}

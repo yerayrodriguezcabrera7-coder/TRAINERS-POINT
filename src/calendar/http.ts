@@ -1,11 +1,17 @@
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { timingSafeEqual, randomUUID } from "node:crypto";
-import { ZodError, z } from "zod";
-import { Store } from "./store";
+import { randomUUID,timingSafeEqual } from "node:crypto";
+import { createServer,IncomingMessage,ServerResponse } from "node:http";
+import { z,ZodError } from "zod";
+import { Inventory } from "../finance/inventory";
+import { clientPackageAlerts } from "../finance/packages";
+import { serveAsset } from "../http/assets";
+import { serveRuntime } from "../http/runtime";
+import { Access,Identity,initialPassword } from "./access";
 import { ApiError } from "./model";
-import { Access, Identity } from "./access";
+import { Store } from "./store";
+import { saveOmission, listOmissions } from './attendance-omissions';
+import { attendanceCsv } from "./attendance-export";
+import { mobileStaffView, staffClientIds } from "./mobile-view";
+import type { CognitoVerifier } from "../cloud/cognito";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -22,6 +28,8 @@ async function body(req: IncomingMessage) {
     throw new ApiError(400, "JSON inválido.");
   }
 }
+function workerBooking(booking:any){const {history,...visible}=booking;return visible;}
+function clientBooking(booking:any){const {history,incidents,...visible}=booking;return visible;}
 function send(res: ServerResponse, status: number, value: unknown) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -33,52 +41,46 @@ export function server(
   store: Store,
   defaultGym: string,
   token: string,
-  options: { exposeAdminToken?: boolean } = {},
+  options: { exposeAdminToken?: boolean; cognito?: CognitoVerifier } = {},
 ) {
   if (token.length < 24)
     throw new Error("CALENDAR_ADMIN_TOKEN debe tener al menos 24 caracteres.");
-  const access = new Access(store.pool);
+  const access = new Access(store.pool,store.clientsDb);
   const attempts = new Map<string, { count: number; until: number }>();
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
       const path = url.pathname;
-      let gym = defaultGym;
-      const requestedGym = req.headers["x-calendar-gym"];
-      if (typeof requestedGym === "string" && requestedGym.trim()) gym = requestedGym.trim();
+      const gym = (req.headers["x-calendar-gym"] as string) || defaultGym;
       if (path === "/api/health") {
         send(res, 200, { mode: "server" });
         return;
       }
       if (path.startsWith("/api/")) {
-        if (path === "/api/gyms" && req.method === "GET") {
-          send(res, 200, { gyms: await store.listGyms(), selected: gym });
-          return;
-        }
-        if (path === "/api/gyms" && req.method === "POST") {
-          const actual = Buffer.from(req.headers.authorization || "");
-          const expected = Buffer.from(`Bearer ${token}`);
-          if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
-            throw new ApiError(401, "No autorizado.");
-          const raw = await body(req);
-          const name = z.string().trim().min(1).max(120).parse(raw.name);
-          send(res, 201, { gym: await store.createGym(name, defaultGym) });
-          return;
-        }
         if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
-        if (req.method === "POST" && path === "/api/login") {
+        if (req.method === "POST" && (path === "/api/login" || path === "/api/cognito/login")) {
           const key = req.socket.remoteAddress || "unknown";
           const now = Date.now();
           for (const [k,v] of attempts) if (v.until < now) attempts.delete(k);
           const attempt = attempts.get(key) || { count: 0, until: now + 15 * 60_000 };
           if (attempt.count >= 20) throw new ApiError(429, "Demasiados intentos. Espera 15 minutos.");
           attempt.count++; attempts.set(key,attempt);
-          send(res,200,await access.login(gym,await body(req)));
+          const raw = await body(req);
+          if (path === "/api/cognito/login") {
+            if (!options.cognito) throw new ApiError(503, "El acceso con Cognito todavía no está activado en este centro.");
+            const input = z.object({ accessToken: z.string().min(1).max(16384), portal: z.enum(["CLIENT","TRAINER","OFFICE"]).optional() }).parse(raw);
+            send(res,200,await access.loginWithCognito(gym,await options.cognito(input.accessToken),input.portal));
+          } else send(res,200,await access.login(gym,raw));
           attempts.delete(key);
           return;
         }
         const publicRoute = path.startsWith("/api/public/");
-        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null };
+        let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
+        const hasPage = (pageKey: string): boolean => {
+          if (identity.role === "ADMIN") return true;
+          if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
+          return identity.pagePermissions.includes(pageKey);
+        };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -89,39 +91,205 @@ export function server(
             !(await access.needsSetup(gym))
           )
             identity = await access.identify(gym,bearer);
+
           const admin = identity.role === "ADMIN";
-          const office = admin || identity.role === "RECEPTION";
+          const reception = identity.role === "RECEPTION";
+          const trainer = identity.role === "TRAINER";
+          const client = identity.role === "CLIENT";
+          const office = admin || reception;
+
+          if (identity.mustChangePassword &&
+            !(req.method === "GET" && path === "/api/me") &&
+            !(req.method === "POST" && path === "/api/password/change") &&
+            !(req.method === "POST" && path === "/api/logout"))
+            throw new ApiError(403, "Debes cambiar la contraseña antes de continuar.");
+
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
+          if (req.method === "POST" && path === "/api/password/change") {
+            send(res,200,await access.changePassword(gym,bearer,await body(req)));
+            return;
+          }
+
+          const workerAction=path.match(/^\/api\/bookings\/([^/]+)\/worker-action$/);
+          if(workerAction && req.method==='POST'){
+            if(!trainer)throw new ApiError(403,"Esta acción corresponde al trabajador asignado.");
+            send(res,200,workerBooking(await store.workerAction(gym,decodeURIComponent(workerAction[1]),identity,await body(req))));return;
+          }
+          if (path === "/api/recoveries" && req.method === "GET") {
+            if (!hasPage("recuperaciones.html")) throw new ApiError(403, "No tienes acceso a las recuperaciones.");
+            const items = await store.recoveries(gym);
+            send(res,200,trainer ? items.filter(r=>r.employeeId===identity.employeeId) : client ? items.filter(r=>r.clientId===identity.clientId) : items); return;
+          }
+          const defer = path.match(/^\/api\/bookings\/([^/]+)\/defer$/);
+          if (defer && req.method === "POST") {
+            if (!admin && !trainer) throw new ApiError(403,"Solo administración o entrenador puede autorizar una recuperación.");
+            const raw = await body(req);
+            send(res,201,await store.deferBooking(gym,decodeURIComponent(defer[1]),identity,raw.exception === true)); return;
+          }
+          if (path === "/api/client-calendar" && client) {
+            if (!identity.clientId) throw new ApiError(403,"Cuenta sin cliente asociado.");
+            const s=await store.state(gym);
+            if(req.method === "GET") {
+              send(res,200,{services:s.services.filter((v:any)=>v.active!==false), employees:s.employees.filter((v:any)=>v.active!==false).map((v:any)=>({id:v.id,name:v.name})), rooms:s.rooms, bookings:s.bookings.filter((v:any)=>v.clientId===identity.clientId).map(clientBooking), recoveries:(await store.recoveries(gym)).filter(v=>v.clientId===identity.clientId)});return;
+            }
+            if(req.method === "POST") {
+              const raw=await body(req);
+              if(!raw.employeeId)throw new ApiError(400,"Selecciona un trabajador.");
+              send(res,201,await store.save(gym,{...raw,clientId:identity.clientId,id:undefined,version:undefined,status:"CONFIRMED",chargeAmount:undefined}));return;
+            }
+          }
+          if(path === "/api/client-slots" && client && req.method === "GET") {
+            send(res,200,await store.slots(gym,Object.fromEntries(url.searchParams)));return;
+          }
+          if (client) {
+            throw new ApiError(403, "Tu perfil no tiene acceso a las funciones de gestión.");
+          }
+
+          if (req.method === "GET" && path === "/api/mobile/calendar") {
+            send(res, 200, mobileStaffView(await store.state(gym), identity));
+            return;
+          }
+
           if (req.method === "GET" && path === "/api/manage") {
             const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
+            let clients = s.clients;
+            let bookings = s.bookings;
+            let employees = s.employees;
+            let staffNames = s.employees.map((e: any) => ({id:e.id,name:e.name}));
+            if (trainer) {
+              const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+              clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || c.assignedWorkerId === identity.employeeId);
+              bookings = s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking);
+              employees = s.employees.filter((e: any) => e.id === identity.employeeId);
+              staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
+            }
             send(res,200,{ ...identity, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
-              clients: office ? s.clients : [], services: office ? s.services : [],
-              bookings: office ? s.bookings : [],
-              staffNames: office ? s.employees.map((e: any) => ({id:e.id,name:e.name})) : [],
-              employees: admin ? s.employees : s.employees.filter((e: any) => e.id === identity.employeeId),
-              users: admin ? await access.list(gym) : [],
+              clients,
+              services: s.services,
+              bookings,
+              staffNames,
+              employees: (admin || reception) ? s.employees : employees,
+              users: admin ? await access.list(gym,s.clients) : [],
             }); return;
+          }
+                    const resetMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/reset-password$/);
+          if (resetMatch && req.method === "POST") {
+            if (!admin) throw new ApiError(403, "Solo administración puede restablecer contraseñas.");
+            const userId = decodeURIComponent(resetMatch[1]);
+            const raw = await body(req).catch(() => ({}));
+            const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined);
+            send(res, 200, result);
+            return;
+          }
+          const permissionsMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/permissions$/);
+          if (permissionsMatch && req.method === 'PUT') {
+            if (!admin) throw new ApiError(403, 'Solo administración puede gestionar permisos de página.');
+            const userId = decodeURIComponent(permissionsMatch[1]);
+            const raw = await body(req);
+            const pages = z.array(z.string().min(1).max(200)).nullable().parse(raw.pagePermissions);
+            const userRow = (await store.pool.query('SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2', [gym, userId])).rows[0];
+            if (!userRow) throw new ApiError(404, 'Usuario no encontrado.');
+
+            const auditEntry = {
+              changedBy: identity.name || identity.username || 'Administrador',
+              changedById: identity.id,
+              changedAt: new Date().toISOString(),
+              mode: pages ? `${pages.length} páginas` : 'restaurado al rol',
+            };
+
+            await store.pool.query('UPDATE calendar.users SET page_permissions=$1, permissions_audit=$2 WHERE gym_id=$3 AND id=$4',
+              [pages ? JSON.stringify(pages) : null, JSON.stringify(auditEntry), gym, userId]);
+            send(res, 200, { ok: true, pagePermissions: pages, permissionsAudit: auditEntry });
+            return;
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
-            if (!admin && !(identity.role === "RECEPTION" && management[1] === "clients")) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "users" && (!admin || !hasPage("usuarios"))) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
+            if (management[1] === "services" && (!admin || !hasPage("servicios"))) throw new ApiError(403,"Solo administración puede modificar servicios.");
+            if (management[1] === "employees" && (!admin && !reception || !hasPage("profesionales"))) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "clients" && (!admin && !reception || !hasPage("clientes"))) throw new ApiError(403,"No tienes permiso para modificar clientes.");
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
-              ? await access.save(gym,raw.record,id)
+              ? await access.save(gym,raw.record,id,identity.id !== "bootstrap" ? bearer : undefined)
               : await store.manage(gym,management[1],raw.record,raw.revision,id);
             if (management[1] === "users" && identity.id === "bootstrap") {
-              const session = await access.login(gym,raw.record);
-              send(res,201,{...result,token:session.token});
+              const session = await access.login(gym,{ username: raw.record.username, password: initialPassword });
+              send(res,201,{...result,...session});
             } else send(res,id ? 200 : 201,result);
             return;
           }
+          if (req.method === "GET" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
+            const leaves = await store.leaves(gym, identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned");
+            const employees = (await store.state(gym)).employees as Array<{ id: string; name: string }>;
+            send(res, 200, leaves.map((leave: any) => ({ ...leave, employeeName: employees.find((employee) => employee.id === leave.employeeId)?.name || "Empleado" })));
+            return;
+          }
+          if (req.method === "POST" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
+            if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
+            send(res, 201, await store.requestLeave(gym, identity.employeeId, await body(req)));
+            return;
+          }
+          const leaveAction = path.match(/^\/api\/leaves\/([^/]+)\/(review|cancel)$/);
+          if (leaveAction && req.method === "PUT") {
+            const id = decodeURIComponent(leaveAction[1]);
+            if (leaveAction[2] === "review") {
+              if (!admin) throw new ApiError(403, "Solo administración puede revisar solicitudes.");
+              const raw = z.object({ status: z.enum(["APPROVED", "REJECTED"]) }).parse(await body(req));
+              send(res, 200, await store.reviewLeave(gym, id, raw.status, identity.id));
+            } else {
+              if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
+              send(res, 200, await store.cancelLeave(gym, id, identity.employeeId));
+            }
+            return;
+          }
           if (path === "/api/config" && !admin) throw new ApiError(403,"Solo administración puede cambiar horarios y configuración.");
-          if (!office && !["/api/attendance","/api/attendance/clock"].includes(path)) throw new ApiError(403,"Tu perfil permite consultar tus turnos y fichajes.");
+          if (!office && !trainer && !["/api/attendance","/api/attendance/clock"].includes(path)) throw new ApiError(403,"Tu perfil no permite acceder a esta sección.");
         }
         if (req.method === "GET" && path === "/api/state") {
-          send(res, 200, await store.state(gym));
+          const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
+          if (identity.role === "TRAINER") {
+            const visibleIds = staffClientIds(s, identity);
+            const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+            send(res, 200, {
+              ...s,
+              clientDebts: Object.fromEntries(Object.entries(clientDebts).filter(([id]) => visibleIds.has(id))),
+              clientPackageAlerts: Object.fromEntries(Object.entries(clientPackageAlertsMap).filter(([id]) => visibleIds.has(id))),
+              bookings: s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking),
+              employees: s.employees.filter((e: any) => e.id === identity.employeeId),
+              clients: s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId),
+              leaveRequests: s.leaveRequests.filter((l:any)=>l.employeeId===identity.employeeId),
+            });
+            return;
+          }
+          send(res, 200, { ...s, clientDebts, clientPackageAlerts: clientPackageAlertsMap });
+          return;
+        }
+        if (path === '/api/attendance/omissions') {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
+          if(req.method==='POST'){send(res,201,await saveOmission(store.pool,gym,identity,await body(req)));return;}
+          if(req.method==='GET'){send(res,200,await listOmissions(store.pool,gym,identity,url.searchParams.get('from')||'',url.searchParams.get('to')||''));return;}
+          throw new ApiError(405,'Operación no permitida.');
+        }
+        if (req.method === "GET" && path === "/api/attendance/export") {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
+          if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");
+          const requested = url.searchParams.get("employeeId") || undefined;
+          if (!["ADMIN","RECEPTION"].includes(identity.role) && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
+          const report = await store.attendance(gym, url.searchParams.get("from")!, url.searchParams.get("to")!, ["ADMIN","RECEPTION"].includes(identity.role) ? requested : identity.employeeId || "unassigned", identity.role);
+          res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "no-store", "Content-Disposition": `attachment; filename="fichajes-${report.from}-${report.to}.csv"` });
+          res.end(attendanceCsv(report));
           return;
         }
         if (req.method === "GET" && path === "/api/attendance") {
@@ -132,19 +300,53 @@ export function server(
               gym,
               url.searchParams.get("from") || undefined,
               url.searchParams.get("to") || undefined,
-              identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned",
+              ["ADMIN","RECEPTION"].includes(identity.role) ? undefined : identity.employeeId || "unassigned",
+              identity.role,
             ),
           );
           return;
         }
         if (req.method === "POST" && path === "/api/attendance/clock") {
           const raw = await body(req);
-          if (identity.role !== "ADMIN" && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
-          send(res, 201, await store.clock(gym, raw));
+          if (!["ADMIN","RECEPTION"].includes(identity.role) && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
+          send(res, 201, await store.clock(gym, raw, identity));
+          return;
+        }
+        if (req.method === "GET" && path === "/api/clients") {
+          if (!hasPage("clientes")) throw new ApiError(403, "No tienes permiso para consultar clientes.");
+          const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
+          let clients = s.clients;
+          if (identity.role === "TRAINER") {
+            const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
+            clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId);
+          }
+          send(res, 200, {
+            clients: clients.map((c: any) => ({
+              id: c.id,
+              firstName: c.name.split(" ")[0] || c.name,
+              lastName: c.name.split(" ").slice(1).join(" ") || "",
+              email: c.email || "",
+              phone: c.phone || "",
+              notes: c.notes || "",
+              status: c.status || "ACTIVE",
+              servicePackages: [],
+              bookings: [],
+            })),
+            total: clients.length,
+            counts: {},
+          });
           return;
         }
         if (req.method === "GET" && path === "/api/public/catalog") {
           const s = await store.state(gym);
+          const [clientDebts, clientPackageAlertsMap] = await Promise.all([
+            store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
+            store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
+          ]);
           send(res, 200, {
             timezone: s.timezone,
             employees: s.employees.filter((e: any) => e.active !== false).map(({ id, name }: any) => ({ id, name })),
@@ -168,10 +370,15 @@ export function server(
           req.method === "GET" &&
           ["/api/slots", "/api/public/slots"].includes(path)
         ) {
+          const queryParams = Object.fromEntries(url.searchParams);
+          if (identity.role === "TRAINER" && queryParams.employeeId && queryParams.employeeId !== identity.employeeId) {
+            send(res, 200, []);
+            return;
+          }
           send(
             res,
             200,
-            await store.slots(gym, Object.fromEntries(url.searchParams)),
+            await store.slots(gym, queryParams),
           );
           return;
         }
@@ -184,6 +391,7 @@ export function server(
               phone: z.string().max(40).default(""),
             })
             .parse(raw.client);
+          if(!raw.booking?.employeeId)throw new ApiError(400,"Selecciona un trabajador.");
           const clientId = randomUUID();
           const b = await store.save(
             gym,
@@ -201,15 +409,17 @@ export function server(
           return;
         }
         if (req.method === "POST" && path === "/api/bookings") {
+          if (identity.role === "TRAINER") throw new ApiError(403, "Tu perfil no permite modificar reservas.");
           const raw = await body(req);
           send(
             res,
             201,
-            await store.save(gym, raw.booking, undefined, raw.client),
+            await store.save(gym, raw.booking, undefined, raw.client,identity.id),
           );
           return;
         }
         if (req.method === "PUT" && path.startsWith("/api/bookings/")) {
+          if (identity.role === "TRAINER") throw new ApiError(403, "Tu perfil no permite modificar reservas.");
           const raw = await body(req);
           send(
             res,
@@ -219,6 +429,7 @@ export function server(
               raw.booking,
               decodeURIComponent(path.slice("/api/bookings/".length)),
               raw.client,
+              identity.id,
             ),
           );
           return;
@@ -230,57 +441,13 @@ export function server(
         }
         throw new ApiError(404, "Ruta desconocida.");
       }
-      if (req.method !== "GET") throw new ApiError(405, "Método no permitido.");
-      const file =
-        path === "/" || path === "/calendario/" || path === "/web/"
-          ? "index.html"
-          : path.replace(/^\/(?:calendario|web)\//, "");
-      if (file === "runtime.js" || path === "/runtime.js") {
-        res.writeHead(200, {
-          "Content-Type": "text/javascript",
-          "Cache-Control": "no-store",
-        });
-        res.end(
-          `window.CALENDAR_SERVER = true;(()=>{const f=window.fetch.bind(window);window.fetch=(i,o={})=>{const u=typeof i==='string'?i:i.url;if(u.startsWith('/api/')){const h=new Headers(o.headers||(typeof i!=='string'?i.headers:undefined)),g=localStorage.getItem('calendar-selected-gym');if(g)h.set('X-Calendar-Gym',g);o={...o,headers:h};}return f(i,o);};})();${
-            options.exposeAdminToken
-              ? `window.CALENDAR_DEV_TOKEN = ${JSON.stringify(token)};`
-              : ""
-          }`,
-        );
+      if (req.method !== "GET" && req.method !== "HEAD") throw new ApiError(405, "Método no permitido.");
+      if (path === "/runtime.js") {
+        const expose = options.exposeAdminToken && await access.needsSetup(gym);
+        await serveRuntime(req,res,expose?token:'');
         return;
       }
-      const name = file.replace(/^\//, "");
-      const allowed: Record<string, string> = {
-        "index.html": "text/html",
-        "app.js": "text/javascript",
-        "calendar-core.js": "text/javascript",
-        "styles.css": "text/css",
-        "menu.css": "text/css",
-        "design.css": "text/css",
-        "inicio.html": "text/html",
-        "inicio.css": "text/css",
-        "inicio.js": "text/javascript",
-        "menu.js": "text/javascript",
-        "logo-cobosu.png": "image/png",
-        "fichajes.html": "text/html",
-        "fichajes.js": "text/javascript",
-        "fichajes.css": "text/css",
-        "gestion.html": "text/html",
-        "gestion.js": "text/javascript",
-        "gestion.css": "text/css",
-        "gimnasios.html": "text/html",
-        "gimnasios.js": "text/javascript",
-        "gimnasios.css": "text/css",
-        "login.html": "text/html",
-        "login.js": "text/javascript",
-      };
-      if (!allowed[name]) throw new ApiError(404, "Archivo desconocido.");
-      res.writeHead(200, {
-        "Content-Type": allowed[name].startsWith("image/") ? allowed[name] : `${allowed[name]}; charset=utf-8`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      });
-      res.end(await readFile(resolve("web", name)));
+      if (!await serveAsset(req,res,path)) throw new ApiError(404,"Archivo desconocido.");
     } catch (e) {
       if (e instanceof ZodError) {
         send(res, 400, {

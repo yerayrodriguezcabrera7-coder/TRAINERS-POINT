@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+.env
+.env.*
+.calendar-dev
+backups
+*.log
+tests
+.codex

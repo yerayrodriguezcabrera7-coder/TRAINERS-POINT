@@ -7,6 +7,7 @@ const { randomUUID } = require("node:crypto");
 const { Pool } = require("pg");
 const { Store } = require("../dist/calendar/store");
 const { server } = require("../dist/calendar/http");
+const { Access } = require("../dist/calendar/access");
 const { normalize } = require("../dist/calendar/model");
 let pg, pool, pool2, store, other;
 const hours = Array.from({ length: 7 }, () => ({
@@ -378,13 +379,13 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
   let dom;
   async function until(fn){const limit=Date.now()+7000;while(Date.now()<limit){if(fn())return;await new Promise(r=>setTimeout(r,50));}throw Error('La interfaz no se actualizó');}
   try{
-    dom=await JSDOM.fromURL(url,{resources:'usable',runScripts:'dangerously',beforeParse(w){
+    dom=await JSDOM.fromURL(url,{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){
       w.prompt=()=>{throw Error('El modo local no debe pedir una clave');};w.fetch=(p,o)=>fetch(new URL(p,url),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;
       w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
       w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
     }});
     const w=dom.window,d=w.document;
-    await until(()=>d.getElementById('employee-filter').options.length===3);
+    await until(()=>d.getElementById('employee-filter').options.length===4);
     assert.equal(d.getElementById('mode-title').textContent,'Servidor conectado');
     const jump=d.getElementById('jump-date');jump.value='2030-10-22';jump.dispatchEvent(new w.Event('change'));
     d.getElementById('new-booking').click();
@@ -437,19 +438,33 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
   const base='http://127.0.0.1:'+app.address().port;
   async function request(path,token=bootstrap,method='GET',body){return fetch(base+'/api/'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
   try{
-    const adminBody={record:{employeeId:'e1',username:'admin@example.com',password:'Admin-test-123',role:'ADMIN',enabled:true}};
+    const adminBody={record:{employeeId:'e1',username:'admin',role:'ADMIN',enabled:true}};
     const first=await request('manage/users',bootstrap,'POST',adminBody);assert.equal(first.status,201,await first.clone().text());
-    const {token:admin,id:adminId}=await first.json();assert.ok(admin);
+    const {token:admin,id:adminId,mustChangePassword}=await first.json();assert.ok(admin);assert.equal(mustChangePassword,true);
+    const stored=await pool.query('SELECT password_hash,must_change_password FROM calendar.users WHERE id=$1',[adminId]);
+    assert.match(stored.rows[0].password_hash,/^scrypt\$131072\$8\$1\$/);
+    assert.ok(!stored.rows[0].password_hash.includes('Trainerspoint'));
+    assert.equal(stored.rows[0].must_change_password,true);
     assert.equal((await request('state')).status,401,'Bootstrap key stops working after first account');
     assert.doesNotMatch(await (await fetch(base+'/runtime.js')).text(),new RegExp(bootstrap));
-    const trainee=await request('manage/users',admin,'POST',{record:{employeeId:'e2',username:'trainer@example.com',password:'Trainer-test-123',role:'TRAINER',enabled:true}});
+    assert.equal((await request('state',admin)).status,403,'New accounts cannot use protected routes before changing password');
+    const change=async(token,currentPassword,newPassword)=>request('password/change',token,'POST',{currentPassword,newPassword,confirmPassword:newPassword});
+    assert.equal((await change(admin,'wrong','Admin-personal-password-123')).status,400);
+    assert.equal((await change(admin,'Trainerspoint','Admin-personal-password-123')).status,200);
+    const adminMe=await request('me',admin);assert.equal((await adminMe.json()).mustChangePassword,false);
+    const trainee=await request('manage/users',admin,'POST',{record:{employeeId:'e2',username:'trainer',role:'TRAINER',enabled:true}});
     assert.equal(trainee.status,201);const trainerId=(await trainee.json()).id;
-    assert.equal((await request('manage/users',admin,'POST',{record:{employeeId:'e3',username:'desk@example.com',password:'Reception-test-123',role:'RECEPTION',enabled:true}})).status,201);
-    async function login(username,password){const r=await request('login','', 'POST',{username,password});assert.equal(r.status,200,await r.clone().text());return (await r.json()).token;}
-    const trainer=await login('trainer@example.com','Trainer-test-123');
-    const receptionist=await login('desk@example.com','Reception-test-123');
-    assert.equal((await request('login','', 'POST',{username:'trainer@example.com',password:'wrong'})).status,401);
-    assert.equal((await request('state',trainer)).status,403);
+    assert.equal((await request('manage/users',admin,'POST',{record:{employeeId:'e3',username:'desk',role:'RECEPTION',enabled:true}})).status,201);
+    async function login(username,password='Trainerspoint'){const r=await request('login','', 'POST',{username,password});assert.equal(r.status,200,await r.clone().text());return r.json();}
+    const trainerLogin=await login('trainer');assert.equal(trainerLogin.mustChangePassword,true);
+    assert.equal((await request('state',trainerLogin.token)).status,403);
+    assert.equal((await change(trainerLogin.token,'Trainerspoint','Trainer-personal-password-123')).status,200);
+    const trainer=trainerLogin.token;
+    const receptionistLogin=await login('desk');assert.equal(receptionistLogin.mustChangePassword,true);
+    assert.equal((await change(receptionistLogin.token,'Trainerspoint','Reception-personal-password-123')).status,200);
+    const receptionist=receptionistLogin.token;
+    assert.equal((await request('login','', 'POST',{username:'trainer',password:'Trainerspoint'})).status,401);
+    const trainerState=await (await request('state',trainer)).json();assert.equal(trainerState.employees.length,1);assert.equal(trainerState.employees[0].id,'e2');assert.equal((await request('bookings',trainer,'POST',{booking:{}})).status,403);
     const view=await (await request('manage',trainer)).json();assert.equal(view.employees.length,1);assert.equal(view.employees[0].id,'e2');assert.deepEqual(view.clients,[]);assert.deepEqual(view.users,[]);
     assert.equal((await request('config',trainer,'PUT',{config:c,revision:0})).status,403);
     assert.equal((await request('manage/users',trainer,'POST',adminBody)).status,403);
@@ -462,9 +477,54 @@ test('Usuarios: login, permisos de servidor, fichajes propios y revocación de s
     assert.equal((await request('manage/clients',receptionist,'POST',{record:{name:'Desde recepción',email:'',phone:'',notes:''},revision:rev})).status,201);
     assert.equal((await request('manage/users/'+adminId,admin,'PUT',{record:{...adminBody.record,enabled:false}})).status,409);
     const members=await (await request('manage',admin)).json();assert.ok(members.users.every(u=>!u.password_hash&&!u.password));
-    assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer@example.com',role:'TRAINER',enabled:false}})).status,200);
+    assert.ok(members.users.every(u=>typeof u.mustChangePassword==='boolean'));
+    assert.equal((await request('manage/users/'+trainerId,admin,'PUT',{record:{employeeId:'e2',username:'trainer',role:'TRAINER',enabled:false}})).status,200);
     assert.equal((await request('me',trainer)).status,401);
     await request('logout',receptionist,'POST');assert.equal((await request('me',receptionist)).status,401);
+  }finally{await new Promise(r=>app.close(r));}
+});
+
+test('La cuenta de un cliente puede crearse explícitamente con usuario y contraseña temporal',async()=>{
+  const g=await gym(),access=new Access(pool);
+  const first=await access.createClientAccount(g,'Centro de pruebas',{id:'client-lucia',name:'Lucía García',email:'lucia@example.com',phone:'600000000'});
+  assert.equal(first.username,'lucia.garcia');
+  const account=(await pool.query('SELECT client_id,role,password_hash,must_change_password FROM calendar.users WHERE gym_id=$1 AND username=$2',[g,first.username])).rows[0];
+  assert.equal(account.client_id,'client-lucia');
+  assert.equal(account.role,'CLIENT');
+  assert.match(account.password_hash,/^scrypt\$131072\$8\$1\$/);
+  assert.equal(account.must_change_password,true);
+  const session=await access.login(g,{username:first.username,password:'Trainerspoint'});
+  assert.equal(session.mustChangePassword,true);
+  assert.equal((await access.identify(g,session.token)).clientId,'client-lucia');
+  const second=await access.createClientAccount(g,'Centro de pruebas',{id:'client-lucia-2',name:'Lucía García'});
+  assert.equal(second.username,'lucia.garcia.2');
+  await assert.rejects(access.save(g,{name:'Sin ficha',username:'sin.ficha',role:'CLIENT',enabled:true}),/Selecciona el cliente/);
+});
+
+test('Credenciales provisionales solo se crean en gimnasio local vacío',async()=>{
+  const g=await gym(),access=new Access(pool);
+  assert.equal(await access.seedLocalDevelopmentAdmin(g),true);
+  const session=await access.login(g,{username:'admin',password:'admin'});
+  assert.equal(session.role,'ADMIN');
+  assert.equal(session.mustChangePassword,false);
+  assert.equal(await access.seedLocalDevelopmentAdmin(g),false);
+});
+
+test('Login y cambio de contraseña usan el gimnasio seleccionado',async()=>{
+  const defaultGym=await gym(),selectedGym=await gym();
+  await new Access(pool).createClientAccount(selectedGym,'Centro seleccionado',{id:'client-selected',name:'Cliente Seleccionado'});
+  const app=server(store,defaultGym,'multi-gym-bootstrap-token-long-enough');
+  await new Promise(r=>app.listen(0,'127.0.0.1',r));
+  const base='http://127.0.0.1:'+app.address().port;
+  const headers={'Content-Type':'application/json','X-Calendar-Gym':selectedGym};
+  try{
+    const login=await fetch(base+'/api/login',{method:'POST',headers,body:JSON.stringify({username:'cliente.seleccionado',password:'Trainerspoint'})});
+    assert.equal(login.status,200,await login.clone().text());
+    const {token,mustChangePassword}=await login.json();assert.equal(mustChangePassword,true);
+    const change=await fetch(base+'/api/password/change',{method:'POST',headers:{...headers,Authorization:'Bearer '+token},body:JSON.stringify({currentPassword:'Trainerspoint',newPassword:'Selected-client-password-123',confirmPassword:'Selected-client-password-123'})});
+    assert.equal(change.status,200,await change.clone().text());
+    const me=await fetch(base+'/api/me',{headers:{...headers,Authorization:'Bearer '+token}});
+    assert.equal((await me.json()).mustChangePassword,false);
   }finally{await new Promise(r=>app.close(r));}
 });
 
@@ -473,7 +533,7 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
   const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+app.address().port;let dom;
   const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('UI timeout');};
-  async function open(section){dom?.window.close();dom=await JSDOM.fromURL(base+'/gestion.html?section='+section,{resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}});await until(()=>dom.window.document.querySelector('[data-edit]'));return dom.window.document;}
+  async function open(section){dom?.window.close();dom=await JSDOM.fromURL(base+'/gestion.html?section='+section,{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}});await until(()=>dom.window.document.querySelector('[data-edit]'));return dom.window.document;}
   try{
     let d=await open('clients');d.getElementById('add').click();d.querySelector('[name=name]').value='Cliente interfaz';d.querySelector('[name=email]').value='ui@example.com';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>d.getElementById('rows').textContent.includes('Cliente interfaz'));
@@ -481,9 +541,19 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
     d=await open('services');d.getElementById('add').click();d.querySelector('[name=name]').value='Pilates';d.querySelector('[name=capacity]').value='8';d.querySelector('[name=price]').value='25';d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>d.getElementById('rows').textContent.includes('Pilates'));
     assert.equal((await store.state(g)).services.find(s=>s.name==='Pilates').capacity,8);
-    d=await open('shifts');d.querySelector('[data-edit=e1]').click();d.getElementById('shift-date').value='2030-10-23';d.getElementById('day-off').click();d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+    d=await open('shifts');d.querySelector('[data-edit=e1]').click();d.querySelector('[name=close1]').value='12:00';d.querySelector('[data-add-weekly="1"]').click();d.querySelector('[data-weekly="1"] [data-close]').value='18:00';d.getElementById('shift-date').value='2030-10-23';d.getElementById('day-off').click();d.getElementById('record-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
     await until(()=>!d.getElementById('editor').open);
     assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
+    assert.deepEqual((await other.state(g)).employees[0].weeklyPeriods[1],[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+    dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
+    await until(()=>d.querySelector('[data-slot="2030-10-22"]'));
+    d.getElementById('service-filter').value='s2';d.getElementById('service-filter').dispatchEvent(new dom.window.Event('change'));
+    const slot=n=>d.querySelector(`[data-slot="2030-10-22"][data-employee="e1"][data-minute="${n}"]`);
+    assert.equal(slot(690).disabled,true); // 11:30 + 45 min crosses lunch.
+    assert.equal(slot(720).disabled,true);
+    assert.equal(slot(960).disabled,false);
+    assert.equal(slot(1050).disabled,true); // 17:30 + 45 min exceeds shift.
+
   }finally{dom?.window.close();await new Promise(r=>app.close(r));}
 });
 
@@ -499,7 +569,7 @@ test('Inicio: muestra actividad real, filtra pendientes y abre la reserva correc
   const app=server(store,g,token,{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));
   const base='http://127.0.0.1:'+app.address().port;let dom;
   const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,40));}throw Error('Overview UI timeout');};
-  const options={resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}};
+  const options={pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};}};
   try{
     dom=await JSDOM.fromURL(base+'/inicio.html',options);let d=dom.window.document;
     await until(()=>d.getElementById('today-count').textContent==='2');
@@ -511,4 +581,115 @@ test('Inicio: muestra actividad real, filtra pendientes y abre la reserva correc
     await until(()=>d.getElementById('booking-dialog').open);
     assert.equal(d.getElementById('booking-client').value,'c0');assert.equal(d.getElementById('booking-status').value,'pending');assert.equal(d.getElementById('booking-date').value,today);
   }finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+
+
+test('Turnos semanales partidos: persistencia, descansos, excepciones y protección de citas',async()=>{
+  const c=config();c.employees[0].weeklyPeriods=Array.from({length:7},()=>[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+  c.employees[0].shifts=[{date:'2030-10-23',periods:[]},{date:'2030-10-24',periods:[{open:'10:00',close:'11:00'}]}];
+  const g=await gym(c), query={date:'2030-10-22',employeeId:'e1',serviceId:'s2',roomId:'r1'};
+  const slots=await other.slots(g,query);
+  assert.ok(slots.some(s=>s.start==='11:15'&&s.end==='12:00'));
+  assert.ok(slots.some(s=>s.start==='16:00'));
+  assert.ok(!slots.some(s=>s.start==='11:30'||s.start==='13:00'||s.start==='17:30'));
+  assert.deepEqual(await store.slots(g,{...query,date:'2030-10-23'}),[]);
+  assert.deepEqual((await store.slots(g,{...query,date:'2030-10-24'})).map(s=>s.start),['10:00','10:15']);
+  await assert.rejects(store.save(g,booking({serviceId:'s2',start:'11:30'})),/horario del entrenador/);
+  await store.save(g,booking({start:'16:00'}));
+  const state=await store.state(g), worker=state.employees[0];
+  worker.weeklyPeriods[1]=[{open:'09:00',close:'12:00'}];
+  await assert.rejects(store.manage(g,'employees',worker,state.revision,worker.id),/horario del entrenador/);
+  assert.equal((await other.state(g)).employees[0].weeklyPeriods[1].length,2);
+  worker.weeklyPeriods[1]=[{open:'09:00',close:'12:00'},{open:'11:00',close:'17:00'}];
+  await assert.rejects(store.manage(g,'employees',worker,state.revision,worker.id),/solapan/);
+});
+
+test('Ausencias: solicitud, aprobación, bloqueo del calendario y protección de reservas',async()=>{
+  const g=await gym();
+  const leave=await store.requestLeave(g,'e1',{type:'VACATION',startDate:'2030-10-22',endDate:'2030-10-23',note:'Vacaciones anuales'});
+  assert.equal(leave.status,'PENDING');
+  assert.equal((await store.slots(g,{date:'2030-10-22',employeeId:'e1',serviceId:'s1',roomId:'r1'})).length>0,true);
+  const approved=await other.reviewLeave(g,leave.id,'APPROVED','admin-1');
+  assert.equal(approved.status,'APPROVED');
+  assert.deepEqual(await store.slots(g,{date:'2030-10-22',employeeId:'e1',serviceId:'s1',roomId:'r1'}),[]);
+  await assert.rejects(store.save(g,booking()),/ausencia aprobada/);
+  const conflictLeave=await store.requestLeave(g,'e2',{type:'PERMISSION',startDate:'2030-10-24',endDate:'2030-10-24',note:''});
+  await store.save(g,booking({employeeId:'e2',roomId:'r2',date:'2030-10-24'}));
+  await assert.rejects(store.reviewLeave(g,conflictLeave.id,'APPROVED','admin-1'),/reservas activas/);
+  const cancelled=await store.cancelLeave(g,conflictLeave.id,'e2');
+  assert.equal(cancelled.status,'CANCELLED');
+  await assert.rejects(store.cancelLeave(g,leave.id,'e2'),/desconocida/);
+});
+
+test('Servicios: días, entrenadores, color y desactivación conservan historial',async()=>{
+ const c=config();c.services[0]={...c.services[0],color:'#abcdef',employeeIds:['e1'],schedule:hours.map((h,i)=>({...h,closed:i!==1}))};
+ const id=await gym(c);
+ assert.equal((await store.state(id)).services[0].color,'#abcdef');
+ await assert.rejects(store.save(id,booking({employeeId:'e2'})),/entrenador no realiza/);
+ await assert.rejects(store.save(id,booking({date:'2030-10-23'})),/horario del servicio/);
+ const b=await store.save(id,booking());
+ const state=await store.state(id);state.services[0].active=false;
+ await store.configure(id,state,state.revision);
+ assert.equal((await store.state(id)).bookings[0].id,b.id);
+ await assert.rejects(store.save(id,booking({start:'12:00'})),/inactivo/);
+});
+test('Recuperaciones: exclusividad concurrente y devolución al cancelar con antelación',async()=>{
+ const id=await gym();const b=await store.save(id,booking());
+ const credit=await store.deferBooking(id,b.id,{id:'admin',role:'ADMIN',employeeId:null});
+ await assert.rejects(store.deferBooking(id,b.id,{id:'admin',role:'ADMIN',employeeId:null}));
+ const results=await Promise.allSettled([store.save(id,booking({start:'12:00',recoveryId:credit.id})),other.save(id,booking({start:'14:00',recoveryId:credit.id}))]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+ const recovered=results.find(r=>r.status==='fulfilled').value;
+ assert.equal(recovered.chargeAmount,0);
+ assert.equal((await store.recoveries(id))[0].status,'SCHEDULED');
+ await store.save(id,{...recovered,status:'CANCELLED'},recovered.id);
+ assert.equal((await store.recoveries(id))[0].status,'PENDING');
+});
+
+test('Planificación: reserva sin asignar, asignación concurrente y centro de trabajo',async()=>{
+ const g=await gym(),center=await gym();const input=booking({employeeId:null,status:'PENDING',centerId:center});const b=await store.save(g,input);
+ assert.equal(b.employeeId,null);assert.equal((await store.state(g)).bookings[0].centerId,center);
+ await assert.rejects(store.save(g,{...input,status:'CONFIRMED'}),/Asigna un trabajador/);
+ const changes=await Promise.allSettled([store.save(g,{...b,employeeId:'e1',status:'CONFIRMED'},b.id),other.save(g,{...b,employeeId:'e2',status:'CONFIRMED'},b.id)]);
+ assert.equal(changes.filter(x=>x.status==='fulfilled').length,1);
+ const assigned=changes.find(x=>x.status==='fulfilled').value;
+ assert.ok(assigned.employeeId);assert.equal(assigned.history[0].action,'ASSIGNED');assert.equal(assigned.history[0].previous.employeeId,null);
+ const state=await store.state(g);assert.equal(state.bookings.filter(b=>!b.employeeId&&b.status==='PENDING').length,0);
+ await assert.rejects(store.save(g,booking({start:'13:00',centerId:'no-existe'})),/Centro desconocido/);
+});
+test('Planificación: reprogramar libera el hueco y conserva fecha, trabajador y centro anteriores',async()=>{
+ const g=await gym();const original=await store.save(g,booking());const pending=await store.save(g,{...original,status:'CANCELLED',needsReschedule:true},original.id,undefined,'recepcion');
+ assert.equal(pending.needsReschedule,true);assert.equal(pending.history[0].previous.date,original.date);assert.equal(pending.history[0].previous.employeeId,'e1');assert.equal(pending.history[0].previous.centerId,g);
+ await store.save(g,booking({clientId:'c1'}));
+ const next=await store.save(g,{...pending,start:'12:00',end:'13:00',status:'CONFIRMED',needsReschedule:false,employeeId:'e2'},pending.id,undefined,'recepcion');
+ assert.equal(next.id,original.id);assert.equal(next.needsReschedule,false);assert.equal(next.history.length,2);
+ assert.equal(next.history[1].previous.needsReschedule,true);
+ await assert.rejects(store.save(g,{...next,status:'CONFIRMED',needsReschedule:true},next.id),/liberar el horario/);
+});
+test('Planificación: trabajador solo completa o comunica incidencias en reservas propias',async()=>{
+ const g=await gym();const original=await store.save(g,booking({date:'2020-10-22'}));
+ await assert.rejects(store.workerAction(g,original.id,{id:'user2',employeeId:'e2'},{action:'COMPLETE',version:original.version}),/desconocida/);
+ const incident=await store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'INCIDENT',message:'Cliente solicita cambio de fecha.',version:original.version});
+ assert.equal(incident.incidents[0].message,'Cliente solicita cambio de fecha.');
+ await assert.rejects(store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:original.version}),/cambió/);
+ const completed=await store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:incident.version});assert.equal(completed.status,'COMPLETED');
+ const future=await store.save(g,booking());await assert.rejects(store.workerAction(g,future.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:future.version}),/no ha terminado/);
+});
+test('Pendientes: interfaz asigna una reserva y la elimina de la cola compartida',async()=>{
+ const {JSDOM}=require('jsdom'),g=await gym(),center=await gym();const b=await store.save(g,booking({employeeId:null,status:'PENDING',centerId:center}));
+ const app=server(store,g,'planning-ui-token-long-enough',{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;let dom;
+ const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('No se actualizó la cola de pendientes');};
+ try{dom=await JSDOM.fromURL(base+'/pendientes.html',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0)'));const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
+});
+test('Centros: un trabajador no puede estar en dos centros a la misma hora',async()=>{
+ const g=await gym(),center=await gym();await store.save(g,booking());await assert.rejects(store.save(g,booking({centerId:center,clientId:'c1'})),/ocupados/);
+ const b=await store.save(g,booking({centerId:center,clientId:'c1',employeeId:'e2'}));assert.equal(b.centerId,center);
+});
+test('Reprogramación de recuperación conserva el crédito y no genera otro cobro',async()=>{
+ const g=await gym();const first=await store.save(g,booking());const credit=await store.deferBooking(g,first.id,{id:'admin',role:'ADMIN',employeeId:null});
+ const recovered=await store.save(g,booking({start:'12:00',recoveryId:credit.id}));const pending=await store.save(g,{...recovered,status:'CANCELLED',needsReschedule:true},recovered.id);
+ assert.equal((await store.recoveries(g))[0].status,'RESCHEDULE_PENDING');
+ await assert.rejects(store.save(g,booking({start:'14:00',recoveryId:credit.id})),/pendiente/);
+ const next=await store.save(g,{...pending,start:'14:00',end:'15:00',status:'CONFIRMED',needsReschedule:false},pending.id);
+ assert.equal(next.chargeAmount,0);assert.equal((await store.recoveries(g))[0].status,'SCHEDULED');
 });

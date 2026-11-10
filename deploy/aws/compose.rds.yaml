@@ -1,0 +1,41 @@
+# Configuración independiente. No combinar con deploy/compose.yaml (crearía otra BD).
+# No ejecutar hasta disponer de RDS, red y dominio aprobados. No crea RDS ni Cognito.
+services:
+  migrate:
+    build:
+      context: ../..
+      target: build
+    env_file: .env
+    volumes:
+      - ${RDS_CA_HOST_FILE:?Indica el archivo CA de RDS}:/run/certs/rds-ca-bundle.pem:ro
+    command: [npx, prisma, migrate, deploy]
+  app:
+    build: ../..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      TRAINERS_POINT_DEV_ADMIN: 'false'
+    volumes:
+      - ${RDS_CA_HOST_FILE:?Indica el archivo CA de RDS}:/run/certs/rds-ca-bundle.pem:ro
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Configura el dominio HTTPS}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ../Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - proxy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  certificates:
+  proxy_config:
