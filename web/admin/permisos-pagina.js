@@ -129,6 +129,8 @@
       const currentPerms = Array.isArray(user.pagePermissions) ? user.pagePermissions : null;
       const rolePages = roleDefaults[user.role] || [];
       const otherUsers = (manageData.users || []).filter(u => u.id !== user.id && u.role !== 'ADMIN');
+      const audit = user.permissionsAudit;
+      const auditText = audit ? `🕒 Modificado por <strong>${esc(audit.changedBy)}</strong> el ${new Date(audit.changedAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (${esc(audit.mode || '')})` : '';
 
       card.innerHTML = `
         <div class="perms-user-header" role="button" tabindex="0" aria-expanded="false">
@@ -196,6 +198,9 @@
             <button type="button" class="button button-outline button-small perms-reset-role-btn" style="font-size:12px;">Restaurar modo rol</button>
             <button type="button" class="button button-primary button-small perms-save-btn">Guardar permisos</button>
             <span class="perms-status" hidden></span>
+          </div>
+          <div class="perms-audit-info" style="margin-top: 14px; font-size: 11px; color: var(--tp-muted); border-top: 1px dashed var(--tp-line); padding-top: 8px;" ${auditText ? '' : 'hidden'}>
+            ${auditText}
           </div>
           `}
         </div>
@@ -308,9 +313,12 @@
           const statusEl = card.querySelector('.perms-status');
           statusEl.hidden = true;
           try {
-            await api(`manage/users/${encodeURIComponent(user.id)}/permissions`, 'PUT', { pagePermissions: null });
+            const res = await api(`manage/users/${encodeURIComponent(user.id)}/permissions`, 'PUT', { pagePermissions: null });
             const u = manageData.users.find(x => x.id === user.id);
-            if (u) u.pagePermissions = null;
+            if (u) {
+              u.pagePermissions = null;
+              if (res.permissionsAudit) u.permissionsAudit = res.permissionsAudit;
+            }
 
             // Actualizar interfaz
             const checkboxes = [...card.querySelectorAll('input[type="checkbox"]')];
@@ -324,6 +332,12 @@
             if (summaryLabel) summaryLabel.textContent = 'Según rol';
             const infoEl = card.querySelector('.perms-info');
             if (infoEl) infoEl.innerHTML = 'Mostrando los <strong>permisos predeterminados de su rol</strong>. Si marcas o desmarcas páginas y guardas, se activará una configuración personalizada para este usuario.';
+
+            const auditEl = card.querySelector('.perms-audit-info');
+            if (auditEl && res.permissionsAudit) {
+              auditEl.innerHTML = `🕒 Modificado por <strong>${esc(res.permissionsAudit.changedBy)}</strong> el ${new Date(res.permissionsAudit.changedAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (${esc(res.permissionsAudit.mode || '')})`;
+              auditEl.hidden = false;
+            }
 
             statusEl.textContent = '✓ Restaurado a rol';
             statusEl.className = 'perms-status';
@@ -350,16 +364,26 @@
           saveBtn.disabled = true;
           statusEl.hidden = true;
           try {
-            await api(`manage/users/${encodeURIComponent(user.id)}/permissions`, 'PUT', { pagePermissions });
+            const res = await api(`manage/users/${encodeURIComponent(user.id)}/permissions`, 'PUT', { pagePermissions });
             // Update local data
             const u = manageData.users.find(x => x.id === user.id);
-            if (u) u.pagePermissions = pagePermissions;
+            if (u) {
+              u.pagePermissions = pagePermissions;
+              if (res.permissionsAudit) u.permissionsAudit = res.permissionsAudit;
+            }
             // Update summary label
             const summaryLabel = card.querySelector('.perms-summary-label');
             if (summaryLabel) summaryLabel.textContent = pagePermissions.length + ' páginas';
             // Update info text
             const infoEl = card.querySelector('.perms-info');
             if (infoEl) infoEl.innerHTML = '<strong>Permisos personalizados activos</strong>. Puedes modificar las casillas y guardar, o pulsar "Restaurar permisos del rol" para que vuelva al estándar.';
+            
+            const auditEl = card.querySelector('.perms-audit-info');
+            if (auditEl && res.permissionsAudit) {
+              auditEl.innerHTML = `🕒 Modificado por <strong>${esc(res.permissionsAudit.changedBy)}</strong> el ${new Date(res.permissionsAudit.changedAt).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (${esc(res.permissionsAudit.mode || '')})`;
+              auditEl.hidden = false;
+            }
+
             statusEl.textContent = '✓ Guardado';
             statusEl.className = 'perms-status';
             statusEl.hidden = false;

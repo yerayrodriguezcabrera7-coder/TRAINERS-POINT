@@ -105,7 +105,8 @@ CREATE TABLE IF NOT EXISTS calendar.external_identities (
  user_id text NOT NULL REFERENCES calendar.users(id) ON DELETE CASCADE,
  PRIMARY KEY(gym_id,issuer,subject), UNIQUE(gym_id,issuer,user_id));
 CREATE INDEX IF NOT EXISTS sessions_user ON calendar.sessions(user_id);
-ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS page_permissions jsonb;`;
+ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS page_permissions jsonb;
+ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS permissions_audit jsonb;`;
 
 export class Access {
   constructor(private pool: Pool, private clientsDb?: PrismaClient) {}
@@ -142,7 +143,8 @@ export class Access {
   async list(gym: string, linkedClients: LinkedClient[] = []) {
     const [usersRes, gymRes] = await Promise.all([
       this.pool.query(`SELECT id,employee_id AS "employeeId",client_id AS "clientId",username,role,enabled,
-        must_change_password AS "mustChangePassword",page_permissions AS "pagePermissions"
+        must_change_password AS "mustChangePassword",page_permissions AS "pagePermissions",
+        permissions_audit AS "permissionsAudit"
         FROM calendar.users WHERE gym_id=$1 ORDER BY username`, [gym]),
       this.pool.query(`SELECT config FROM calendar.gyms WHERE id=$1`, [gym]),
     ]);

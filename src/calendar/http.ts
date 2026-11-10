@@ -192,12 +192,19 @@ export function server(
             const userId = decodeURIComponent(permissionsMatch[1]);
             const raw = await body(req);
             const pages = z.array(z.string().min(1).max(200)).nullable().parse(raw.pagePermissions);
-            // Update only the page_permissions column, without touching password or other fields
             const userRow = (await store.pool.query('SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2', [gym, userId])).rows[0];
             if (!userRow) throw new ApiError(404, 'Usuario no encontrado.');
-            await store.pool.query('UPDATE calendar.users SET page_permissions=$1 WHERE gym_id=$2 AND id=$3',
-              [pages ? JSON.stringify(pages) : null, gym, userId]);
-            send(res, 200, { ok: true, pagePermissions: pages });
+
+            const auditEntry = {
+              changedBy: identity.name || identity.username || 'Administrador',
+              changedById: identity.id,
+              changedAt: new Date().toISOString(),
+              mode: pages ? `${pages.length} páginas` : 'restaurado al rol',
+            };
+
+            await store.pool.query('UPDATE calendar.users SET page_permissions=$1, permissions_audit=$2 WHERE gym_id=$3 AND id=$4',
+              [pages ? JSON.stringify(pages) : null, JSON.stringify(auditEntry), gym, userId]);
+            send(res, 200, { ok: true, pagePermissions: pages, permissionsAudit: auditEntry });
             return;
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
