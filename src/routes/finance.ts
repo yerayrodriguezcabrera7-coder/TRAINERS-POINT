@@ -45,11 +45,21 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
       const gym = (request as any).selectedGym as string;
       const inventory = new Inventory(prisma);
       const product = url.pathname.match(/^\/api\/inventory\/products(?:\/([0-9a-f-]+))?$/i);
+      const restock = url.pathname.match(/^\/api\/inventory\/restock(?:\/([0-9a-f-]+))?$/i);
       const payment = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/payments$/i);
       const receiptAction = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(refunds|verify-payment)$/i);
       const reversal = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
-      inventoryPermission(actor, request.method === 'GET' ? 'read' : url.pathname === '/api/inventory/sales' || payment || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin');
-      if (product && request.method === 'GET' && !product[1])
+      const action = request.method === 'GET' ? 'read' : restock ? 'restock' : url.pathname === '/api/inventory/sales' || payment || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin';
+      inventoryPermission(actor, action);
+      if (restock && request.method === 'GET' && !restock[1])
+        sendJson(response, 200, { requests: await inventory.restockRequests(gym, url.searchParams.get('status') || undefined) });
+      else if (restock && request.method === 'POST' && !restock[1])
+        sendJson(response, 201, await inventory.saveRestockRequest(gym, { id: actor!.id, name: actor!.name }, await readJsonBody(request)));
+      else if (restock && (request.method === 'PUT' || request.method === 'PATCH') && restock[1])
+        sendJson(response, 200, await inventory.updateRestockRequest(gym, { id: actor!.id, name: actor!.name }, restock[1], await readJsonBody(request)));
+      else if (restock && request.method === 'DELETE' && restock[1])
+        sendJson(response, 200, await inventory.removeRestockRequest(gym, restock[1]));
+      else if (product && request.method === 'GET' && !product[1])
         sendJson(response, 200, { products: await inventory.products(gym) });
       else if (product && request.method === 'POST' && !product[1])
         sendJson(response, 201, await inventory.saveProduct(gym, await readJsonBody(request)));

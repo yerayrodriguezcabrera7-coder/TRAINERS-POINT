@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tienda TPV · Venta física · Trainers Point</title>
+  <script src="/polling.js" defer></script>
+  <link rel="stylesheet" href="/fichajes.css">
+  <link rel="stylesheet" href="/gestion.css">
+  <link rel="stylesheet" href="/menu.css">
+  <link rel="stylesheet" href="/design.css">
+  <link rel="stylesheet" href="/tienda.css">
+  <script src="/runtime.js" defer></script>
+  <script src="/menu.js" defer></script>
+  <script src="/tienda.js" defer></script>
+  <link rel="stylesheet" href="/ayuda.css">
+  <link rel="stylesheet" href="/orden.css">
+  <script src="/ayuda.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside data-app-menu="" aria-label="Navegación"></aside>
+    <main class="attendance-shell main-content">
+      <header class="topbar">
+        <div class="breadcrumb">
+          <span>Ventas y caja</span>
+          <span class="crumb-separator">/</span>
+          <strong>Tienda TPV</strong>
+        </div>
+        <div class="topbar-right">
+          <div class="profile-avatar" aria-label="Trainers Point">TP</div>
+        </div>
+      </header>
+
+      <section class="page-content">
+        <header class="attendance-header">
+          <div>
+            <p class="eyebrow">TRAINERS POINT · TIENDA TPV &amp; CONTROL DE SALIDAS</p>
+            <h1>Tienda y Mostrador<span class="accent">.</span></h1>
+            <p>Venta visual rápida a clientes físicos, control de existencias y cuadre de caja.</p>
+          </div>
+          <div class="cash-actions">
+            <span id="cash-status-pill" class="tpv-status-badge closed">
+              <span class="dot"></span>
+              <span id="cash-status-text">Comprobando caja…</span>
+            </span>
+            <button id="btn-quick-open-cash" class="primary" hidden="">Abrir caja hoy</button>
+            <button id="btn-quick-restock" class="outline-button" type="button" style="display:inline-flex;align-items:center;gap:6px">📋 Falta para pedir</button>
+            <button id="btn-quick-new-product" class="outline-button">＋ Nuevo producto</button>
+            <a href="/caja.html" class="outline-button" style="text-decoration:none">Ir a Caja</a>
+          </div>
+        </header>
+
+        <p id="notice" role="status" aria-live="polite"></p>
+
+        <!-- Navigation Tabs -->
+        <nav class="tpv-nav-tabs" aria-label="Secciones del TPV">
+          <button id="tab-pos" class="tpv-tab-btn active" type="button" aria-pressed="true">
+            🛒 Mostrador de Venta
+          </button>
+          <button id="tab-dispatched" class="tpv-tab-btn" type="button" aria-pressed="false">
+            📦 Salidas de hoy <span id="badge-dispatched-units" class="badge-count">0</span>
+          </button>
+          <button id="tab-balance" class="tpv-tab-btn" type="button" aria-pressed="false">
+            💰 Cuadre con Caja (Arqueo)
+          </button>
+          <button id="tab-restock" class="tpv-tab-btn" type="button" aria-pressed="false">
+            📋 Falta para pedir <span id="badge-restock-count" class="badge-count">0</span>
+          </button>
+        </nav>
+
+        <!-- SECCIÓN 1: MOSTRADOR DE VENTA (TPV) -->
+        <section id="panel-pos" class="tpv-main-grid">
+          <!-- Columna Izquierda: Catálogo Visual de Productos -->
+          <div class="tpv-catalog-card">
+            <div class="tpv-catalog-toolbar">
+              <div class="tpv-search-box">
+                <input id="product-search" type="search" placeholder="🔍 Buscar producto por nombre o código…" aria-label="Buscar producto">
+              </div>
+              <button id="btn-catalog-restock" class="outline-button" type="button" title="Anotar producto que falta para pedir">📝 Anotar falta</button>
+              <button id="btn-refresh-products" class="outline-button" type="button">Actualizar</button>
+            </div>
+
+            <!-- Category pills -->
+            <div class="tpv-category-pills" id="category-pills" role="toolbar" aria-label="Filtrar por categoría">
+              <button class="tpv-cat-pill active" data-cat="all" type="button">Todos</button>
+              <button class="tpv-cat-pill" data-cat="bebidas" type="button">Bebidas</button>
+              <button class="tpv-cat-pill" data-cat="suplementos" type="button">Suplementos</button>
+              <button class="tpv-cat-pill" data-cat="snacks" type="button">Snacks y Barritas</button>
+              <button class="tpv-cat-pill" data-cat="anteriores" type="button" title="Ver productos que han existido en la tienda para pedir reposición">📦 Han existido (Anteriores)</button>
+            </div>
+
+            <!-- Grid de productos -->
+            <div id="products-grid" class="tpv-products-grid" aria-label="Catálogo de productos">
+              <p>Cargando productos…</p>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Panel de Ticket y Cobro Rápido -->
+          <div class="tpv-ticket-card" aria-label="Ticket de venta actual">
+            <div class="tpv-ticket-header">
+              <h2>Ticket actual <span id="ticket-count" style="font-size:13px;color:#6b767d;font-weight:normal">(0)</span></h2>
+              <button id="btn-clear-ticket" class="tpv-btn-clear" type="button">Vaciar ticket</button>
+            </div>
+
+            <!-- Selector de Comprador -->
+            <div class="tpv-buyer-box">
+              <div class="tpv-buyer-toggle">
+                <button id="buyer-opt-walkin" class="tpv-toggle-opt selected" type="button">👤 Persona de paso</button>
+                <button id="buyer-opt-client" class="tpv-toggle-opt" type="button">📋 Cliente registrado</button>
+              </div>
+              <div id="client-select-wrap" class="tpv-client-search-wrap" hidden="">
+                <input id="client-search" type="search" placeholder="Buscar cliente por nombre o teléfono…">
+                <select id="client-select" aria-label="Seleccionar cliente"></select>
+              </div>
+            </div>
+
+            <!-- Líneas de productos en el ticket -->
+            <div id="ticket-items" class="tpv-ticket-items">
+              <div class="tpv-ticket-empty">
+                <p>El ticket está vacío.</p>
+                <small>Pulsa sobre cualquier producto del catálogo para añadirlo a la venta.</small>
+              </div>
+            </div>
+
+            <!-- Desglose de Totales -->
+            <div class="tpv-totals-box">
+              <div class="tpv-total-row">
+                <span>Artículos en ticket:</span>
+                <strong id="ticket-total-units">0 uds</strong>
+              </div>
+              <div class="tpv-total-row final">
+                <span style="font-size:16px;font-weight:700">TOTAL:</span>
+                <strong id="ticket-total-price">0,00 €</strong>
+              </div>
+            </div>
+
+            <!-- Método de Cobro -->
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;font-weight:700;color:#556066">FORMA DE COBRO:</span>
+                <select id="payment-mode-select" style="font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid #ced4d0">
+                  <option value="PAID">Cobrar ahora</option>
+                  <option value="PENDING" disabled="">Dejar pendiente en cuenta</option>
+                </select>
+              </div>
+
+              <div id="payment-methods-grid" class="tpv-payment-methods">
+                <button id="pay-btn-cash" class="tpv-pay-btn selected" data-method="EFECTIVO" type="button">
+                  <span class="icon">💶</span>
+                  <span>Efectivo</span>
+                </button>
+                <button id="pay-btn-card" class="tpv-pay-btn" data-method="TARJETA" type="button">
+                  <span class="icon">💳</span>
+                  <span>Tarjeta</span>
+                </button>
+                <button id="pay-btn-bizum" class="tpv-pay-btn" data-method="BIZUM" type="button">
+                  <span class="icon">📱</span>
+                  <span>Bizum</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Calculadora de Cambio en Efectivo -->
+            <div id="cash-calc-wrap" class="tpv-cash-calc">
+              <div class="tpv-cash-input-row">
+                <label for="cash-tendered">Efectivo entregado:</label>
+                <input id="cash-tendered" type="number" step="0.01" min="0" placeholder="0,00">
+              </div>
+              <div class="tpv-bills-row">
+                <button class="tpv-bill-chip" data-bill="exact" type="button">Exacto</button>
+                <button class="tpv-bill-chip" data-bill="5" type="button">5 €</button>
+                <button class="tpv-bill-chip" data-bill="10" type="button">10 €</button>
+                <button class="tpv-bill-chip" data-bill="20" type="button">20 €</button>
+                <button class="tpv-bill-chip" data-bill="50" type="button">50 €</button>
+              </div>
+              <div id="change-display" class="tpv-change-result ok" hidden="">
+                <span>Cambio a devolver:</span>
+                <strong id="change-amount">0,00 €</strong>
+              </div>
+            </div>
+
+            <p id="sale-form-error" role="alert" style="color:#af241d;font-size:12px;margin:0"></p>
+
+            <!-- Botón Grande de Confirmar Cobro -->
+            <button id="btn-confirm-sale" class="tpv-checkout-btn" type="button" disabled="">
+              Confirmar venta y cobrar (0,00 €)
+            </button>
+          </div>
+        </section>
+
+        <!-- SECCIÓN 2: SALIDAS DE HOY (APUNTAR LO QUE SALE) -->
+        <section id="panel-dispatched" class="tpv-section-card" hidden="">
+          <header style="margin-bottom:20px">
+            <h2>Registro de lo que ha salido hoy</h2>
+            <p style="color:#5e6b72">Control detallado de productos despachados en la jornada actual y contraste con existencias.</p>
+          </header>
+
+          <div class="tpv-kpi-row">
+            <article class="tpv-kpi-card">
+              <small>TOTAL RECAUDADO EN VENTAS</small>
+              <strong id="kpi-dispatched-revenue">0,00 €</strong>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>UNIDADES TOTALES SALIDAS</small>
+              <strong id="kpi-dispatched-units">0 uds</strong>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>TICKETS REGISTRADOS</small>
+              <strong id="kpi-dispatched-tickets">0</strong>
+            </article>
+          </div>
+
+          <h3 style="margin-top:28px;margin-bottom:12px">Productos que han salido del mostrador</h3>
+          <div class="cash-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Unidades que han salido</th>
+                  <th>Precio unitario</th>
+                  <th>Total vendido</th>
+                  <th>Stock restante</th>
+                </tr>
+              </thead>
+              <tbody id="dispatched-products-tbody">
+                <tr><td colspan="5">Cargando salidas…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 style="margin-top:32px;margin-bottom:12px">Historial de tickets y ventas de hoy</h3>
+          <div class="cash-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Hora / Ticket</th>
+                  <th>Comprador</th>
+                  <th>Productos despachados</th>
+                  <th>Método</th>
+                  <th>Importe</th>
+                  <th>Comprobante</th>
+                </tr>
+              </thead>
+              <tbody id="dispatched-tickets-tbody">
+                <tr><td colspan="6">Cargando tickets…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- SECCIÓN 3: CUADRE CON CAJA Y ARQUEO -->
+        <section id="panel-balance" class="tpv-section-card" hidden="">
+          <header style="margin-bottom:20px">
+            <h2>Cuadre de ventas y arqueo de caja</h2>
+            <p style="color:#5e6b72">Comprueba que el dinero de las ventas coincide exactamente con el efectivo físico en el cajón.</p>
+          </header>
+
+          <div id="balance-session-banner" class="cash-warning" hidden="">
+            <strong>⚠️ No hay caja abierta hoy</strong>
+            <p>Para cuadrar el efectivo de las ventas físicas con el cajón, debes abrir una sesión de caja con el fondo inicial.</p>
+            <button id="btn-balance-open-cash" class="primary" style="margin-top:8px">Abrir caja ahora</button>
+          </div>
+
+          <div id="balance-content-wrap">
+            <!-- Desglose por método de cobro -->
+            <div class="tpv-kpi-row">
+              <article class="tpv-kpi-card">
+                <small>VENTAS EN EFECTIVO (CAJÓN)</small>
+                <strong id="balance-cash-sales">0,00 €</strong>
+                <p style="font-size:11px;color:#59676e;margin-top:4px">Debe estar en el cajón de monedas y billetes.</p>
+              </article>
+              <article class="tpv-kpi-card">
+                <small>VENTAS POR TARJETA (DATÁFONO)</small>
+                <strong id="balance-card-sales">0,00 €</strong>
+                <p style="font-size:11px;color:#59676e;margin-top:4px">Para puntear con el ticket de cierre del datáfono.</p>
+              </article>
+              <article class="tpv-kpi-card">
+                <small>VENTAS POR BIZUM</small>
+                <strong id="balance-bizum-sales">0,00 €</strong>
+                <p style="font-size:11px;color:#59676e;margin-top:4px">Para contrastar con la cuenta bancaria / Bizum.</p>
+              </article>
+            </div>
+
+            <!-- Cálculo de Arqueo -->
+            <div class="tpv-arqueo-box">
+              <h3 style="margin-top:0;margin-bottom:16px">Cálculo del efectivo esperado en el cajón</h3>
+              <div class="tpv-arqueo-row">
+                <span>(＋) Fondo inicial de apertura en cajón:</span>
+                <strong id="balance-initial-float">0,00 €</strong>
+              </div>
+              <div class="tpv-arqueo-row">
+                <span>(＋) Cobrado en efectivo por ventas de tienda:</span>
+                <strong id="balance-cash-collected" style="color:#267359">＋ 0,00 €</strong>
+              </div>
+              <div class="tpv-arqueo-row">
+                <span>(＋) Entradas manuales de efectivo (cambio, etc.):</span>
+                <strong id="balance-manual-in">＋ 0,00 €</strong>
+              </div>
+              <div class="tpv-arqueo-row">
+                <span>(－) Salidas / retiradas de efectivo:</span>
+                <strong id="balance-manual-out" style="color:#af241d">− 0,00 €</strong>
+              </div>
+              <div class="tpv-arqueo-row bold">
+                <span>(=) EFECTIVO QUE DEBE HABER EN EL CAJÓN:</span>
+                <strong id="balance-expected-cash" style="font-size:20px;color:var(--ink)">0,00 €</strong>
+              </div>
+            </div>
+
+            <!-- Recuento y comprobación -->
+            <div class="tpv-recount-card">
+              <h3 style="margin-top:0">Comprobador de Arqueo (Cuadre con lo contado)</h3>
+              <p style="font-size:13px;color:#5b676e">
+                Cuenta todos los billetes y monedas que hay físicamente en el cajón e introduce el importe para verificar si cuadra con lo que ha salido.
+              </p>
+
+              <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0">
+                <label for="recount-input" style="font-weight:700;font-size:14px">Efectivo contado físicamente (€):</label>
+                <input id="recount-input" type="number" step="0.01" min="0" placeholder="0,00" style="padding:10px 14px;font-size:16px;font-weight:700;width:140px;border-radius:6px;border:1px solid #ced5d0">
+                <button id="btn-calc-difference" class="outline-button" type="button">Calcular cuadre</button>
+              </div>
+
+              <div id="recount-diff-box" class="tpv-diff-badge balanced" hidden="">
+                <span id="recount-diff-text">Introduce el importe contado para comprobar el cuadre.</span>
+              </div>
+
+              <div id="recount-close-actions" style="margin-top:20px;padding-top:16px;border-top:1px solid #e5ebe6" hidden="">
+                <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:600">Observaciones del cierre (opcional):</label>
+                <textarea id="recount-close-note" style="width:100%;min-height:60px;padding:8px;border-radius:6px;border:1px solid #ced5d0;font-size:13px" placeholder="Si hay diferencia o motivo especial, anótalo aquí..."></textarea>
+                <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+                  <button id="btn-close-cash-from-tpv" class="primary" type="button">Guardar recuento y cerrar caja oficial</button>
+                  <a href="/caja.html" class="outline-button" style="text-decoration:none">Ver historial completo de cajas</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECCIÓN 4: FALTA PARA PEDIR (REPOSICIÓN Y PEDIDOS) -->
+        <section id="panel-restock" class="tpv-section-card" hidden="">
+          <header style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+            <div>
+              <h2>Productos que faltan para pedir (Reposición)</h2>
+              <p style="color:#5e6b72">Control desde recepción de productos agotados o pedidos pendientes de solicitar al proveedor.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <button id="btn-open-restock-modal" class="primary" type="button">＋ Anotar lo que falta</button>
+              <button id="btn-refresh-restock" class="outline-button" type="button">Actualizar lista</button>
+            </div>
+          </header>
+
+          <div class="tpv-kpi-row">
+            <article class="tpv-kpi-card">
+              <small>PENDIENTES DE PEDIR</small>
+              <strong id="kpi-restock-pending" style="color:#af241d">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">Artículos que faltan y hay que pedir</p>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>YA PEDIDOS AL PROVEEDOR</small>
+              <strong id="kpi-restock-ordered" style="color:#2a63cd">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">En camino / pendientes de entrega</p>
+            </article>
+            <article class="tpv-kpi-card">
+              <small>RECIBIDOS / REPUESTOS</small>
+              <strong id="kpi-restock-received" style="color:#267359">0</strong>
+              <p style="font-size:11px;color:#59676e;margin-top:4px">Completados recientemente</p>
+            </article>
+          </div>
+
+          <!-- Filtros y buscador -->
+          <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:24px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="tpv-category-pills" id="restock-filter-pills" role="toolbar" style="margin:0">
+              <button class="tpv-cat-pill active" data-status="PENDIENTE" type="button">Pendientes de pedir</button>
+              <button class="tpv-cat-pill" data-status="PEDIDO" type="button">Ya pedidos</button>
+              <button class="tpv-cat-pill" data-status="RECIBIDO" type="button">Recibidos</button>
+              <button class="tpv-cat-pill" data-status="ALL" type="button">Todos</button>
+            </div>
+            <div style="flex:1;max-width:320px;min-width:200px">
+              <input id="restock-search-input" type="search" placeholder="🔍 Buscar por producto, notas o persona…" style="width:100%;padding:8px 12px;border:1px solid #ced5d0;border-radius:6px;font-size:13px">
+            </div>
+          </div>
+
+          <div class="cash-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha y hora</th>
+                  <th>Producto que falta</th>
+                  <th>Cant. a pedir</th>
+                  <th>Stock en tienda</th>
+                  <th>Anotado por</th>
+                  <th>Notas / Motivo</th>
+                  <th>Estado</th>
+                  <th style="text-align:right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="restock-requests-tbody">
+                <tr><td colspan="8">Cargando lista de reposición…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+      </section>
+    </main>
+  </div>
+
+  <!-- DIALOG: COMPROBANTE / TICKET DE VENTA -->
+  <dialog id="receipt-dialog" aria-labelledby="receipt-title">
+    <header class="dialog-heading">
+      <h2 id="receipt-title">Comprobante de Venta</h2>
+      <button type="button" data-close="receipt-dialog" aria-label="Cerrar">×</button>
+    </header>
+
+    <div class="tpv-receipt-wrap" id="printable-receipt">
+      <div class="tpv-receipt-brand">
+        <h3>TRAINERS POINT</h3>
+        <p style="margin:2px 0;font-size:11px">Mostrador y Tienda del Centro</p>
+      </div>
+
+      <div class="tpv-receipt-meta">
+        <div><strong>Ticket Ref:</strong> <span id="receipt-ref">—</span></div>
+        <div><strong>Fecha:</strong> <span id="receipt-date">—</span></div>
+        <div><strong>Atendido por:</strong> <span id="receipt-seller">—</span></div>
+        <div><strong>Cliente:</strong> <span id="receipt-client">Persona de paso</span></div>
+      </div>
+
+      <table class="tpv-receipt-table">
+        <thead>
+          <tr>
+            <th>Cant. / Prod.</th>
+            <th>P.Unit</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="receipt-lines-tbody">
+          <!-- Dinámico -->
+        </tbody>
+      </table>
+
+      <div class="tpv-receipt-total">
+        <span>TOTAL PAGADO:</span>
+        <span id="receipt-total-amount">0,00 €</span>
+      </div>
+
+      <div style="margin-top:8px;font-size:12px">
+        <div><strong>Método:</strong> <span id="receipt-method">Efectivo</span></div>
+        <div id="receipt-tendered-wrap" hidden="">
+          <div><strong>Entregado:</strong> <span id="receipt-tendered">0,00 €</span></div>
+          <div><strong>Cambio:</strong> <span id="receipt-change">0,00 €</span></div>
+        </div>
+      </div>
+
+      <div class="tpv-receipt-footer">
+        <p>¡Gracias por tu compra!</p>
+        <p style="font-size:10px;color:#777">Trainers Point · Registro de ventas y control de caja</p>
+      </div>
+    </div>
+
+    <footer class="dialog-actions">
+      <button type="button" data-close="receipt-dialog">Cerrar</button>
+      <button id="btn-print-receipt" class="outline-button" type="button">🖨️ Imprimir ticket</button>
+      <button id="btn-new-sale-after" class="primary" type="button">Nueva venta</button>
+    </footer>
+  </dialog>
+
+  <!-- DIALOG: APERTURA RÁPIDA DE CAJA -->
+  <dialog id="open-cash-dialog" aria-labelledby="open-cash-title">
+    <form id="open-cash-form">
+      <header class="dialog-heading">
+        <h2 id="open-cash-title">Abrir caja para comenzar la venta</h2>
+        <button type="button" data-close="open-cash-dialog" aria-label="Cerrar">×</button>
+      </header>
+      <label>
+        ¿Cuánto efectivo inicial hay en el cajón? (€)
+        <input id="quick-opening-amount" type="number" min="0" max="1000000000" step="0.01" required="" placeholder="Ej. 100">
+      </label>
+      <p style="font-size:12px;color:#5a666d">
+        El efectivo inicial sirve para calcular el cambio disponible y cuadrar las ventas del día al cierre.
+      </p>
+      <p id="quick-open-error" role="alert" style="color:#af241d"></p>
+      <footer class="dialog-actions">
+        <button type="button" data-close="open-cash-dialog">Cancelar</button>
+        <button class="primary">Guardar fondo y abrir caja</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- DIALOG: NUEVO PRODUCTO RÁPIDO -->
+  <dialog id="new-product-dialog" aria-labelledby="new-prod-title">
+    <form id="new-product-form">
+      <header class="dialog-heading">
+        <h2 id="new-prod-title">Añadir producto al catálogo</h2>
+        <button type="button" data-close="new-product-dialog" aria-label="Cerrar">×</button>
+      </header>
+      <div class="form-grid">
+        <label>Nombre del producto
+          <input name="name" required="" maxlength="200" placeholder="Ej. Botella de agua 500ml">
+        </label>
+        <label>Precio de venta (€)
+          <input name="price" type="number" required="" min="0" max="1000000" step="0.01" placeholder="Ej. 1.50">
+        </label>
+        <label>Stock inicial (unidades)
+          <input name="stock" type="number" required="" min="0" max="1000000" step="1" placeholder="Ej. 24">
+        </label>
+        <label class="full">Descripción / Categoría
+          <textarea name="description" maxlength="2000" placeholder="Ej. Bebidas frías / Suplementación"></textarea>
+        </label>
+      </div>
+      <p id="new-prod-error" role="alert" style="color:#af241d"></p>
+      <footer class="dialog-actions">
+        <button type="button" data-close="new-product-dialog">Cerrar</button>
+        <button class="primary">Guardar producto</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- DIALOG: ANOTAR LO QUE FALTA PARA PEDIR -->
+  <dialog id="restock-dialog" aria-labelledby="restock-dialog-title">
+    <form id="restock-form">
+      <header class="dialog-heading">
+        <h2 id="restock-dialog-title">Anotar producto que falta para pedir</h2>
+        <button type="button" data-close="restock-dialog" aria-label="Cerrar">×</button>
+      </header>
+      <div class="form-grid">
+        <div class="full" style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-weight:600;font-size:13px">Origen del producto a pedir:</label>
+          <div class="tpv-category-pills" id="restock-source-pills" role="toolbar" style="margin:0">
+            <button class="tpv-cat-pill active" type="button" data-source="all">Todos</button>
+            <button class="tpv-cat-pill" type="button" data-source="active">🟢 Que ya existen</button>
+            <button class="tpv-cat-pill" type="button" data-source="inactive">📦 Que han existido (anteriores)</button>
+            <button class="tpv-cat-pill" type="button" data-source="custom">➕ Artículo nuevo</button>
+          </div>
+        </div>
+
+        <label class="full" id="restock-select-wrap">Producto a pedir
+          <select id="restock-product-select" required="">
+            <option value="">-- Seleccionar producto --</option>
+            <optgroup id="optgroup-active-products" label="🟢 Productos que ya existen en tienda">
+            </optgroup>
+            <optgroup id="optgroup-inactive-products" label="📦 Productos que han existido (anteriores / descatalogados)">
+            </optgroup>
+            <optgroup label="➕ Otro artículo">
+              <option value="__custom__">➕ Otro artículo no registrado</option>
+            </optgroup>
+          </select>
+        </label>
+
+        <div id="restock-inactive-notice" class="full" style="display:none;background:#f3f7fa;border:1px solid #c8d9e6;color:#1c4b6e;padding:8px 12px;border-radius:6px;font-size:12px">
+          📦 <strong>Producto que existió anteriormente:</strong> Este artículo está descatalogado. Al marcarlo como recibido al llegar el pedido, se volverá a reactivar automáticamente en la tienda.
+        </div>
+
+        <label id="restock-custom-wrap" class="full" hidden="">Nombre del artículo o producto que falta
+          <input id="restock-custom-name" maxlength="200" placeholder="Ej. Agua con gas 500ml, Barritas de avena...">
+        </label>
+        <label>Cantidad que falta / a pedir (uds)
+          <input id="restock-quantity" type="number" min="1" max="10000" step="1" required="" value="1">
+        </label>
+        <label>Prioridad
+          <select id="restock-priority">
+            <option value="NORMAL">Normal</option>
+            <option value="ALTA">Urgente (agotado o solicitado por cliente)</option>
+          </select>
+        </label>
+        <label class="full">Observaciones / Motivo (opcional)
+          <textarea id="restock-notes" maxlength="1000" placeholder="Ej. Se ha agotado en la nevera; socio preguntó si traeremos más..."></textarea>
+        </label>
+      </div>
+      <p id="restock-form-error" role="alert" style="color:#af241d;font-size:12px;margin:8px 0 0"></p>
+      <footer class="dialog-actions">
+        <button type="button" data-close="restock-dialog">Cancelar</button>
+        <button class="primary" type="submit" id="btn-submit-restock">Guardar aviso para pedir</button>
+      </footer>
+    </form>
+  </dialog>
+</body>
+</html>
+
