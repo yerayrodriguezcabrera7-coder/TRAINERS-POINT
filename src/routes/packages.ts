@@ -32,10 +32,6 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
         return true;
       }
     }
-    if (client.gymId !== (request as any).selectedGym) {
-      sendError(response, 404, "Cliente desconocido en este centro.");
-      return true;
-    }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
       include: { service: { select: { id: true, name: true, durationMin: true, validityWeeks: true } }, sale: { include: { lines: true, payments: true } } },

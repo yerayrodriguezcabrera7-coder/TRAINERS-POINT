@@ -73,7 +73,10 @@ $('mode-description').textContent = serverMode
 const fromServer = b => ({...b,status:b.status.toLowerCase()});
 const toServer = b => ({...b,status:b.status.toUpperCase()});
 async function api(path,method='GET',body) {
-  const res=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json','Authorization':'Bearer '+adminToken},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
+  const headers = {'Content-Type':'application/json','Authorization':'Bearer '+adminToken};
+  const gym = currentGymId();
+  if (gym && gym !== 'local') headers['x-calendar-gym'] = gym;
+  const res=await fetch('/api/'+path,{method,headers,body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(10000)});
   const result=await res.json();
   if(res.status===401) location.href='login.html';
   if(!res.ok)throw new Error(result.error||'Error de conexión');
@@ -391,10 +394,16 @@ function renderClientResults() {
   $('client-results').hidden = false;
 }
 function syncClientPicker() {
-  if($('booking-client').value!==state.packagesClientId)loadClientPackages();
+  const value = $('booking-client').value;
+  if(value!==state.packagesClientId)loadClientPackages();
   updateDebtDetail();
   updateRenewalDetail();
-  const value = $('booking-client').value;
+  if (!value) {
+    $('client-search').value = '';
+    $('client-results').hidden = true;
+    updateClientFields();
+    return;
+  }
   if (value === 'new') { updateClientFields(); return; }
   const client = availableClients().find(item => item.id === value);
   $('client-search').value = client?.name || '';
@@ -431,7 +440,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const selectedService = data.services.find(s => s.id === state.service && s.active !== false);
   const service = selectedService || data.services.find(s => s.active !== false) || data.services[0];
   const duration = service.duration || 60;
-  const values = b || {clientId:availableClients()[0]?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
+  const values = b || {clientId:'',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
   if(employeeId==='__unassigned')$('booking-employee').value='';
   $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
@@ -440,12 +449,18 @@ function showBooking(id, date = state.date, minute, employeeId) {
   updateDebtDetail();
   updateRenewalDetail();
   $('booking-end').readOnly=serverMode;
+  const assignedEmp = values.employeeId ? lookup('employees', values.employeeId) : null;
   if (b) {
     $('booking-title').textContent = 'Detalle de la reserva';
   } else {
-    const assignedEmp = values.employeeId ? lookup('employees', values.employeeId) : null;
     $('booking-title').textContent = (assignedEmp && assignedEmp.id !== '__unassigned') ? `Nueva cita con ${assignedEmp.name}` : 'Nueva reserva';
   }
+
+  const summaryEmp = $('summary-employee-name');
+  if (summaryEmp) summaryEmp.textContent = assignedEmp ? assignedEmp.name : 'Sin asignar';
+  const summaryDt = $('summary-datetime');
+  if (summaryDt) summaryDt.textContent = `${prettyDate(values.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${values.start} a ${values.end}`;
+  if ($('buy-package-result')) { $('buy-package-result').hidden = true; $('buy-package-result').textContent = ''; }
 
   const isTrainer = currentUser?.role === 'TRAINER';
   $('collect-booking').hidden=isTrainer||!b||b.status!=='completed'||!b.paymentDue;
@@ -480,7 +495,22 @@ async function loadClientPackages(selected=null){
   if(!serverMode||!data.packagesEnabled){$('booking-package-panel').hidden=true;return;}
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
   $('package-create-result').textContent='';
-  if(!clientId||clientId==='new'){packageBusy=false;renderPackages();return;}
+  if(!clientId){
+    packageBusy=false;
+    $('booking-package-message').textContent='Selecciona primero un cliente para consultar sus bonos.';
+    $('existing-package-wrap').hidden=true;
+    $('buy-package-card').hidden=true;
+    return;
+  }
+  if(clientId==='new'){
+    packageBusy=false;
+    $('booking-package-message').textContent='Para clientes nuevos puedes asignarle un bono o continuar sin bono:';
+    $('existing-package-wrap').hidden=true;
+    $('buy-package-card').hidden=false;
+    if ($('cancel-buy-package-btn')) $('cancel-buy-package-btn').hidden = true;
+    updateBuyPackageServices();
+    return;
+  }
   packageBusy=true;$('booking-package-message').textContent='Consultando los bonos del cliente…';
   try{
     const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');
@@ -495,13 +525,49 @@ async function loadClientPackages(selected=null){
     updateRenewalDetail();
     renderPackages(selected);
   }
-  catch(e){if(request===packageRequest){$('booking-package-message').textContent='No se pudieron consultar los bonos: '+e.message;$('booking-package').innerHTML='<option value="">Reservar sin bono · pago pendiente</option>';}}
+  catch(e){
+    if(request===packageRequest){
+      $('booking-package-message').textContent='No se pudieron consultar los bonos: '+e.message;
+      $('booking-package').innerHTML='<option value="">Reservar sin bono · pago pendiente</option>';
+      $('existing-package-wrap').hidden=false;
+      $('buy-package-card').hidden=true;
+    }
+  }
   finally{if(request===packageRequest)packageBusy=false;}
 }
+
+function updateBuyPackageServices() {
+  const select = $('buy-package-service');
+  if (!select) return;
+  const currentServiceId = $('booking-service')?.value;
+  const activeServices = (data.services || []).filter(s => s.active !== false);
+  select.innerHTML = activeServices.map(s => {
+    const isSelected = s.id === currentServiceId;
+    const priceText = s.price ? `${s.price} €` : '0 €';
+    const count = s.trainingCount || 1;
+    return `<option value="${escapeHTML(s.id)}" ${isSelected ? 'selected' : ''}>${escapeHTML(s.name)} · ${count} sesión${count > 1 ? 'es' : ''} (${priceText})</option>`;
+  }).join('');
+}
+
 function renderPackages(selected){
   if(!serverMode)return;
   const select=$('booking-package'),old=selected??select.value;
   const currentServiceId = $('booking-service')?.value;
+  const clientId = $('booking-client').value;
+  const isRealClient = clientId && clientId !== 'new';
+  const msgEl = $('booking-package-message');
+  const buyCard = $('buy-package-card');
+  const existingWrap = $('existing-package-wrap');
+  const toggleBuyBtn = $('toggle-buy-package-btn');
+  const cancelBuyBtn = $('cancel-buy-package-btn');
+
+  if (!isRealClient) {
+    if (existingWrap) existingWrap.hidden = true;
+    if (buyCard) buyCard.hidden = clientId !== 'new';
+    if (msgEl) msgEl.textContent = clientId === 'new' ? 'Para clientes nuevos puedes asignarle un bono o continuar sin bono:' : 'Selecciona primero un cliente para consultar sus bonos.';
+    return;
+  }
+
   const availablePaid = clientPackages.filter(p=>p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0);
   const list=clientPackages.filter(p=>(p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0)||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
   select.innerHTML='<option value="">Reservar sin bono · pago pendiente</option>'+list.map(p=>{
@@ -512,45 +578,189 @@ function renderPackages(selected){
   if (!old && availablePaid.length > 0) {
     const matching = availablePaid.find(p => p.service.id === currentServiceId) || availablePaid[0];
     select.value = matching.id;
+    if (matching.service?.id) {
+      $('booking-service').value = matching.service.id;
+      const srv = lookup('services', matching.service.id);
+      if (srv && srv.duration && $('booking-start').value) {
+        $('booking-end').value = C.timeLabel(C.minutes($('booking-start').value) + srv.duration);
+        const summaryDt = $('summary-datetime');
+        if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
+      }
+    }
   } else {
     select.value=list.some(p=>p.id===old)?old:'';
   }
   select.disabled=currentUser?.role==='TRAINER';
 
-  const chosen=clientPackages.find(p=>p.id===select.value),service=lookup('services',$('booking-service').value);
-  const msgEl = $('booking-package-message');
+  const chosen=clientPackages.find(p=>p.id===select.value);
+
   if (chosen) {
+    if (existingWrap) existingWrap.hidden = false;
+    if (buyCard) buyCard.hidden = true;
+    if (toggleBuyBtn) toggleBuyBtn.hidden = false;
     if (chosen.paymentStatus === 'PAGADO') {
       msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Sesión asignada al bono "${escapeHTML(chosen.service.name)}" (${chosen.sessionsRemaining} disponibles).</span>`;
     } else {
       msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#fef3c7; color:#b45309; font-weight:600; font-size:12px;">⚠️ Este bono está pendiente de cobro. La cita mostrará aviso de cobro.</span>`;
     }
-  } else if (availablePaid.length === 0 && $('booking-client').value && $('booking-client').value !== 'new') {
-    msgEl.innerHTML = `<div style="padding:6px 10px; border-radius:6px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; font-size:12px; font-weight:600;">⚠️ Este cliente no tiene bonos disponibles para este servicio. Se registrará como sesión individual con pago pendiente.</div>`;
+  } else if (availablePaid.length === 0) {
+    if (existingWrap) existingWrap.hidden = true;
+    if (buyCard) {
+      buyCard.hidden = false;
+      updateBuyPackageServices();
+      if (cancelBuyBtn) cancelBuyBtn.hidden = true;
+      const sub = $('buy-package-sub-text');
+      if (sub) sub.textContent = 'El cliente no tiene ningún bono disponible. Elige el bono y si se cobra ahora o queda pendiente:';
+    }
+    msgEl.innerHTML = `<div style="padding:6px 10px; border-radius:6px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; font-size:12px; font-weight:600;">⚠️ Este cliente no tiene bonos disponibles. Puedes adquirir uno ahora mismo:</div>`;
   } else {
+    if (existingWrap) existingWrap.hidden = false;
+    if (buyCard) buyCard.hidden = true;
+    if (toggleBuyBtn) toggleBuyBtn.hidden = false;
     msgEl.innerHTML = `<span style="color:var(--tp-muted); font-size:12px;">Selecciona de qué bono descontar la sesión o continúa sin bono (pago pendiente).</span>`;
   }
-  $('create-pending-package').hidden=currentUser?.role==='TRAINER'||!!chosen||!state.packagesClientId||state.packagesClientId==='new'||!/^[0-9a-f-]{36}$/i.test(service.id||'');
 }
+
 $('booking-package').onchange=()=>{
- const p=clientPackages.find(p=>p.id===$('booking-package').value);
- if(p){$('booking-service').value=p.service.id;const service=lookup('services',p.service.id);if($('booking-start').value)$('booking-end').value=C.timeLabel(C.minutes($('booking-start').value)+service.duration);}
- renderPackages();updateHoursHint();
+  const p=clientPackages.find(p=>p.id===$('booking-package').value);
+  if(p){
+    $('booking-service').value=p.service.id;
+    const service=lookup('services',p.service.id);
+    if($('booking-start').value && service.duration){
+      $('booking-end').value=C.timeLabel(C.minutes($('booking-start').value)+service.duration);
+      const summaryDt = $('summary-datetime');
+      if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
+    }
+  }
+  renderPackages();updateHoursHint();
 };
-$('create-pending-package').onclick=async()=>{
- const button=$('create-pending-package'),service=lookup('services',$('booking-service').value),clientId=$('booking-client').value;
- if(packageBusy||!clientId||clientId==='new')return;
- button.disabled=true;packageBusy=true;
- try{
-  const result=await api('clients/'+encodeURIComponent(clientId)+'/service-packages','POST',{requestKey:pendingPackageKey,serviceId:service.id,sessionsBought:service.trainingCount||1,totalAmount:service.price||0,paymentMethod:'OTRO',paymentStatus:'PENDIENTE',notes:'Creado desde el calendario. Pendiente de cobro.'});
-  const history=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if($('booking-client').value!==clientId)return;clientPackages=history.packages||[];newPendingPackageId=result.servicePackage.id;renderPackages(newPendingPackageId);$('package-create-result').textContent='Bono pendiente guardado en la ficha. Ahora confirma la reserva.';
- }catch(e){$('package-create-result').textContent=e.message;}finally{button.disabled=false;packageBusy=false;}
-};
+
+if ($('toggle-buy-package-btn')) {
+  $('toggle-buy-package-btn').onclick = () => {
+    $('existing-package-wrap').hidden = true;
+    $('buy-package-card').hidden = false;
+    if ($('cancel-buy-package-btn')) $('cancel-buy-package-btn').hidden = false;
+    updateBuyPackageServices();
+    $('booking-package-message').innerHTML = '<span style="color:var(--tp-muted); font-size:12px;">Elige el nuevo bono que va a adquirir este cliente:</span>';
+  };
+}
+if ($('cancel-buy-package-btn')) {
+  $('cancel-buy-package-btn').onclick = () => {
+    $('existing-package-wrap').hidden = false;
+    $('buy-package-card').hidden = true;
+    renderPackages();
+  };
+}
+
+function syncBuyPackageMode() {
+  const mode = document.querySelector('input[name="buy-pkg-mode"]:checked')?.value || 'now';
+  const methodRow = $('buy-package-method-row');
+  const nowBtn = $('buy-package-now-btn');
+  const laterBtn = $('buy-package-later-btn');
+  if (methodRow) methodRow.hidden = mode !== 'now';
+  if (nowBtn) nowBtn.hidden = mode !== 'now';
+  if (laterBtn) laterBtn.hidden = mode !== 'later';
+}
+document.querySelectorAll('input[name="buy-pkg-mode"]').forEach(radio => {
+  radio.addEventListener('change', syncBuyPackageMode);
+});
+
+if ($('buy-package-service')) {
+  $('buy-package-service').onchange = () => {
+    const srv = lookup('services', $('buy-package-service').value);
+    if (srv && srv.id) {
+      $('booking-service').value = srv.id;
+      if (srv.duration && $('booking-start').value) {
+        $('booking-end').value = C.timeLabel(C.minutes($('booking-start').value) + srv.duration);
+        const summaryDt = $('summary-datetime');
+        if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
+      }
+    }
+  };
+}
+
+async function handleBuyPackage(isNow) {
+  const clientId = $('booking-client').value;
+  if (!clientId || clientId === 'new' || packageBusy) return null;
+  const serviceId = $('buy-package-service').value;
+  const service = lookup('services', serviceId);
+  if (!service) return null;
+
+  const paymentStatus = isNow ? 'PAGADO' : 'PENDIENTE';
+  const paymentMethod = isNow ? $('buy-package-method').value : 'OTRO';
+  const sessionsBought = service.trainingCount || 1;
+  const totalAmount = service.price || 0;
+
+  const nowBtn = $('buy-package-now-btn');
+  const laterBtn = $('buy-package-later-btn');
+  const resEl = $('buy-package-result');
+  if (nowBtn) nowBtn.disabled = true;
+  if (laterBtn) laterBtn.disabled = true;
+  packageBusy = true;
+  if (resEl) {
+    resEl.hidden = false;
+    resEl.style.color = '#1e293b';
+    resEl.textContent = 'Registrando bono…';
+  }
+
+  try {
+    const result = await api('clients/' + encodeURIComponent(clientId) + '/service-packages', 'POST', {
+      requestKey: uid(),
+      serviceId,
+      sessionsBought,
+      totalAmount,
+      paymentStatus,
+      paymentMethod,
+      notes: `Contratado desde el calendario (${isNow ? 'Pagado por ' + paymentMethod : 'Pendiente de cobro'}).`
+    });
+    const history = await api('clients/' + encodeURIComponent(clientId) + '/service-history');
+    if ($('booking-client').value === clientId) {
+      clientPackages = history.packages || [];
+      const newPkgId = result.servicePackage?.id;
+      $('booking-service').value = serviceId;
+      if (service.duration && $('booking-start').value) {
+        $('booking-end').value = C.timeLabel(C.minutes($('booking-start').value) + service.duration);
+        const summaryDt = $('summary-datetime');
+        if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
+      }
+      renderPackages(newPkgId);
+      if (resEl) {
+        resEl.style.color = '#15803d';
+        resEl.textContent = `✓ Bono contratado con éxito (${isNow ? 'Pagado por ' + paymentMethod : 'Pendiente de cobro'}). Se ha vinculado a esta cita.`;
+      }
+      toast('Bono asignado a la cita.');
+    }
+    return result.servicePackage;
+  } catch (err) {
+    if (resEl) {
+      resEl.style.color = '#b91c1c';
+      resEl.textContent = 'Error: ' + err.message;
+    }
+    throw err;
+  } finally {
+    if (nowBtn) nowBtn.disabled = false;
+    if (laterBtn) laterBtn.disabled = false;
+    packageBusy = false;
+  }
+}
+
+if ($('buy-package-now-btn')) $('buy-package-now-btn').onclick = () => handleBuyPackage(true);
+if ($('buy-package-later-btn')) $('buy-package-later-btn').onclick = () => handleBuyPackage(false);
+if ($('clear-client-search')) {
+  $('clear-client-search').onclick = () => {
+    $('client-search').value = '';
+    $('booking-client').value = '';
+    syncClientPicker();
+    renderPackages();
+    $('client-search').focus();
+  };
+}
 function formError(id,message) { $(id).textContent = message; $(id).hidden = false; }
 $('booking-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (currentUser?.role === 'TRAINER') return;
   const clientId = $('booking-client').value;
+  if (!clientId) { formError('booking-error','Selecciona un cliente para la cita.'); return; }
   if(packageBusy){formError('booking-error','Espera a que termine la consulta de bonos del cliente.');return;}
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
   const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
@@ -558,12 +768,22 @@ $('booking-form').addEventListener('submit', async event => {
     if(state.saving)return;
     state.saving=true;
     try {
+      const buyCard = $('buy-package-card');
+      const mode = document.querySelector('input[name="buy-pkg-mode"]:checked')?.value || 'now';
+      if (buyCard && !buyCard.hidden && !$('booking-package').value && clientId !== 'new' && (mode === 'now' || mode === 'later')) {
+        const pkg = await handleBuyPackage(mode === 'now');
+        if (pkg?.id) {
+          booking.packageId = pkg.id;
+          booking.serviceId = $('buy-package-service').value;
+        }
+      } else {
+        booking.packageId = $('booking-package').value || null;
+      }
       if(!booking.employeeId&&booking.status==='confirmed')booking.status='pending';
       booking.needsReschedule=state.editingSnapshot?.needsReschedule&&booking.status==='cancelled'||false;
       booking.version=state.editingVersion;
       booking.sessionId=state.editingSnapshot?.sessionId||null;
       booking.recoveryId=state.editingSnapshot?.recoveryId||null;
-      booking.packageId=$('booking-package').value||null;
       if (!state.editing && !booking.packageId) {
         const credits=(await api('recoveries')).filter(r=>r.clientId===booking.clientId && r.status==='PENDING');
         const compatible=credits.find(r=>r.serviceId===booking.serviceId);
@@ -571,7 +791,7 @@ $('booking-form').addEventListener('submit', async event => {
           booking.recoveryId=compatible.id;booking.status='confirmed';
         } else if(credits.length && !compatible) toast('Tiene recuperaciones pendientes de otro servicio. Esta reserva será normal.');
       }
-      const duration=lookup('services',booking.serviceId).duration;
+      const duration=lookup('services',booking.serviceId).duration || 60;
       booking.end=C.timeLabel(C.minutes(booking.start)+duration);
       const client=clientId==='new'?{id:booking.clientId,name:$('client-name').value.trim(),email:$('client-email').value.trim(),phone:$('client-phone').value.trim(),notes:''}:undefined;
       const saved = await api(state.editing?'bookings/'+encodeURIComponent(state.editing):'bookings',state.editing?'PUT':'POST',{booking:toServer(booking),client});

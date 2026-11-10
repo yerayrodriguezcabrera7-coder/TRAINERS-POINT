@@ -63,7 +63,6 @@ export class Store {
     const externalGym = gyms.find(item => item.id === row.name || slug(item.name) === slug(String(row.name)));
     if (!externalGym) return config;
     const clientsQuery = this.clientsDb.client.findMany({
-      where: { gymId: externalGym.id },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
@@ -262,8 +261,8 @@ export class Store {
       if(b.packageId)throw new ApiError(400,"Selecciona un cliente y servicio del catálogo para utilizar un bono.");
       return;
     }
-    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid AND c."gymId"=$3::uuid',[b.clientId,b.serviceId,gym])).rowCount;
-    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo de este centro.");
+    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid',[b.clientId,b.serviceId])).rowCount;
+    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo.");
     if(b.packageId&&b.recoveryId)throw new ApiError(400,"Selecciona un bono o una recuperación, sin utilizar ambos para la misma sesión.");
     // Keep the lock order: calendar centre, finance centre, package/booking rows.
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[gym]);
