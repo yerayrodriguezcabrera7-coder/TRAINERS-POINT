@@ -105,6 +105,7 @@
 
       const currentPerms = Array.isArray(user.pagePermissions) ? user.pagePermissions : null;
       const rolePages = roleDefaults[user.role] || [];
+      const otherUsers = (manageData.users || []).filter(u => u.id !== user.id && u.role !== 'ADMIN');
 
       card.innerHTML = `
         <div class="perms-user-header" role="button" tabindex="0" aria-expanded="false">
@@ -128,6 +129,23 @@
               ? 'Mostrando los <strong>permisos predeterminados de su rol</strong>. Si marcas o desmarcas páginas y guardas, se activará una configuración personalizada para este usuario.' 
               : '<strong>Permisos personalizados activos</strong>. Puedes modificar las casillas y guardar, o pulsar "Restaurar permisos del rol" para que vuelva al estándar.'}
           </p>
+
+          ${otherUsers.length > 0 ? `
+          <div class="perms-copy-bar" style="display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 8px 12px; background: var(--tp-surface-muted); border: 1px solid var(--tp-line); border-radius: 6px; font-size: 12px; flex-wrap: wrap;">
+            <span style="color: var(--tp-muted); white-space: nowrap;">📋 <strong>Copiar permisos de:</strong></span>
+            <select class="perms-copy-select" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--tp-line); border-radius: 4px; background: var(--tp-surface); flex: 1; min-width: 160px; color: var(--tp-ink);">
+              <option value="">Selecciona un usuario de referencia...</option>
+              ${otherUsers.map(ou => {
+                const ouName = resolvePersonName(ou);
+                const ouRole = roleNames[ou.role] || ou.role;
+                const ouCustom = Array.isArray(ou.pagePermissions) ? ` (${ou.pagePermissions.length} págs)` : '';
+                return `<option value="${esc(ou.id)}">${esc(ouName)} · ${esc(ouRole)}${esc(ouCustom)}</option>`;
+              }).join('')}
+            </select>
+            <button type="button" class="button button-outline button-small perms-copy-btn" style="padding: 4px 10px; font-size: 11px;">Copiar a este usuario</button>
+          </div>
+          ` : ''}
+
           <div class="perms-grid" data-user-id="${esc(user.id)}">
             ${PAGES.map(page => {
               const isDefault = rolePages.includes(page.key);
@@ -170,6 +188,40 @@
             const label = cb.closest('.perms-toggle');
             if (label) label.classList.toggle('is-checked', cb.checked);
           }
+        });
+
+        // Botón Copiar permisos de otro usuario
+        const copyBtn = card.querySelector('.perms-copy-btn');
+        const copySelect = card.querySelector('.perms-copy-select');
+        copyBtn?.addEventListener('click', () => {
+          const sourceUserId = copySelect?.value;
+          if (!sourceUserId) {
+            alert('Selecciona primero un usuario del menú desplegable para copiar sus permisos.');
+            copySelect?.focus();
+            return;
+          }
+          const sourceUser = manageData.users.find(u => u.id === sourceUserId);
+          if (!sourceUser) return;
+          const sourceName = resolvePersonName(sourceUser);
+          const sourcePages = Array.isArray(sourceUser.pagePermissions)
+            ? sourceUser.pagePermissions
+            : (roleDefaults[sourceUser.role] || []);
+
+          const checkboxes = [...card.querySelectorAll('input[type="checkbox"]')];
+          checkboxes.forEach(cb => {
+            const isChecked = sourcePages.includes(cb.dataset.pageKey);
+            cb.checked = isChecked;
+            cb.closest('.perms-toggle')?.classList.toggle('is-checked', isChecked);
+          });
+
+          const statusEl = card.querySelector('.perms-status');
+          if (statusEl) {
+            statusEl.textContent = `✓ Permisos copiados de ${sourceName}. Pulsa "Guardar permisos" para aplicar.`;
+            statusEl.className = 'perms-status';
+            statusEl.hidden = false;
+            setTimeout(() => { statusEl.hidden = true; }, 4000);
+          }
+          showToast(`Permisos de ${sourceName} cargados en el formulario.`);
         });
 
         // Select all / none / role
