@@ -80,6 +80,8 @@ export const staticFiles: Record<string, {
   "/services.html": { file: "web/services/services.html", contentType: "text/html; charset=utf-8" },
   "/services.css": { file: "web/services/services.css", contentType: "text/css; charset=utf-8" },
   "/services.js": { file: "web/services/services.js", contentType: "text/javascript; charset=utf-8" },
+  '/permisos-pagina.html': { file: 'web/admin/permisos-pagina.html', contentType: 'text/html; charset=utf-8' },
+  '/permisos-pagina.js': { file: 'web/admin/permisos-pagina.js', contentType: 'text/javascript; charset=utf-8' },
 };
 // Historical URLs remain available while each feature has one canonical implementation.
 staticFiles['/gimnasios.html'] = staticFiles['/gyms.html'];

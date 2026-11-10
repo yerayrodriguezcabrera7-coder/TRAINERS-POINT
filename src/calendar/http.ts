@@ -76,6 +76,11 @@ export function server(
         }
         const publicRoute = path.startsWith("/api/public/");
         let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
+        const hasPage = (pageKey: string): boolean => {
+          if (identity.role === "ADMIN") return true;
+          if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
+          return identity.pagePermissions.includes(pageKey);
+        };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -86,6 +91,7 @@ export function server(
             !(await access.needsSetup(gym))
           )
             identity = await access.identify(gym,bearer);
+
           const admin = identity.role === "ADMIN";
           const reception = identity.role === "RECEPTION";
           const trainer = identity.role === "TRAINER";
@@ -111,6 +117,7 @@ export function server(
             send(res,200,workerBooking(await store.workerAction(gym,decodeURIComponent(workerAction[1]),identity,await body(req))));return;
           }
           if (path === "/api/recoveries" && req.method === "GET") {
+            if (!hasPage("recuperaciones.html")) throw new ApiError(403, "No tienes acceso a las recuperaciones.");
             const items = await store.recoveries(gym);
             send(res,200,trainer ? items.filter(r=>r.employeeId===identity.employeeId) : client ? items.filter(r=>r.clientId===identity.clientId) : items); return;
           }
@@ -179,12 +186,33 @@ export function server(
             send(res, 200, result);
             return;
           }
+          const permissionsMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/permissions$/);
+          if (permissionsMatch && req.method === 'PUT') {
+            if (!admin) throw new ApiError(403, 'Solo administración puede gestionar permisos de página.');
+            const userId = decodeURIComponent(permissionsMatch[1]);
+            const raw = await body(req);
+            const pages = z.array(z.string().min(1).max(200)).nullable().parse(raw.pagePermissions);
+            const userRow = (await store.pool.query('SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2', [gym, userId])).rows[0];
+            if (!userRow) throw new ApiError(404, 'Usuario no encontrado.');
+
+            const auditEntry = {
+              changedBy: identity.name || identity.username || 'Administrador',
+              changedById: identity.id,
+              changedAt: new Date().toISOString(),
+              mode: pages ? `${pages.length} páginas` : 'restaurado al rol',
+            };
+
+            await store.pool.query('UPDATE calendar.users SET page_permissions=$1, permissions_audit=$2 WHERE gym_id=$3 AND id=$4',
+              [pages ? JSON.stringify(pages) : null, JSON.stringify(auditEntry), gym, userId]);
+            send(res, 200, { ok: true, pagePermissions: pages, permissionsAudit: auditEntry });
+            return;
+          }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
-            if (management[1] === "users" && !admin) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
-            if (management[1] === "services" && !admin) throw new ApiError(403,"Solo administración puede modificar servicios.");
-            if (management[1] === "employees" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
-            if (management[1] === "clients" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar clientes.");
+            if (management[1] === "users" && (!admin || !hasPage("usuarios"))) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
+            if (management[1] === "services" && (!admin || !hasPage("servicios"))) throw new ApiError(403,"Solo administración puede modificar servicios.");
+            if (management[1] === "employees" && (!admin && !reception || !hasPage("profesionales"))) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "clients" && (!admin && !reception || !hasPage("clientes"))) throw new ApiError(403,"No tienes permiso para modificar clientes.");
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
@@ -197,12 +225,14 @@ export function server(
             return;
           }
           if (req.method === "GET" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
             const leaves = await store.leaves(gym, identity.role === "ADMIN" ? undefined : identity.employeeId || "unassigned");
             const employees = (await store.state(gym)).employees as Array<{ id: string; name: string }>;
             send(res, 200, leaves.map((leave: any) => ({ ...leave, employeeName: employees.find((employee) => employee.id === leave.employeeId)?.name || "Empleado" })));
             return;
           }
           if (req.method === "POST" && path === "/api/leaves") {
+            if (!hasPage("ausencias.html")) throw new ApiError(403, "No tienes acceso a las ausencias del equipo.");
             if (!identity.employeeId) throw new ApiError(403, "Inicia sesión con una cuenta de empleado.");
             send(res, 201, await store.requestLeave(gym, identity.employeeId, await body(req)));
             return;
@@ -247,11 +277,13 @@ export function server(
           return;
         }
         if (path === '/api/attendance/omissions') {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
           if(req.method==='POST'){send(res,201,await saveOmission(store.pool,gym,identity,await body(req)));return;}
           if(req.method==='GET'){send(res,200,await listOmissions(store.pool,gym,identity,url.searchParams.get('from')||'',url.searchParams.get('to')||''));return;}
           throw new ApiError(405,'Operación no permitida.');
         }
         if (req.method === "GET" && path === "/api/attendance/export") {
+          if (!hasPage("fichajes.html")) throw new ApiError(403, "No tienes acceso a los fichajes.");
           if (!url.searchParams.get("from") || !url.searchParams.get("to")) throw new ApiError(400, "Selecciona las fechas del informe.");
           const requested = url.searchParams.get("employeeId") || undefined;
           if (!["ADMIN","RECEPTION"].includes(identity.role) && requested && requested !== identity.employeeId) throw new ApiError(403, "Solo puedes exportar tus propios fichajes.");
@@ -281,6 +313,7 @@ export function server(
           return;
         }
         if (req.method === "GET" && path === "/api/clients") {
+          if (!hasPage("clientes")) throw new ApiError(403, "No tienes permiso para consultar clientes.");
           const s = await store.state(gym);
           const [clientDebts, clientPackageAlertsMap] = await Promise.all([
             store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
