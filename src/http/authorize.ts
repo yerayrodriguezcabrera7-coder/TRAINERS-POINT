@@ -46,6 +46,29 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       sendError(response, 403, "Debes cambiar la contraseña antes de continuar.");
       return true;
     }
+    if (identity.role !== "ADMIN" && identity.pagePermissions) {
+      const perms = identity.pagePermissions;
+      if (url.pathname.startsWith("/api/clients") && !perms.includes("clientes")) {
+        sendError(response, 403, "No tienes permiso para acceder a la gestión de clientes.");
+        return true;
+      }
+      if (url.pathname.startsWith("/api/services") && !perms.includes("servicios")) {
+        sendError(response, 403, "No tienes permiso para acceder a la gestión de servicios.");
+        return true;
+      }
+      if (url.pathname.startsWith("/api/gyms") && !perms.includes("gimnasios")) {
+        sendError(response, 403, "No tienes permiso para acceder a la gestión de sedes.");
+        return true;
+      }
+      if (url.pathname.startsWith("/api/finance/cash") && !perms.includes("caja.html")) {
+        sendError(response, 403, "No tienes permiso para acceder a la gestión de caja.");
+        return true;
+      }
+      if (url.pathname.startsWith("/api/finance/inventory") && !perms.includes("productos.html") && !perms.includes("tienda.html")) {
+        sendError(response, 403, "No tienes permiso para acceder al catálogo o inventario.");
+        return true;
+      }
+    }
     if (identity.role === "CLIENT") {
       const isMeOrLogout = ["/api/client-calendar", "/api/client-slots", "/api/recoveries"].includes(url.pathname) || url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
       if (!isMeOrLogout) {

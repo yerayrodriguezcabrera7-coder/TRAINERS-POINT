@@ -32,6 +32,13 @@
     CLIENT: { bg: '#f3e5f5', text: '#7b1fa2' },
   };
 
+  const roleDefaults = {
+    ADMIN: PAGES.map(p => p.key),
+    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+    TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+    CLIENT: ['mis-reservas.html', 'configuracion.html'],
+  };
+
   let manageData = null;
   let searchQuery = '';
   let toastTimer = null;
@@ -97,6 +104,7 @@
       card.dataset.userId = user.id;
 
       const currentPerms = Array.isArray(user.pagePermissions) ? user.pagePermissions : null;
+      const rolePages = roleDefaults[user.role] || [];
 
       card.innerHTML = `
         <div class="perms-user-header" role="button" tabindex="0" aria-expanded="false">
@@ -111,22 +119,31 @@
         </div>
         <div class="perms-panel" role="region">
           ${isAdmin ? '<div class="admin-warning">Los administradores siempre tienen acceso completo a todas las páginas. No se pueden restringir.</div>' : `
+          <div class="perms-legend">
+            <span class="legend-indicator"></span>
+            <span>Borde naranja y etiqueta <strong>Rol</strong> indican las páginas que vienen por defecto con el rol de <em>${esc(roleLabel)}</em>.</span>
+          </div>
           <p class="perms-info">
-            ${currentPerms === null ? 'Este usuario usa los <strong>permisos predeterminados de su rol</strong>. Activa permisos personalizados marcando páginas específicas.' : 'Permisos personalizados activos. Desmarca todas las páginas para volver a los permisos del rol.'}
+            ${currentPerms === null 
+              ? 'Mostrando los <strong>permisos predeterminados de su rol</strong>. Si marcas o desmarcas páginas y guardas, se activará una configuración personalizada para este usuario.' 
+              : '<strong>Permisos personalizados activos</strong>. Puedes modificar las casillas y guardar, o pulsar "Restaurar permisos del rol" para que vuelva al estándar.'}
           </p>
           <div class="perms-grid" data-user-id="${esc(user.id)}">
             ${PAGES.map(page => {
-              const checked = currentPerms === null ? false : currentPerms.includes(page.key);
-              return `<label class="perms-toggle${checked ? ' is-checked' : ''}">
+              const isDefault = rolePages.includes(page.key);
+              const checked = currentPerms === null ? isDefault : currentPerms.includes(page.key);
+              return `<label class="perms-toggle${checked ? ' is-checked' : ''}${isDefault ? ' is-role-default' : ''}">
                 <input type="checkbox" data-page-key="${esc(page.key)}" ${checked ? 'checked' : ''}>
                 <span>${esc(page.label)}</span>
+                ${isDefault ? '<span class="role-default-tag" title="Página incluida en el rol base">Rol</span>' : ''}
               </label>`;
             }).join('')}
           </div>
           <div class="perms-actions">
             <button type="button" class="perms-select-all" data-action="all">Marcar todas</button>
             <button type="button" class="perms-select-all" data-action="none">Desmarcar todas</button>
-            <button type="button" class="perms-select-all" data-action="role">Restaurar permisos del rol</button>
+            <button type="button" class="perms-select-all" data-action="role">Cargar páginas del rol</button>
+            <button type="button" class="button button-outline button-small perms-reset-role-btn" style="font-size:12px;">Restaurar modo rol</button>
             <button type="button" class="button button-primary button-small perms-save-btn">Guardar permisos</button>
             <span class="perms-status" hidden></span>
           </div>
@@ -166,8 +183,50 @@
           } else if (action === 'none') {
             checkboxes.forEach(cb => { cb.checked = false; cb.closest('.perms-toggle')?.classList.remove('is-checked'); });
           } else if (action === 'role') {
-            checkboxes.forEach(cb => { cb.checked = false; cb.closest('.perms-toggle')?.classList.remove('is-checked'); });
-            // Will save null to restore role-based
+            checkboxes.forEach(cb => {
+              const isDefault = rolePages.includes(cb.dataset.pageKey);
+              cb.checked = isDefault;
+              cb.closest('.perms-toggle')?.classList.toggle('is-checked', isDefault);
+            });
+          }
+        });
+
+        // Botón restaurar modo rol
+        const resetRoleBtn = card.querySelector('.perms-reset-role-btn');
+        resetRoleBtn?.addEventListener('click', async () => {
+          if (!confirm(`¿Restaurar los permisos de ${personName} al estándar de su rol (${roleLabel})? Se eliminarán las excepciones personalizadas.`)) return;
+          resetRoleBtn.disabled = true;
+          const statusEl = card.querySelector('.perms-status');
+          statusEl.hidden = true;
+          try {
+            await api(`manage/users/${encodeURIComponent(user.id)}/permissions`, 'PUT', { pagePermissions: null });
+            const u = manageData.users.find(x => x.id === user.id);
+            if (u) u.pagePermissions = null;
+
+            // Actualizar interfaz
+            const checkboxes = [...card.querySelectorAll('input[type="checkbox"]')];
+            checkboxes.forEach(cb => {
+              const isDefault = rolePages.includes(cb.dataset.pageKey);
+              cb.checked = isDefault;
+              cb.closest('.perms-toggle')?.classList.toggle('is-checked', isDefault);
+            });
+
+            const summaryLabel = card.querySelector('.perms-summary-label');
+            if (summaryLabel) summaryLabel.textContent = 'Según rol';
+            const infoEl = card.querySelector('.perms-info');
+            if (infoEl) infoEl.innerHTML = 'Mostrando los <strong>permisos predeterminados de su rol</strong>. Si marcas o desmarcas páginas y guardas, se activará una configuración personalizada para este usuario.';
+
+            statusEl.textContent = '✓ Restaurado a rol';
+            statusEl.className = 'perms-status';
+            statusEl.hidden = false;
+            setTimeout(() => { statusEl.hidden = true; }, 2500);
+            showToast(`Permisos de ${personName} restablecidos a su rol (${roleLabel}).`);
+          } catch (err) {
+            statusEl.textContent = err.message;
+            statusEl.className = 'perms-status error';
+            statusEl.hidden = false;
+          } finally {
+            resetRoleBtn.disabled = false;
           }
         });
 
@@ -177,7 +236,7 @@
         saveBtn.addEventListener('click', async () => {
           const checkboxes = [...card.querySelectorAll('input[type="checkbox"]')];
           const checked = checkboxes.filter(cb => cb.checked).map(cb => cb.dataset.pageKey);
-          const pagePermissions = checked.length > 0 ? checked : null;
+          const pagePermissions = checked;
 
           saveBtn.disabled = true;
           statusEl.hidden = true;
@@ -188,12 +247,10 @@
             if (u) u.pagePermissions = pagePermissions;
             // Update summary label
             const summaryLabel = card.querySelector('.perms-summary-label');
-            if (summaryLabel) summaryLabel.textContent = pagePermissions === null ? 'Según rol' : pagePermissions.length + ' páginas';
+            if (summaryLabel) summaryLabel.textContent = pagePermissions.length + ' páginas';
             // Update info text
             const infoEl = card.querySelector('.perms-info');
-            if (infoEl) infoEl.innerHTML = pagePermissions === null
-              ? 'Este usuario usa los <strong>permisos predeterminados de su rol</strong>. Activa permisos personalizados marcando páginas específicas.'
-              : 'Permisos personalizados activos. Desmarca todas las páginas para volver a los permisos del rol.';
+            if (infoEl) infoEl.innerHTML = '<strong>Permisos personalizados activos</strong>. Puedes modificar las casillas y guardar, o pulsar "Restaurar permisos del rol" para que vuelva al estándar.';
             statusEl.textContent = '✓ Guardado';
             statusEl.className = 'perms-status';
             statusEl.hidden = false;
@@ -219,6 +276,21 @@
       manageData = await api('manage');
       if (manageData.role !== 'ADMIN') { location.replace('/index.html'); return; }
       renderList();
+
+      // Si viene ?userId=... en la URL, enfocar y abrir ese usuario automáticamente
+      const params = new URLSearchParams(window.location.search);
+      const targetUserId = params.get('userId');
+      if (targetUserId) {
+        const targetCard = document.querySelector(`.perms-user-card[data-user-id="${CSS.escape(targetUserId)}"]`);
+        if (targetCard) {
+          targetCard.classList.add('is-open');
+          targetCard.querySelector('.perms-user-header')?.setAttribute('aria-expanded', 'true');
+          targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetCard.style.outline = '2px solid var(--tp-accent)';
+          targetCard.style.transition = 'outline 0.3s ease';
+          setTimeout(() => { targetCard.style.outline = 'none'; }, 2000);
+        }
+      }
     } catch (err) {
       $('perms-list').innerHTML = `<p class="list-message error">${esc(err.message)}</p>`;
     }

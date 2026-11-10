@@ -76,6 +76,11 @@ export function server(
         }
         const publicRoute = path.startsWith("/api/public/");
         let identity: Identity = { id: "bootstrap", name: "Administrador local", role: "ADMIN", employeeId: null, clientId: null, mustChangePassword: false };
+        const hasPage = (pageKey: string): boolean => {
+          if (identity.role === "ADMIN") return true;
+          if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
+          return identity.pagePermissions.includes(pageKey);
+        };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -86,13 +91,6 @@ export function server(
             !(await access.needsSetup(gym))
           )
             identity = await access.identify(gym,bearer);
-
-          // Helper: check page-level permissions (only restricts when custom pagePermissions are set)
-          const hasPage = (pageKey: string): boolean => {
-            if (identity.role === "ADMIN") return true;
-            if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
-            return identity.pagePermissions.includes(pageKey);
-          };
 
           const admin = identity.role === "ADMIN";
           const reception = identity.role === "RECEPTION";
@@ -204,10 +202,10 @@ export function server(
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
-            if (management[1] === "users" && !admin) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
-            if (management[1] === "services" && !admin) throw new ApiError(403,"Solo administración puede modificar servicios.");
-            if (management[1] === "employees" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
-            if (management[1] === "clients" && !admin && !reception) throw new ApiError(403,"No tienes permiso para modificar clientes.");
+            if (management[1] === "users" && (!admin || !hasPage("usuarios"))) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
+            if (management[1] === "services" && (!admin || !hasPage("servicios"))) throw new ApiError(403,"Solo administración puede modificar servicios.");
+            if (management[1] === "employees" && (!admin && !reception || !hasPage("profesionales"))) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "clients" && (!admin && !reception || !hasPage("clientes"))) throw new ApiError(403,"No tienes permiso para modificar clientes.");
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
@@ -308,6 +306,7 @@ export function server(
           return;
         }
         if (req.method === "GET" && path === "/api/clients") {
+          if (!hasPage("clientes")) throw new ApiError(403, "No tienes permiso para consultar clientes.");
           const s = await store.state(gym);
           const [clientDebts, clientPackageAlertsMap] = await Promise.all([
             store.clientsDb ? new Inventory(store.clientsDb).debtSummary(gym) : {},
