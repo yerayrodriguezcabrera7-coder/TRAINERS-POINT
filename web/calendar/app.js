@@ -11,7 +11,8 @@ const dateFormats = new Map();
 const prettyDate = (key, options) => { const id=JSON.stringify(options); if(!dateFormats.has(id))dateFormats.set(id,new Intl.DateTimeFormat('es-ES',options)); return dateFormats.get(id).format(C.parseDate(key)); };
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', room: 'all', center:'all', editing: null };
+const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', room: 'all', editing: null };
+const currentGymId = () => localStorage.getItem('calendar-selected-gym') || data?.gymId || (data?.centers || [])[0]?.id || 'local';
 let storageWritable = true;
 let toastTimer;
 
@@ -152,7 +153,8 @@ function visibleDates() {
 }
 function visibleBookings() {
   const dates = new Set(visibleDates());
-  return data.bookings.filter(b => dates.has(b.date) && (state.center==='all'||b.centerId===state.center) && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service) && (state.room === 'all' || b.roomId === state.room));
+  const activeGym = currentGymId();
+  return data.bookings.filter(b => dates.has(b.date) && (!b.centerId || b.centerId === activeGym || activeGym === 'local') && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service) && (state.room === 'all' || b.roomId === state.room));
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
@@ -160,11 +162,9 @@ function setupSelects() {
   fillSelect('service-filter', data.services.filter(s => s.active !== false), '<option value="all">Todos los servicios</option>');
   fillSelect('room-filter', data.rooms, '<option value="all">Todos los espacios</option>');
   fillSelect('booking-employee', data.employees.filter(e => e.active !== false),serverMode?'<option value="">Sin asignar</option>':'');
-  fillSelect('center-filter',data.centers||[], '<option value="all">Todos los centros</option>');
-  fillSelect('booking-center',data.centers||[{id:'local',name:'Centro actual'}]);
   fillSelect('booking-service', data.services.filter(s => s.active !== false));
   fillSelect('booking-room', data.rooms);
-  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room'],['center-filter','center']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
+  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
   if (currentUser?.role === 'TRAINER') {
     state.employee = currentUser.employeeId;
     const empFilter = $('employee-filter');
@@ -282,7 +282,7 @@ function render(updatePeriodTitle = false) {
   $('stat-pending').textContent=bookings.filter(b=>b.status==='pending').length;
   $('stat-team').textContent=employees.filter(e=>e.id!=='__unassigned').length;
   $('result-count').textContent=bookings.length+' reservas';
-  $('clear-filters').hidden=['employee','service','room','center'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
+  $('clear-filters').hidden=['employee','service','room'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
   document.querySelectorAll('[data-view]').forEach(button => {
@@ -346,7 +346,6 @@ function showBooking(id, date = state.date, minute, employeeId) {
   fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
   fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId),serverMode?'<option value="">Sin asignar</option>':'');
-  fillSelect('booking-center',data.centers||[{id:'local',name:'Centro actual'}]);
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const start = minute ?? C.minutes(hours.open);
@@ -356,9 +355,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const values = b || {clientId:availableClients()[0]?.id || 'new',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
   if(employeeId==='__unassigned')$('booking-employee').value='';
-  $('booking-center').value=b?.centerId||data.gymId||(data.centers||[])[0]?.id||'local';
-  $('booking-center-info').textContent=b?.centerAddress||'';
-  $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)} · ${escapeHTML(h.previous.centerName||'')}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
+  $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
   syncClientPicker();
   loadClientPackages(b?.packageId||null);
   updateDebtDetail();
@@ -385,14 +382,14 @@ function showBooking(id, date = state.date, minute, employeeId) {
 let slotsRequest=0;
 async function loadAvailableSlots(){
  if(!serverMode)return;
- const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,roomId:$('booking-room').value,centerId:$('booking-center').value};
+ const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,roomId:$('booking-room').value,centerId:currentGymId()};
  const select=$('booking-available-slot'),request=++slotsRequest;
  if(!query.employeeId||!C.validDate(query.date)){select.innerHTML='<option value="">Selecciona trabajador, servicio y fecha</option>';return;}
  if(state.editing)query.excludeId=state.editing;
  try{const slots=await api('slots?'+new URLSearchParams(query));if(request!==slotsRequest)return;const list=Array.isArray(slots)?slots:[];select.innerHTML='<option value="">'+(list.length?'Elige un horario libre ('+list.length+' opciones)':'No hay horarios libres con estos filtros')+'</option>'+list.map(s=>`<option value="${escapeHTML(s.start)}">${escapeHTML(s.start)} – ${escapeHTML(s.end)}</option>`).join('');}catch(e){if(request===slotsRequest)select.innerHTML='<option value="">No se pudo consultar la disponibilidad. Se comprobará al guardar.</option>';}
 }
 $('booking-available-slot').onchange=()=>{if(!$('booking-available-slot').value)return;$('booking-start').value=$('booking-available-slot').value;$('booking-start').dispatchEvent(new Event('change'));};
-$('booking-room').addEventListener('change',loadAvailableSlots);$('booking-center').addEventListener('change',loadAvailableSlots);
+$('booking-room').addEventListener('change',loadAvailableSlots);
 async function loadClientPackages(selected=null){
   if(!serverMode||!data.packagesEnabled){$('booking-package-panel').hidden=true;return;}
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
@@ -447,7 +444,7 @@ $('booking-form').addEventListener('submit', async event => {
   const clientId = $('booking-client').value;
   if(packageBusy){formError('booking-error','Espera a que termine la consulta de bonos del cliente.');return;}
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
-  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:$('booking-center').value,serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
+  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
   if(serverMode) {
     if(state.saving)return;
     state.saving=true;
@@ -515,7 +512,6 @@ $('booking-service').addEventListener('change', () => {
   }
 });
 $('booking-employee').addEventListener('change',updateHoursHint);
-$('booking-center').addEventListener('change',()=>{const c=(data.centers||[]).find(c=>c.id===$('booking-center').value);$('booking-center-info').textContent=[c?.address,c?.city,c?.province].filter(Boolean).join(', ');});
 $('reschedule-booking').onclick=async()=>{
   if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
   try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
@@ -590,8 +586,8 @@ $('schedule-form').addEventListener('submit',async event => {
 
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',() => $(button.dataset.close).close()));
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => {state.view = button.dataset.view;render(true);}));
-for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room'],['center-filter','center']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
-$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service','room','center']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
+for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
+$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service','room']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
 $('new-booking').addEventListener('click',() => showBooking(null));
 $('today').addEventListener('click',() => {state.date=todayKey();render(true);});
 $('jump-date').addEventListener('change',event => {if(C.validDate(event.target.value)){state.date=event.target.value;render(true);}});
