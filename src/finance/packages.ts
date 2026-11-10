@@ -28,8 +28,8 @@ export class Packages {
     const v = input.parse(raw);
     const fingerprint = createHash('sha256').update(JSON.stringify({ clientId, ...v })).digest('hex');
     return this.transaction(gym, async (tx) => {
-      if (!await tx.client.findFirst({ where: { id: clientId, gymId: gym } }))
-        throw new ApiError(404, 'Cliente desconocido en este centro.');
+      if (!await tx.client.findUnique({ where: { id: clientId } }))
+        throw new ApiError(404, 'No se encontró el cliente.');
       if (v.requestKey) {
         const old = await tx.clientServicePackage.findUnique({ where: { requestKey: v.requestKey } });
         if (old) {
@@ -51,9 +51,9 @@ export class Packages {
   }
   async billing(gym: string, id: string, actor: string) {
     return this.transaction(gym, async (tx) => {
-      const pkg = await tx.clientServicePackage.findFirst({ where: { id, client: { gymId: gym } } });
+      const pkg = await tx.clientServicePackage.findUnique({ where: { id } });
       if (!pkg)
-        throw new ApiError(404, 'Bono desconocido en este centro.');
+        throw new ApiError(404, 'Bono no encontrado.');
       if (!pkg.saleId && !['PENDIENTE', 'FALLIDO'].includes(pkg.paymentStatus))
         throw new ApiError(409, 'Este bono no tiene un pago pendiente.');
       return this.link(tx, gym, pkg, actor, true);

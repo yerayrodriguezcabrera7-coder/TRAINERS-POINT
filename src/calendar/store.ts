@@ -63,7 +63,6 @@ export class Store {
     const externalGym = gyms.find(item => item.id === row.name || slug(item.name) === slug(String(row.name)));
     if (!externalGym) return config;
     const clientsQuery = this.clientsDb.client.findMany({
-      where: { gymId: externalGym.id },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
@@ -98,8 +97,8 @@ export class Store {
     if (services.length) {
       const saved = config.services;
       const savedById = new Map(saved.map(service => [service.id, service]));
-      const serviceIds = new Set(services.map(service => service.id));
-      config.services = services.map(service => ({
+      const defaultPalette = ["#ff7f0a", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#f59e0b", "#06b6d4", "#6366f1"];
+      config.services = services.map((service, index) => ({
         ...savedById.get(service.id),
         id: service.id,
         name: service.name,
@@ -114,8 +113,8 @@ export class Store {
         validityWeeks: service.validityWeeks,
         recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
         conditions: service.conditions,
+        color: savedById.get(service.id)?.color || defaultPalette[index % defaultPalette.length],
       }));
-      config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
     const allCenters = await this.centers();
     config.centers = allCenters;
@@ -262,8 +261,8 @@ export class Store {
       if(b.packageId)throw new ApiError(400,"Selecciona un cliente y servicio del catálogo para utilizar un bono.");
       return;
     }
-    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid AND c."gymId"=$3::uuid',[b.clientId,b.serviceId,gym])).rowCount;
-    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo de este centro.");
+    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid',[b.clientId,b.serviceId])).rowCount;
+    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo.");
     if(b.packageId&&b.recoveryId)throw new ApiError(400,"Selecciona un bono o una recuperación, sin utilizar ambos para la misma sesión.");
     // Keep the lock order: calendar centre, finance centre, package/booking rows.
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[gym]);
@@ -717,5 +716,59 @@ export class Store {
     } finally {
       db.release();
     }
+  }
+
+  async updateEmployeeShift(gym: string, employeeId: string, dateStr: string, periods: Array<{ open: string; close: string }> | null) {
+    return this.transaction(gym, async (db, c) => {
+      const employee = c.employees.find(e => e.id === employeeId);
+      if (!employee) throw new ApiError(404, "Empleado no encontrado.");
+      employee.shifts = employee.shifts || [];
+      const existingIdx = employee.shifts.findIndex(s => s.date === dateStr);
+      if (periods === null) {
+        if (existingIdx >= 0) employee.shifts.splice(existingIdx, 1);
+      } else {
+        const sorted = [...periods].sort((a,b) => a.open.localeCompare(b.open));
+        if (existingIdx >= 0) employee.shifts[existingIdx].periods = sorted;
+        else employee.shifts.push({ date: dateStr, periods: sorted });
+      }
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, employeeId, date: dateStr, periods };
+    });
+  }
+
+  async copyWeekShifts(gym: string, fromMonday: string, toMonday: string) {
+    return this.transaction(gym, async (db, c) => {
+      const fromDates: string[] = [];
+      const toDates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        fromDates.push(DateTime.fromISO(fromMonday).plus({ days: i }).toISODate()!);
+        toDates.push(DateTime.fromISO(toMonday).plus({ days: i }).toISODate()!);
+      }
+      for (const employee of c.employees) {
+        employee.shifts = employee.shifts || [];
+        for (let i = 0; i < 7; i++) {
+          const srcDate = fromDates[i];
+          const tgtDate = toDates[i];
+          const srcShift = employee.shifts.find(s => s.date === srcDate);
+          const tgtIdx = employee.shifts.findIndex(s => s.date === tgtDate);
+
+          if (srcShift && srcShift.periods && srcShift.periods.length > 0) {
+            const periodsToCopy = srcShift.periods.map(p => ({ open: p.open, close: p.close }));
+            if (tgtIdx >= 0) {
+              employee.shifts[tgtIdx].periods = periodsToCopy;
+            } else {
+              employee.shifts.push({ date: tgtDate, periods: periodsToCopy });
+            }
+          } else {
+            // If employee had no shift or had day off on srcDate, remove any shift on target date
+            if (tgtIdx >= 0) {
+              employee.shifts.splice(tgtIdx, 1);
+            }
+          }
+        }
+      }
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, fromMonday, toMonday };
+    });
   }
 }
