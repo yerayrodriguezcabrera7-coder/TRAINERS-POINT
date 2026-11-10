@@ -121,10 +121,11 @@
     const grid = $('products-grid');
 
     const filtered = products.filter(p => {
-      if (!p.isActive) return false;
       const matchesQuery = (p.name + ' ' + (p.description || '')).toLowerCase().includes(query);
       if (!matchesQuery) return false;
 
+      if (selectedCategory === 'anteriores') return !p.isActive;
+      if (!p.isActive) return false;
       if (selectedCategory === 'all') return true;
       const cat = getCategoryForProduct(p);
       return cat === selectedCategory;
@@ -136,12 +137,15 @@
     }
 
     grid.innerHTML = filtered.map(p => {
+      const isAnterior = !p.isActive;
       const stock = Number(p.stock);
       const isOut = stock <= 0;
       const isLow = stock > 0 && stock <= 3;
       const inCart = cart.get(p.id) || 0;
 
-      const stockBadge = isOut
+      const stockBadge = isAnterior
+        ? '<span class="tpv-product-stock low" style="background:#f3f4f6;color:#556066;border-color:#d1d5db">Descatalogado</span>'
+        : isOut
         ? '<span class="tpv-product-stock zero">Agotado</span>'
         : isLow
         ? `<span class="tpv-product-stock low">¡Quedan ${stock}!</span>`
@@ -154,10 +158,10 @@
       const pendingRestock = restockRequests.find(r => r.productId === p.id && r.status === 'PENDIENTE');
       const restockActionBadge = pendingRestock
         ? `<span class="tpv-badge-restock-pending" data-pid="${esc(p.id)}" title="Anotado para pedir: ${pendingRestock.quantity} uds">📋 Falta (${pendingRestock.quantity} uds)</span>`
-        : `<button class="tpv-card-restock-btn" type="button" data-restock-pid="${esc(p.id)}" title="Anotar que falta para pedir">⚠️ Falta para pedir</button>`;
+        : `<button class="tpv-card-restock-btn" type="button" data-restock-pid="${esc(p.id)}" title="${isAnterior ? 'Pedir producto anterior para reponerlo' : 'Anotar que falta para pedir'}">${isAnterior ? '📦 Volver a pedir' : '⚠️ Falta para pedir'}</button>`;
 
       return `
-        <article class="tpv-product-card ${isOut ? 'out-of-stock' : ''}" data-product-id="${esc(p.id)}">
+        <article class="tpv-product-card ${isOut || isAnterior ? 'out-of-stock' : ''}" data-product-id="${esc(p.id)}">
           ${inCartBadge}
           <div>
             <div class="tpv-product-title">${esc(p.name)}</div>
@@ -195,7 +199,12 @@
         if (e.target.closest('.tpv-card-restock-btn') || e.target.closest('.tpv-badge-restock-pending')) return;
         const pId = card.dataset.productId;
         const p = products.find(item => item.id === pId);
-        if (!p || p.stock <= 0) return;
+        if (!p) return;
+        if (!p.isActive) {
+          openRestockModal(pId);
+          return;
+        }
+        if (p.stock <= 0) return;
         addToCart(pId, 1);
       };
     });
@@ -858,23 +867,86 @@
   };
 
   // --- 13. MÓDULO: FALTA PARA PEDIR (REPOSICIÓN Y PEDIDOS DESDE RECEPCIÓN) ---
-  function openRestockModal(preselectedProductId = '') {
+  let restockSelectedSource = 'all';
+
+  function populateRestockSelect(preselectedProductId = '', filterSource = 'all') {
     const sel = $('restock-product-select');
-    sel.innerHTML = `
-      <option value="">-- Seleccionar producto del catálogo --</option>
-      <option value="__custom__">➕ Otro artículo no registrado en catálogo</option>
-      ${products.map(p => `<option value="${esc(p.id)}" ${p.id === preselectedProductId ? 'selected' : ''}>${esc(p.name)} (Stock actual: ${p.stock})</option>`).join('')}
+    const activeProds = products.filter(p => p.isActive);
+    const inactiveProds = products.filter(p => !p.isActive);
+
+    let html = '<option value="">-- Seleccionar producto --</option>';
+
+    if (filterSource === 'all' || filterSource === 'active') {
+      if (activeProds.length > 0) {
+        html += `<optgroup id="optgroup-active-products" label="🟢 Productos que ya existen en tienda (${activeProds.length})">`;
+        html += activeProds.map(p => `
+          <option value="${esc(p.id)}" data-inactive="false" ${p.id === preselectedProductId ? 'selected' : ''}>
+            ${esc(p.name)} — ${eur(p.unitPrice)} (Stock actual: ${p.stock} uds)
+          </option>
+        `).join('');
+        html += '</optgroup>';
+      }
+    }
+
+    if (filterSource === 'all' || filterSource === 'inactive') {
+      if (inactiveProds.length > 0) {
+        html += `<optgroup id="optgroup-inactive-products" label="📦 Productos que han existido (anteriores / descatalogados) (${inactiveProds.length})">`;
+        html += inactiveProds.map(p => `
+          <option value="${esc(p.id)}" data-inactive="true" ${p.id === preselectedProductId ? 'selected' : ''}>
+            ${esc(p.name)} — [Anterior / Descatalogado] (Último precio: ${eur(p.unitPrice)})
+          </option>
+        `).join('');
+        html += '</optgroup>';
+      } else if (filterSource === 'inactive') {
+        html += '<option disabled>No hay productos descatalogados o anteriores registrados en el centro</option>';
+      }
+    }
+
+    html += `
+      <optgroup label="➕ Otro artículo">
+        <option value="__custom__" ${filterSource === 'custom' ? 'selected' : ''}>➕ Escribir manualmente otro artículo no registrado</option>
+      </optgroup>
     `;
+
+    sel.innerHTML = html;
 
     if (preselectedProductId) {
       sel.value = preselectedProductId;
-      $('restock-custom-wrap').hidden = true;
-      $('restock-custom-name').required = false;
-    } else {
-      sel.value = '';
-      $('restock-custom-wrap').hidden = true;
-      $('restock-custom-name').required = false;
+    } else if (filterSource === 'custom') {
+      sel.value = '__custom__';
     }
+
+    updateRestockSelectState();
+  }
+
+  function updateRestockSelectState() {
+    const sel = $('restock-product-select');
+    const isCustom = sel.value === '__custom__';
+    $('restock-custom-wrap').hidden = !isCustom;
+    $('restock-custom-name').required = isCustom;
+
+    const selectedOpt = sel.selectedOptions?.[0];
+    const isInactive = selectedOpt?.dataset?.inactive === 'true';
+    const notice = $('restock-inactive-notice');
+    if (notice) notice.style.display = isInactive ? 'block' : 'none';
+
+    if (isCustom) $('restock-custom-name').focus();
+  }
+
+  function openRestockModal(preselectedProductId = '') {
+    restockSelectedSource = 'all';
+
+    // If preselected product is inactive, highlight inactive source
+    const preProd = preselectedProductId ? products.find(p => p.id === preselectedProductId) : null;
+    if (preProd && !preProd.isActive) {
+      restockSelectedSource = 'inactive';
+    }
+
+    $('restock-source-pills')?.querySelectorAll('.tpv-cat-pill').forEach(pill => {
+      pill.classList.toggle('active', pill.dataset.source === restockSelectedSource);
+    });
+
+    populateRestockSelect(preselectedProductId, restockSelectedSource);
 
     $('restock-custom-name').value = '';
     $('restock-quantity').value = '1';
@@ -883,11 +955,18 @@
     $('restock-dialog').showModal();
   }
 
+  $('restock-source-pills')?.querySelectorAll('.tpv-cat-pill').forEach(pill => {
+    pill.onclick = () => {
+      $('restock-source-pills').querySelectorAll('.tpv-cat-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      restockSelectedSource = pill.dataset.source;
+      const currentSelectedId = $('restock-product-select').value;
+      populateRestockSelect(currentSelectedId !== '__custom__' ? currentSelectedId : '', restockSelectedSource);
+    };
+  });
+
   $('restock-product-select').onchange = () => {
-    const isCustom = $('restock-product-select').value === '__custom__';
-    $('restock-custom-wrap').hidden = !isCustom;
-    $('restock-custom-name').required = isCustom;
-    if (isCustom) $('restock-custom-name').focus();
+    updateRestockSelectState();
   };
 
   $('btn-quick-restock').onclick = () => openRestockModal();
@@ -949,16 +1028,32 @@
 
     tbody.innerHTML = filtered.map(r => {
       const isLinked = !!r.productId;
-      const prodName = isLinked
-        ? `<strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#6b767d">(${eur(r.product?.unitPrice || 0)})</span>`
-        : `<strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#b25e00;font-weight:600">(Artículo no en catálogo)</span>`;
-
+      let prodName = '';
       let stockDisplay = '—';
+
       if (isLinked) {
-        const currentStock = r.product ? Number(r.product.stock) : 0;
-        stockDisplay = currentStock <= 0
+        const prod = r.product;
+        const isCurrent = prod && prod.isActive;
+        const badgeTag = isCurrent
+          ? '<span style="font-size:10px;font-weight:700;color:#1e6338;background:#ebf7ee;border:1px solid #bce6c6;padding:1px 5px;border-radius:4px">Existe en tienda</span>'
+          : '<span style="font-size:10px;font-weight:700;color:#49545c;background:#f0f2f3;border:1px solid #d2d8dc;padding:1px 5px;border-radius:4px">Existió antes (Descatalogado)</span>';
+
+        prodName = `
+          <div><strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#6b767d">(${eur(prod?.unitPrice || 0)})</span></div>
+          <div style="margin-top:2px">${badgeTag}</div>
+        `;
+
+        const currentStock = prod ? Number(prod.stock) : 0;
+        stockDisplay = !isCurrent
+          ? '<span style="color:#6b7280;font-size:12px">0 (Inactivo)</span>'
+          : currentStock <= 0
           ? '<span style="color:#af241d;font-weight:700">Agotado (0)</span>'
           : `<span style="font-weight:600">${currentStock} uds</span>`;
+      } else {
+        prodName = `
+          <div><strong>${esc(r.productName)}</strong></div>
+          <div style="margin-top:2px"><span style="font-size:10px;font-weight:700;color:#9c4c00;background:#fef5ea;border:1px solid #f9dab1;padding:1px 5px;border-radius:4px">Artículo nuevo</span></div>
+        `;
       }
 
       let statusBadge = '';
@@ -1038,7 +1133,12 @@
         const item = restockRequests.find(r => r.id === btn.dataset.id);
         let addToStock = false;
         if (item && item.productId) {
-          addToStock = window.confirm(`¿El pedido de "${item.productName}" ha llegado? Pulsa Aceptar para sumar ${item.quantity} uds al stock de la tienda, o Cancelar para solo marcarlo recibido.`);
+          const prod = products.find(p => p.id === item.productId);
+          const wasInactive = prod && !prod.isActive;
+          const msg = wasInactive
+            ? `¿El pedido de "${item.productName}" ha llegado? Pulsa Aceptar para sumar ${item.quantity} uds y REACTIVAR este producto en la tienda, o Cancelar para solo marcarlo recibido.`
+            : `¿El pedido de "${item.productName}" ha llegado? Pulsa Aceptar para sumar ${item.quantity} uds al stock de la tienda, o Cancelar para solo marcarlo recibido.`;
+          addToStock = window.confirm(msg);
         }
         try {
           await api(`inventory/restock/${btn.dataset.id}`, 'PATCH', { status: 'RECIBIDO', addToStock });

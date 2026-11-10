@@ -532,8 +532,31 @@ test('Reposición en tienda: recepción puede anotar qué falta para pedir, list
   assert.throws(() => inventoryPermission({ role: 'TRAINER' }, 'restock'), /permiso/);
   assert.throws(() => inventoryPermission({ role: 'CLIENT' }, 'restock'), /permiso/);
 
+  // Probar con un producto que ha existido (descatalogado / inactivo)
+  const pastProd = await inventory.saveProduct(gym, { name: 'Camiseta Tirantes Vintage', price: 15, stock: 0 });
+  await inventory.removeProduct(gym, pastProd.id); // Pasa a isActive: false
+  assert.equal((await inventory.products(gym)).find(x => x.id === pastProd.id).isActive, false);
+
+  // Recepción pide el producto que ha existido
+  const reqPast = await inventory.saveRestockRequest(gym, { id: 'usr-recep', name: 'Laura Recepción' }, {
+    productId: pastProd.id,
+    quantity: 10,
+    notes: 'Volvemos a pedir las camisetas de tirantes'
+  });
+  assert.equal(reqPast.productId, pastProd.id);
+  assert.equal(reqPast.productName, 'Camiseta Tirantes Vintage');
+
+  // Al recibir el pedido y añadir a stock, se reactiva automáticamente
+  await inventory.updateRestockRequest(gym, { id: 'usr-recep' }, reqPast.id, {
+    status: 'RECIBIDO',
+    addToStock: true
+  });
+  const reactivated = (await inventory.products(gym)).find(x => x.id === pastProd.id);
+  assert.equal(reactivated.isActive, true, 'El producto que ha existido debe reactivarse al llegar el stock');
+  assert.equal(reactivated.stock, 10);
+
   // Eliminar la segunda solicitud
   await inventory.removeRestockRequest(gym, req2.id);
   const remaining = await inventory.restockRequests(gym, 'ALL');
-  assert.equal(remaining.length, 1);
+  assert.equal(remaining.length, 2);
 });

@@ -87,6 +87,7 @@
               <button class="tpv-cat-pill" data-cat="bebidas" type="button">Bebidas</button>
               <button class="tpv-cat-pill" data-cat="suplementos" type="button">Suplementos</button>
               <button class="tpv-cat-pill" data-cat="snacks" type="button">Snacks y Barritas</button>
+              <button class="tpv-cat-pill" data-cat="anteriores" type="button" title="Ver productos que han existido en la tienda para pedir reposición">📦 Han existido (Anteriores)</button>
             </div>
 
             <!-- Grid de productos -->
@@ -522,12 +523,33 @@
         <button type="button" data-close="restock-dialog" aria-label="Cerrar">×</button>
       </header>
       <div class="form-grid">
-        <label class="full">Producto de la tienda
+        <div class="full" style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-weight:600;font-size:13px">Origen del producto a pedir:</label>
+          <div class="tpv-category-pills" id="restock-source-pills" role="toolbar" style="margin:0">
+            <button class="tpv-cat-pill active" type="button" data-source="all">Todos</button>
+            <button class="tpv-cat-pill" type="button" data-source="active">🟢 Que ya existen</button>
+            <button class="tpv-cat-pill" type="button" data-source="inactive">📦 Que han existido (anteriores)</button>
+            <button class="tpv-cat-pill" type="button" data-source="custom">➕ Artículo nuevo</button>
+          </div>
+        </div>
+
+        <label class="full" id="restock-select-wrap">Producto a pedir
           <select id="restock-product-select" required="">
-            <option value="">-- Seleccionar producto del catálogo --</option>
-            <option value="__custom__">➕ Otro artículo no registrado en catálogo</option>
+            <option value="">-- Seleccionar producto --</option>
+            <optgroup id="optgroup-active-products" label="🟢 Productos que ya existen en tienda">
+            </optgroup>
+            <optgroup id="optgroup-inactive-products" label="📦 Productos que han existido (anteriores / descatalogados)">
+            </optgroup>
+            <optgroup label="➕ Otro artículo">
+              <option value="__custom__">➕ Otro artículo no registrado</option>
+            </optgroup>
           </select>
         </label>
+
+        <div id="restock-inactive-notice" class="full" style="display:none;background:#f3f7fa;border:1px solid #c8d9e6;color:#1c4b6e;padding:8px 12px;border-radius:6px;font-size:12px">
+          📦 <strong>Producto que existió anteriormente:</strong> Este artículo está descatalogado. Al marcarlo como recibido al llegar el pedido, se volverá a reactivar automáticamente en la tienda.
+        </div>
+
         <label id="restock-custom-wrap" class="full" hidden="">Nombre del artículo o producto que falta
           <input id="restock-custom-name" maxlength="200" placeholder="Ej. Agua con gas 500ml, Barritas de avena...">
         </label>

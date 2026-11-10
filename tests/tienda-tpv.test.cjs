@@ -217,7 +217,8 @@ test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que
 
   const mockProducts = [
     { id: 'p1', name: 'Agua mineral 500ml', description: 'Bebida fría', unitPrice: 1.50, stock: 20, isActive: true },
-    { id: 'p2', name: 'Batido Whey Vainilla', description: 'Suplemento proteico', unitPrice: 3.50, stock: 0, isActive: true } // Agotado
+    { id: 'p2', name: 'Batido Whey Vainilla', description: 'Suplemento proteico', unitPrice: 3.50, stock: 0, isActive: true }, // Agotado
+    { id: 'p3', name: 'Toalla microfibra azul', description: 'Accesorio entrenamiento', unitPrice: 12.00, stock: 0, isActive: false } // Producto que ha existido (descatalogado)
   ];
 
   let restockList = [
@@ -339,6 +340,41 @@ test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que
 
   await new Promise(r => setTimeout(r, 60));
   assert.equal(lastUpdatedStatus, 'RECIBIDO', 'El estado debe haber cambiado a RECIBIDO');
+
+  // 7. Comprobar opción de productos que ya existen o han existido
+  // Volvemos a mostrador de venta
+  doc.getElementById('tab-pos').click();
+
+  // Abrir modal de reposición desde la cabecera
+  doc.getElementById('btn-quick-restock').click();
+  const restockSelect = doc.getElementById('restock-product-select');
+  assert.ok(restockSelect.innerHTML.includes('Productos que ya existen en tienda'), 'Debe incluir grupo de productos que ya existen');
+  assert.ok(restockSelect.innerHTML.includes('Productos que han existido'), 'Debe incluir grupo de productos que han existido');
+  assert.ok(restockSelect.innerHTML.includes('Toalla microfibra azul'), 'Debe permitir seleccionar el producto que ha existido (p3)');
+
+  // Filtrar origen: pulsar píldora "📦 Que han existido"
+  const inactivePill = doc.querySelector('#restock-source-pills [data-source="inactive"]');
+  assert.ok(inactivePill, 'Debe tener píldora para filtrar productos que han existido');
+  inactivePill.click();
+  assert.ok(restockSelect.innerHTML.includes('Toalla microfibra azul'));
+  assert.ok(!restockSelect.innerHTML.includes('Agua mineral 500ml'), 'Al filtrar por anteriores no debe listar los activos');
+
+  // Seleccionar producto que ha existido (p3)
+  restockSelect.value = 'p3';
+  restockSelect.dispatchEvent(new w.Event('change'));
+  assert.equal(doc.getElementById('restock-inactive-notice').style.display, 'block', 'Debe mostrar aviso de que es un producto que existió anteriormente');
+
+  // Comprobar también el filtro del catálogo "📦 Han existido (Anteriores)"
+  doc.querySelector('[data-close="restock-dialog"]').click();
+  const catAnteriores = doc.querySelector('#category-pills [data-cat="anteriores"]');
+  assert.ok(catAnteriores, 'El catálogo debe tener píldora para ver productos que han existido');
+  catAnteriores.click();
+
+  const anteriorCards = doc.querySelectorAll('.tpv-product-card');
+  assert.equal(anteriorCards.length, 1, 'Debe listar el producto que ha existido en la tienda');
+  assert.ok(anteriorCards[0].textContent.includes('Toalla microfibra azul'));
+  assert.ok(anteriorCards[0].textContent.includes('Descatalogado'));
+  assert.ok(anteriorCards[0].textContent.includes('Volver a pedir'));
 
   dom.window.close();
 });

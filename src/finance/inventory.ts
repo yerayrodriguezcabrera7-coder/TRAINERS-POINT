@@ -306,6 +306,7 @@ export class Inventory {
             where: { id: existing.productId },
             data: {
               stock: { increment: qtyToAdd },
+              isActive: true,
               revision: { increment: 1 }
             }
           });
