@@ -758,6 +758,13 @@ if ($('repeat-week-btn')) {
     const prevRange = `${prettyDate(prevMonday, {day:'numeric', month:'short'})} al ${prettyDate(prevSunday, {day:'numeric', month:'short'})}`;
     const curRange = `${prettyDate(monday, {day:'numeric', month:'short'})} al ${prettyDate(curSunday, {day:'numeric', month:'short'})}`;
 
+    const prevWeekDates = Array.from({ length: 7 }, (_, i) => C.addDays(prevMonday, i));
+    const prevHasShifts = data.employees.some(e => (e.shifts || []).some(s => prevWeekDates.includes(s.date) && s.periods && s.periods.length > 0));
+    if (!prevHasShifts) {
+      toast('La semana anterior no tiene turnos planificados para copiar.');
+      return;
+    }
+
     if (!confirm(`¿Copiar la planificación de turnos de la semana anterior (${prevRange}) a esta semana (${curRange})?`)) return;
 
     try {

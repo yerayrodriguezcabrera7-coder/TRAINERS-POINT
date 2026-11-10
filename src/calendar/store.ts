@@ -751,19 +751,20 @@ export class Store {
           const srcDate = fromDates[i];
           const tgtDate = toDates[i];
           const srcShift = employee.shifts.find(s => s.date === srcDate);
-          let periodsToCopy: Array<{ open: string; close: string }> = srcShift ? srcShift.periods : [];
-          if (!srcShift && employee.weeklyPeriods && employee.weeklyPeriods[i]?.length) {
-            periodsToCopy = employee.weeklyPeriods[i];
-          } else if (!srcShift && employee.schedule && !employee.schedule[i]?.closed) {
-            periodsToCopy = [{ open: employee.schedule[i].open, close: employee.schedule[i].close }];
-          } else if (!srcShift && c.schedule && !c.schedule[i]?.closed) {
-            periodsToCopy = [{ open: c.schedule[i].open, close: c.schedule[i].close }];
-          }
           const tgtIdx = employee.shifts.findIndex(s => s.date === tgtDate);
-          if (tgtIdx >= 0) {
-            employee.shifts[tgtIdx].periods = [...periodsToCopy];
+
+          if (srcShift && srcShift.periods && srcShift.periods.length > 0) {
+            const periodsToCopy = srcShift.periods.map(p => ({ open: p.open, close: p.close }));
+            if (tgtIdx >= 0) {
+              employee.shifts[tgtIdx].periods = periodsToCopy;
+            } else {
+              employee.shifts.push({ date: tgtDate, periods: periodsToCopy });
+            }
           } else {
-            employee.shifts.push({ date: tgtDate, periods: [...periodsToCopy] });
+            // If employee had no shift or had day off on srcDate, remove any shift on target date
+            if (tgtIdx >= 0) {
+              employee.shifts.splice(tgtIdx, 1);
+            }
           }
         }
       }
