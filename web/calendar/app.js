@@ -145,7 +145,7 @@ function saveData() {
 }
 const COBOSU_ID = '__cobosu';
 function cobosuColumn() {
-  return { id: COBOSU_ID, name: 'Cobosu', color: '#1e3a8a', schedule: data.schedule, isCobosu: true };
+  return { id: COBOSU_ID, name: 'Cobosu', color: '#dc2626', schedule: data.schedule, isCobosu: true };
 }
 const lookupIndexes = new Map();
 function lookup(collection, id) {
@@ -328,10 +328,12 @@ function renderTimeGrid(dates, bookings, employees) {
 
   let html = `<div class="time-grid" style="grid-template-columns:58px repeat(${Math.max(totalGridCols, 1)},minmax(${minWidth}px,1fr))"><div class="corner" style="grid-column:1;grid-row:1 / 3;top:0">HORA</div>`;
 
-  dateLayouts.forEach(d => {
+  dateLayouts.forEach((d, dayIdx) => {
     const today = d.date === todayKey();
     const sunday = isSunday(d.date);
-    html += `<div class="day-heading ${today ? 'today' : ''} ${sunday ? 'is-sunday-parking' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+    const isAlt = dayIdx % 2 === 1;
+    const hasNextDay = dayIdx < dateLayouts.length - 1;
+    html += `<div class="day-heading ${today ? 'today' : ''} ${sunday ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
       <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
       <strong>${C.parseDate(d.date).getDate()}</strong>
       <span>${prettyDate(d.date, { month: 'short' })}</span>
@@ -339,20 +341,23 @@ function renderTimeGrid(dates, bookings, employees) {
     </div>`;
   });
 
-  dateLayouts.forEach(d => {
+  dateLayouts.forEach((d, dayIdx) => {
+    const isAlt = dayIdx % 2 === 1;
+    const hasNextDay = dayIdx < dateLayouts.length - 1;
     if (d.dayEmps.length === 0) {
-      html += `<div class="employee-heading empty-day-heading" style="grid-column:${d.startCol};grid-row:2">
+      html += `<div class="employee-heading empty-day-heading ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" style="grid-column:${d.startCol};grid-row:2">
         ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-pill-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : '<span style="color:var(--muted);font-size:10px;">Sin turnos</span>'}
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
         const isParking = Boolean(employee.isSundayParking);
+        const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
         const periods = isParking ? [{ open: '00:00', close: '23:59' }] : isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
         const shiftText = isParking ? 'Arrastrar a L–S' : isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre'));
         const isOff = !isParking && !periods.length && employee.id !== '__unassigned';
         const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
-        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
           <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
@@ -362,9 +367,11 @@ function renderTimeGrid(dates, bookings, employees) {
 
   html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length: totalHours}, (_, hour) => `<div class="hour-label">${C.timeLabel((startHour + hour) * 60)}</div>`).join('') + '</div>';
 
-  dateLayouts.forEach(d => {
+  dateLayouts.forEach((d, dayIdx) => {
+    const isAlt = dayIdx % 2 === 1;
+    const hasNextDay = dayIdx < dateLayouts.length - 1;
     if (d.dayEmps.length === 0) {
-      html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol};grid-row:3;height:${gridHeight}px">
+      html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" style="grid-column:${d.startCol};grid-row:3;height:${gridHeight}px">
         <div class="empty-day-placeholder">
           <span>Sin turnos planificados</span>
           ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="button secondary small-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : ''}
@@ -374,7 +381,8 @@ function renderTimeGrid(dates, bookings, employees) {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
         const isParking = Boolean(employee.isSundayParking);
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
         const absent = !isCobosu && !isParking && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
         const serviceWorker = isCobosu || isParking || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
@@ -439,9 +447,9 @@ function renderMonth(bookings) {
     const dayBookings = byDay.get(date)||[];
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
-      const color = lookup('services', b.serviceId).color || '#317b9b';
+      const color = b.employeeId === COBOSU_ID ? '#dc2626' : (lookup('services', b.serviceId).color || '#317b9b');
       const isDraggable = canDragBooking(b);
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;

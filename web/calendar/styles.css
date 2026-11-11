@@ -280,22 +280,26 @@
   color: #15803d;
 }
 .employee-heading.is-cobosu {
-  background: #eff6ff;
-  border-bottom: 2px solid #1e3a8a;
+  background: #fef2f2;
+  border-bottom: 2px solid #dc2626;
   flex-direction: column;
   gap: 2px;
   height: 44px;
 }
 .employee-heading.is-cobosu .employee-heading-name {
-  color: #1e3a8a;
+  color: #991b1b;
   font-weight: 700;
 }
 .employee-heading.is-cobosu .employee-shift-tag {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 .time-column.is-cobosu-column {
-  background: #f8fbff;
+  background: #fff5f5;
+}
+.month-event.is-cobosu {
+  background: #fef2f2;
+  color: #7f1d1d;
 }
 .event[draggable="true"],
 .month-event[draggable="true"] {
@@ -449,6 +453,40 @@
 .month-event .booking-dual-missing-badge {
   white-space: normal;
   margin-top: 2px;
+}
+.day-heading {
+  border-top: 3px solid #cbd5e1;
+  background: #ffffff;
+}
+.day-heading.is-day-alt:not(.today):not(.is-sunday-parking) {
+  border-top-color: #94a3b8;
+  background: #f4f7fa;
+}
+.day-heading.today {
+  border-top-color: var(--red);
+  background: #fff9f7;
+}
+.day-heading.is-sunday-parking {
+  border-top-color: #d97706;
+}
+.employee-heading:not(.is-day-end),
+.time-column:not(.is-day-end) {
+  border-right: 1px solid #eef2f5;
+}
+.employee-heading.is-day-alt:not(.is-cobosu):not(.is-sunday-parking) {
+  background: #f8fafc;
+}
+.time-column.is-day-alt:not(.is-today):not(.is-cobosu-column):not(.is-sunday-parking),
+.empty-day-column.is-day-alt:not(.is-today) {
+  background: #fafcfe;
+}
+.day-heading.is-day-end,
+.employee-heading.is-day-end,
+.empty-day-heading.is-day-end,
+.time-column.is-day-end,
+.empty-day-column.is-day-end {
+  border-right: 5px solid #e9eef2;
+  box-shadow: inset -1px 0 0 #d0dae1;
 }
 .dual-buy-box {
   margin-top: 8px;
