@@ -22,6 +22,7 @@ label,
 leaveRequestInputSchema,
 normalize,
 serviceSchema,
+week,
 workerActionSchema
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
@@ -123,11 +124,18 @@ export class Store {
     if (currentCenter?.maxBookingsPerHour != null) {
       config.maxBookingsPerHour = currentCenter.maxBookingsPerHour;
     }
+    const parsedSchedule = currentCenter?.schedule ? week.safeParse(currentCenter.schedule) : null;
+    if (parsedSchedule?.success) {
+      config.schedule = parsedSchedule.data;
+    }
     return config;
   }
   async migrate() {
     await this.pool.query(migration);
     await this.pool.query(accessMigration);
+    if (this.clientsDb) {
+      await this.clientsDb.$executeRawUnsafe('ALTER TABLE "Gym" ADD COLUMN IF NOT EXISTS "schedule" JSONB;').catch(() => {});
+    }
   }
   async seed(gym: string, config: Config) {
     await this.pool.query(
@@ -218,20 +226,41 @@ export class Store {
           city: string | null;
           province: string | null;
           maxBookingsPerHour: number | null;
-        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
-        return rows.map((r) => ({
-          ...r,
-          maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
-        }));
+          schedule: unknown;
+        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour", "schedule" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+        return rows.map((r) => {
+          const parsedSchedule = Array.isArray(r.schedule) ? week.safeParse(r.schedule) : null;
+          return {
+            ...r,
+            maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
+            schedule: parsedSchedule?.success ? parsedSchedule.data : null,
+          };
+        });
       } catch {
-        return this.clientsDb.gym.findMany({
-          where: { isActive: true },
-          select: { id: true, name: true, address: true, city: true, province: true },
-          orderBy: { name: "asc" },
-        }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null })));
+        try {
+          const rows = await this.clientsDb.$queryRaw<Array<{
+            id: string;
+            name: string;
+            address: string | null;
+            city: string | null;
+            province: string | null;
+            maxBookingsPerHour: number | null;
+          }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+          return rows.map((r) => ({
+            ...r,
+            maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
+            schedule: null,
+          }));
+        } catch {
+          return this.clientsDb.gym.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, address: true, city: true, province: true },
+            orderBy: { name: "asc" },
+          }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null, schedule: null })));
+        }
       }
     }
-    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:''}));
+    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null}));
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
@@ -433,6 +462,18 @@ export class Store {
         gym,
         config,
       ]);
+      if (this.clientsDb) {
+        const slug = (value: string) =>
+          value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const gymRow = (await db.query("SELECT id, name FROM calendar.gyms WHERE id=$1", [gym])).rows[0];
+        const gyms = await this.clientsDb.gym.findMany({ where: { isActive: true }, select: { id: true, name: true } });
+        const match = gymRow && gyms.find((item) => item.id === gymRow.name || item.id === gymRow.id || slug(item.name) === slug(String(gymRow.name || gymRow.id)));
+        if (match) {
+          await this.clientsDb.$executeRaw(
+            Prisma.sql`UPDATE "Gym" SET "schedule" = ${JSON.stringify(config.schedule)}::jsonb WHERE "id" = ${match.id}::uuid`,
+          ).catch(() => {});
+        }
+      }
       return config;
     });
   }

@@ -110,6 +110,7 @@ export const configSchema = z
       id: z.string(),
       name: z.string(),
       maxBookingsPerHour: z.number().int().positive().nullable().optional(),
+      schedule: week.nullable().optional(),
       address: z.string().optional().nullable(),
       city: z.string().optional().nullable(),
       province: z.string().optional().nullable(),

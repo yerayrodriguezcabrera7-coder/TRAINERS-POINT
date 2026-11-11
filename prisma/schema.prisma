@@ -241,6 +241,7 @@ model Gym {
   longitude Float?
   radiusMeters Int?    @default(200)
   maxBookingsPerHour Int?
+  schedule  Json?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)

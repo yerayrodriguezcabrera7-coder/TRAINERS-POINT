@@ -245,8 +245,38 @@ function employeesForDate(date, dayBookings, allEmployees) {
   return scheduled;
 }
 
+function gridHourBounds(dates, bookings) {
+  let minMin = Infinity;
+  let maxMin = -Infinity;
+  const openHours = dates.map(date => C.hoursFor(date, data.schedule)).filter(h => !h.closed);
+  const sourceHours = openHours.length ? openHours : (data.schedule || []).filter(h => h && !h.closed);
+  for (const h of sourceHours) {
+    minMin = Math.min(minMin, C.minutes(h.open));
+    maxMin = Math.max(maxMin, C.minutes(h.close));
+  }
+  const visibleDates = new Set(dates);
+  for (const b of bookings) {
+    if (!visibleDates.has(b.date)) continue;
+    minMin = Math.min(minMin, C.minutes(b.start));
+    maxMin = Math.max(maxMin, C.minutes(b.end));
+  }
+  if (!Number.isFinite(minMin) || !Number.isFinite(maxMin) || minMin >= maxMin) {
+    return { startHour: 8, endHour: 21 };
+  }
+  const startHour = Math.max(0, Math.floor(minMin / 60));
+  const endHour = Math.min(24, Math.max(startHour + 1, Math.ceil(maxMin / 60)));
+  return { startHour, endHour };
+}
+
 function renderTimeGrid(dates, bookings, employees) {
   const selected = lookup('services',state.service), duration = selected.duration || 30;
+  const { startHour, endHour } = gridHourBounds(dates, bookings);
+  const totalHours = endHour - startHour;
+  const offsetMin = startHour * 60;
+  const gridHeight = totalHours * 84;
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const showNowLine = nowMin >= offsetMin && nowMin <= endHour * 60;
   const byColumn = new Map();
   for(const booking of bookings){const key=booking.date+'\0'+(booking.employeeId||'__unassigned');if(!byColumn.has(key))byColumn.set(key,[]);byColumn.get(key).push(booking);}
 
@@ -295,11 +325,11 @@ function renderTimeGrid(dates, bookings, employees) {
     }
   });
 
-  html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length:24}, (_, hour) => `<div class="hour-label">${C.timeLabel(hour * 60)}</div>`).join('') + '</div>';
+  html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length: totalHours}, (_, hour) => `<div class="hour-label">${C.timeLabel((startHour + hour) * 60)}</div>`).join('') + '</div>';
 
   dateLayouts.forEach(d => {
     if (d.dayEmps.length === 0) {
-      html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol};grid-row:3">
+      html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol};grid-row:3;height:${gridHeight}px">
         <div class="empty-day-placeholder">
           <span>Sin turnos planificados</span>
           ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="button secondary small-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : ''}
@@ -308,11 +338,11 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" style="grid-column:${d.startCol + j};grid-row:3">`;
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
         const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
         const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
-        for (let slot = 0; slot < 48; slot++) {
+        for (let slot = startHour * 2; slot < endHour * 2; slot++) {
           const start = slot * 30;
           const serviceOpen = !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
           const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule);
@@ -324,7 +354,7 @@ function renderTimeGrid(dates, bookings, employees) {
         placed.forEach(({ event: b, lane, count }) => {
           const startMin = C.minutes(b.start);
           const endMin = C.minutes(b.end);
-          const top = startMin * 1.4;
+          const top = (startMin - offsetMin) * 1.4;
           const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
           const width = 100 / count;
           const left = lane * width;
@@ -335,7 +365,7 @@ function renderTimeGrid(dates, bookings, employees) {
           const roomName = lookup('rooms', b.roomId).name;
           html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
         });
-        if (d.date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
+        if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
         html += '</div>';
       });
     }
@@ -1225,7 +1255,14 @@ if(requestedBooking)showBooking(requestedBooking.id);
 else if(query.get('nueva')==='1')showBooking();
 window.TrainersPoint.poll(() => {
   const now=new Date();
-  document.querySelectorAll('.now-line').forEach(line => {line.style.top=`${(now.getHours()*60+now.getMinutes())*1.4}px`;});
+  const nowMin=now.getHours()*60+now.getMinutes();
+  document.querySelectorAll('.now-line').forEach(line => {
+    const startHour=Number(line.dataset.startHour||0);
+    const endHour=Number(line.dataset.endHour||24);
+    const inRange=nowMin>=startHour*60 && nowMin<=endHour*60;
+    line.hidden=!inRange;
+    if(inRange) line.style.top=`${(nowMin-startHour*60)*1.4}px`;
+  });
 },60000);
 
 if(serverMode)window.TrainersPoint.poll(refreshServer,2000,()=>warn('Sin conexión. Los cambios se guardan solo cuando el servidor responde. Reintentando…'));
