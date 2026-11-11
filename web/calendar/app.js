@@ -117,9 +117,12 @@ if(serverMode) {
   try {data=await api('state');data.bookings=data.bookings.map(fromServer);await loadBookingClients();sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
-let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,pendingPackageKey=null,newPendingPackageId=null;
+let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,pendingPackageKey=null,newPendingPackageId=null,dragState=null,suppressClickUntil=0;
+function canDragBooking(b) {
+  return Boolean(b && currentUser?.role !== 'TRAINER' && ['pending', 'confirmed'].includes(b.status));
+}
 async function refreshServer(force=false) {
-  if(polling)return;
+  if(polling || (dragState && !force))return;
   polling=true;
   try {
     const next=await api('state');
@@ -150,11 +153,13 @@ function lookup(collection, id) {
   if(!index||index.items!==items||index.size!==items.length){index={items,size:items.length,byId:new Map(items.map(item=>[item.id,item]))};lookupIndexes.set(collection,index);}
   return index.byId.get(id) || { name: 'Sin asignar' };
 }
-function toast(message) {
-  $('toast').textContent = message;
-  $('toast').hidden = false;
+function toast(message, isError=false) {
+  const el = $('toast');
+  el.textContent = message;
+  el.classList.toggle('is-error', Boolean(isError));
+  el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4500);
+  toastTimer = setTimeout(() => { el.hidden = true; el.classList.remove('is-error'); }, 4500);
 }
 function visibleDates() {
   if (state.view === 'day') return [state.date];
@@ -297,7 +302,7 @@ function renderTimeGrid(dates, bookings, employees) {
 
   dateLayouts.forEach(d => {
     const today = d.date === todayKey();
-    html += `<div class="day-heading ${today ? 'today' : ''}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+    html += `<div class="day-heading ${today ? 'today' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
       <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
       <strong>${C.parseDate(d.date).getDate()}</strong>
       <span>${prettyDate(d.date, { month: 'short' })}</span>
@@ -338,7 +343,7 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
         const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
         const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
@@ -363,7 +368,8 @@ function renderTimeGrid(dates, bookings, employees) {
           const clientName = lookup('clients', b.clientId).name;
           const serviceName = lookup('services', b.serviceId).name;
           const roomName = lookup('rooms', b.roomId).name;
-          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+          const isDraggable = canDragBooking(b);
+          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
         });
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
         html += '</div>';
@@ -388,7 +394,8 @@ function renderMonth(bookings) {
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
       const color = lookup('services', b.serviceId).color || '#317b9b';
-      return `<button class="month-event ${b.status}" data-booking="${b.id}" style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      const isDraggable = canDragBooking(b);
+      return `<button class="month-event ${b.status}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
@@ -493,7 +500,24 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const values = b || {clientId:'',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
   if(employeeId==='__unassigned')$('booking-employee').value='';
-  $('booking-history').innerHTML=(b?.history||[]).map(h=>`<p>${escapeHTML(h.at)} · ${escapeHTML(({ASSIGNED:'Trabajador asignado',UPDATED:'Reserva modificada',RESCHEDULE_REQUESTED:'Pendiente de reprogramación'})[h.action]||h.action)} · ${escapeHTML(h.previous.date||'')} ${escapeHTML(h.previous.start||'')} · ${escapeHTML(lookup('employees',h.previous.employeeId).name)}</p>`).join('')+(b?.incidents||[]).map(i=>`<p>Incidencia: ${escapeHTML(i.message)}</p>`).join('');
+  const formatHistoryAt = iso => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  };
+  const historyLabels = { ASSIGNED: 'Trabajador asignado', UPDATED: 'Reserva modificada', MOVED: 'Reserva movida', RESCHEDULE_REQUESTED: 'Pendiente de reprogramación' };
+  const formatWhen = (d, t) => `${d && C.validDate(d) ? prettyDate(d, { day: 'numeric', month: 'short' }) : (d || '')} ${t || ''}`.trim();
+  const historyItems = (b?.history || []).slice().reverse().map(h => {
+    const prev = h.previous || {};
+    const prevWhen = formatWhen(prev.date, prev.start);
+    const prevEmp = lookup('employees', prev.employeeId).name;
+    const next = h.next;
+    const moveDetail = next
+      ? `De ${prevWhen} (${prevEmp}) → ${formatWhen(next.date, next.start)} (${lookup('employees', next.employeeId).name})`
+      : `${prevWhen} · ${prevEmp}`;
+    return `<p><strong>${escapeHTML(formatHistoryAt(h.at))}</strong> · ${escapeHTML(historyLabels[h.action] || h.action)} · ${escapeHTML(moveDetail)}</p>`;
+  });
+  const incidentItems = (b?.incidents || []).map(i => `<p>Incidencia: ${escapeHTML(i.message)}</p>`);
+  $('booking-history').innerHTML = (historyItems.length ? `<div style="font-weight:700;margin-bottom:4px;">Historial de cambios</div>${historyItems.join('')}` : '') + incidentItems.join('');
   syncClientPicker();
   loadClientPackages(b?.packageId||null);
   updateDebtDetail();
@@ -1220,6 +1244,7 @@ function navigate(direction) {
 $('previous').addEventListener('click',() => navigate(-1));
 $('next').addEventListener('click',() => navigate(1));
 $('calendar').addEventListener('click',event => {
+  if (Date.now() < suppressClickUntil) return;
   const addTrainerBtn = event.target.closest('[data-add-trainer-date]');
   if (addTrainerBtn) {
     event.stopPropagation();
@@ -1240,6 +1265,206 @@ $('calendar').addEventListener('click',event => {
   if(slot&&!slot.disabled){if(currentUser?.role==='TRAINER')return;showBooking(null,slot.dataset.slot,Number(slot.dataset.minute),slot.dataset.employee);return;}
   const cell=event.target.closest('[data-month-cell]');
   if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
+});
+
+function clearDropUI() {
+  document.querySelectorAll('#calendar .is-drop-target').forEach(el => el.classList.remove('is-drop-target'));
+  document.querySelectorAll('#calendar .drop-preview').forEach(el => el.remove());
+}
+
+function validateMovedBooking(moved) {
+  if (moved.status !== 'cancelled' && moved.employeeId) {
+    const isCobosu = moved.employeeId === COBOSU_ID;
+    if (!isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === moved.employeeId && leave.status === 'APPROVED' && moved.date >= leave.startDate && moved.date <= leave.endDate)) {
+      return 'El empleado tiene una ausencia aprobada en esa fecha.';
+    }
+    if (!C.employeeAvailable(lookup('employees', moved.employeeId), moved.date, C.minutes(moved.start), C.minutes(moved.end), data.schedule)) {
+      return 'La reserva debe quedar dentro del turno del empleado.';
+    }
+  }
+  const service = lookup('services', moved.serviceId);
+  if (service?.schedule && !C.isOpen(moved.date, C.minutes(moved.start), C.minutes(moved.end), service.schedule)) {
+    return 'Fuera del horario del servicio.';
+  }
+  return C.validateBooking(moved, data.bookings, data.schedule, data.centers);
+}
+
+function buildMovedCandidate(orig, nextDate, nextStart, nextEnd, nextEmployeeId) {
+  return {
+    ...orig,
+    centerId: orig.centerId || currentGymId(),
+    date: nextDate,
+    start: nextStart,
+    end: nextEnd,
+    employeeId: nextEmployeeId,
+    status: !nextEmployeeId && orig.status === 'confirmed' ? 'pending' : orig.status,
+    needsReschedule: false,
+  };
+}
+
+function computeColumnDrop(col, clientY, orig) {
+  const dropDate = col.dataset.dropDate;
+  const rawEmp = col.dataset.dropEmployee;
+  const startHour = Number(col.dataset.startHour || 0);
+  const endHour = Number(col.dataset.endHour || 24);
+  const employeeId = !rawEmp || rawEmp === '__unassigned' ? null : rawEmp;
+  const duration = Math.max(15, C.minutes(orig.end) - C.minutes(orig.start));
+  const rect = col.getBoundingClientRect();
+  const grabOffset = Math.min(dragState?.grabOffsetPx || 0, Math.max(0, duration * 1.4 - 14));
+  const relPx = Math.max(0, clientY - rect.top - grabOffset);
+  const minStart = startHour * 60;
+  const maxStart = Math.max(minStart, endHour * 60 - duration);
+  const snapped = minStart + Math.round((relPx / 1.4) / 30) * 30;
+  const startMin = Math.max(minStart, Math.min(maxStart, snapped));
+  return {
+    date: dropDate,
+    start: C.timeLabel(startMin),
+    end: C.timeLabel(startMin + duration),
+    employeeId,
+    startMin,
+    duration,
+    offsetMin: minStart,
+  };
+}
+
+async function commitMovedBooking(orig, moved) {
+  const err = validateMovedBooking(moved);
+  if (err) {
+    toast(err, true);
+    return;
+  }
+  const whenLabel = `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end}`;
+  if (serverMode) {
+    if (state.saving) return;
+    state.saving = true;
+    try {
+      await api('bookings/' + encodeURIComponent(orig.id), 'PUT', { booking: toServer(moved) });
+      await refreshServer(true);
+      toast(`Reserva movida a ${whenLabel}.`);
+    } catch (e) {
+      toast(e.message || 'No se pudo mover la reserva.', true);
+      await refreshServer(true).catch(() => {});
+    } finally {
+      state.saving = false;
+    }
+    return;
+  }
+  const { history: _prevHist, incidents: _prevInc, ...previous } = orig;
+  const movedWithHistory = {
+    ...moved,
+    history: [
+      ...(orig.history || []),
+      {
+        at: new Date().toISOString(),
+        actorId: currentUser?.id || 'local',
+        action: 'MOVED',
+        previous,
+        next: { date: moved.date, start: moved.start, end: moved.end, employeeId: moved.employeeId },
+      },
+    ],
+  };
+  const index = data.bookings.findIndex(b => b.id === orig.id);
+  if (index >= 0) data.bookings[index] = movedWithHistory;
+  const persisted = saveData();
+  render(true);
+  toast(persisted ? `Reserva movida a ${whenLabel}.` : `Reserva movida en esta sesión a ${whenLabel}.`);
+}
+
+$('calendar').addEventListener('dragstart', event => {
+  const card = event.target.closest('[data-booking][draggable="true"]');
+  if (!card) return;
+  const orig = data.bookings.find(b => b.id === card.dataset.booking);
+  if (!orig || !canDragBooking(orig)) {
+    event.preventDefault();
+    return;
+  }
+  const rect = card.getBoundingClientRect();
+  dragState = { id: orig.id, grabOffsetPx: card.classList.contains('event') ? Math.max(0, event.clientY - rect.top) : 0 };
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', orig.id);
+  }
+  requestAnimationFrame(() => card.classList.add('is-dragging'));
+});
+
+$('calendar').addEventListener('dragover', event => {
+  if (!dragState) return;
+  const orig = data.bookings.find(b => b.id === dragState.id);
+  if (!orig) return;
+
+  const col = event.target.closest('.time-column[data-drop-date]');
+  if (col) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    const target = computeColumnDrop(col, event.clientY, orig);
+    const moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
+    const err = validateMovedBooking(moved);
+    document.querySelectorAll('#calendar .is-drop-target').forEach(el => { if (el !== col) el.classList.remove('is-drop-target'); });
+    document.querySelectorAll('#calendar .drop-preview').forEach(el => { if (el.parentElement !== col) el.remove(); });
+    col.classList.add('is-drop-target');
+    let preview = col.querySelector(':scope > .drop-preview');
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.className = 'drop-preview';
+      col.appendChild(preview);
+    }
+    preview.classList.toggle('is-invalid', Boolean(err));
+    preview.style.top = `${(target.startMin - target.offsetMin) * 1.4}px`;
+    preview.style.height = `${Math.max(target.duration * 1.4 - 2, 22)}px`;
+    preview.textContent = err ? `${target.start} · ${err}` : `${target.start} – ${target.end}`;
+    return;
+  }
+
+  const dayBox = event.target.closest('.day-heading[data-drop-day], .month-cell[data-month-cell]');
+  if (dayBox) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('#calendar .drop-preview').forEach(el => el.remove());
+    document.querySelectorAll('#calendar .is-drop-target').forEach(el => { if (el !== dayBox) el.classList.remove('is-drop-target'); });
+    dayBox.classList.add('is-drop-target');
+  }
+});
+
+$('calendar').addEventListener('dragleave', event => {
+  if (!dragState) return;
+  if (!$('calendar').contains(event.relatedTarget)) {
+    clearDropUI();
+  }
+});
+
+$('calendar').addEventListener('drop', event => {
+  if (!dragState) return;
+  const orig = data.bookings.find(b => b.id === dragState.id);
+  const col = event.target.closest('.time-column[data-drop-date]');
+  const dayBox = !col && event.target.closest('.day-heading[data-drop-day], .month-cell[data-month-cell]');
+  if (!orig || (!col && !dayBox)) {
+    clearDropUI();
+    return;
+  }
+  event.preventDefault();
+  suppressClickUntil = Date.now() + 250;
+  let moved;
+  if (col) {
+    const target = computeColumnDrop(col, event.clientY, orig);
+    moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
+  } else {
+    const dropDate = dayBox.dataset.dropDay || dayBox.dataset.monthCell;
+    moved = buildMovedCandidate(orig, dropDate, orig.start, orig.end, orig.employeeId || null);
+  }
+  dragState = null;
+  document.querySelectorAll('#calendar .is-dragging').forEach(el => el.classList.remove('is-dragging'));
+  clearDropUI();
+  if (moved.date === orig.date && moved.start === orig.start && moved.end === orig.end && moved.employeeId === (orig.employeeId || null)) {
+    return;
+  }
+  void commitMovedBooking(orig, moved);
+});
+
+$('calendar').addEventListener('dragend', () => {
+  dragState = null;
+  suppressClickUntil = Date.now() + 250;
+  document.querySelectorAll('#calendar .is-dragging').forEach(el => el.classList.remove('is-dragging'));
+  clearDropUI();
 });
 // Other tabs must not silently overwrite this tab's in-progress form.
 window.addEventListener('storage',event => {

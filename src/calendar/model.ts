@@ -156,7 +156,7 @@ export const bookingSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 export type Input = z.infer<typeof bookingSchema>;
-export type Booking = Input & { id: string; end: string; version: number; centerName?:string; centerAddress?:string; history?: Array<{at:string;actorId:string;action:string;previous:Record<string,unknown>}>; incidents?:Array<{at:string;actorId:string;message:string}> };
+export type Booking = Input & { id: string; end: string; version: number; centerName?:string; centerAddress?:string; history?: Array<{at:string;actorId:string;action:string;previous:Record<string,unknown>;next?:Record<string,unknown>}>; incidents?:Array<{at:string;actorId:string;message:string}> };
 export const attendanceGeoInputSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),

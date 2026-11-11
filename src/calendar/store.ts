@@ -372,7 +372,33 @@ export class Store {
       if(old?.needsReschedule && !b.needsReschedule && b.status !== 'CANCELLED' && DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toMillis()<=Date.now())throw new ApiError(409,"Elige una fecha y hora futuras para reprogramar.");
       b.history=old?.history || [];
       b.incidents=old?.incidents || [];
-      if(old){const {history,incidents,...previous}=old;b.history=[...b.history,{at:new Date().toISOString(),actorId,action:b.needsReschedule?'RESCHEDULE_REQUESTED':!old.employeeId&&b.employeeId?'ASSIGNED':'UPDATED',previous}];}
+      if (old) {
+        const { history, incidents, ...previous } = old;
+        const scheduleChanged = old.date !== b.date || old.start !== b.start || old.end !== b.end;
+        const empChanged = old.employeeId !== b.employeeId;
+        const action = b.needsReschedule
+          ? "RESCHEDULE_REQUESTED"
+          : !old.employeeId && b.employeeId && !scheduleChanged
+          ? "ASSIGNED"
+          : scheduleChanged || empChanged
+          ? "MOVED"
+          : "UPDATED";
+        b.history = [
+          ...b.history,
+          {
+            at: new Date().toISOString(),
+            actorId,
+            action,
+            previous,
+            next: {
+              date: b.date,
+              start: b.start,
+              end: b.end,
+              employeeId: b.employeeId,
+            },
+          },
+        ];
+      }
       if (!old || (b.status !== "CANCELLED" && ["clientId","employeeId","serviceId","date","start","status"].some(k => (b as any)[k] !== (old as any)[k])))
         this.assertActive(b, c);
       if (old && b.status !== "CANCELLED" && (await db.query("SELECT 1 FROM calendar.recoveries WHERE gym_id=$1 AND original_id=$2",[gym,old.id])).rowCount) throw new ApiError(409,"La sesión original tiene una recuperación. Programa la recuperación en lugar de reactivar la original.");
