@@ -102,6 +102,13 @@ enum StockMovementType {
   DANO
 }
 
+enum RestockStatus {
+  PENDIENTE
+  PEDIDO
+  RECIBIDO
+  CANCELADO
+}
+
 enum SaleStatus {
   BORRADOR
   COMPLETADA
@@ -482,12 +489,32 @@ model Product {
   isActive    Boolean         @default(true)
   createdAt   DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
-  movements   StockMovement[]
-  saleLines   SaleLine[]
+  movements       StockMovement[]
+  saleLines       SaleLine[]
+  restockRequests RestockRequest[]
 
   @@index([isActive, name])
   @@index([gymKey])
   @@unique([gymKey, barcode])
+}
+
+model RestockRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  gymKey          String
+  productId       String?        @db.Uuid
+  product         Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName     String
+  quantity        Int            @default(1)
+  status          RestockStatus  @default(PENDIENTE)
+  notes           String?
+  requestedBy     String?
+  requestedByName String?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(3)
+  resolvedAt      DateTime?      @db.Timestamptz(3)
+
+  @@index([gymKey, status])
+  @@index([productId])
 }
 
 model StockMovement {

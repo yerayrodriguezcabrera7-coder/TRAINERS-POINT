@@ -33,7 +33,7 @@
         <div class="view-switch" role="group" aria-label="Vista del calendario"><button data-view="day">Día</button><button data-view="week" class="selected">Semana</button><button data-view="month">Mes</button></div>
       </div>
       <div class="filter-row">
-        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Centro de trabajo<select id="center-filter"><option value="all">Todos los centros</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label>Sala<select id="room-filter"><option value="all">Todos los espacios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button></div>
+        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label>Sala<select id="room-filter"><option value="all">Todos los espacios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button><button type="button" class="button secondary repeat-week-btn" id="repeat-week-btn" hidden="" title="Clonar planificación de turnos de la semana anterior">🔄 Repetir semana anterior</button></div>
         <div class="legend" aria-label="Estados"><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
       </div>
       <div id="calendar" class="calendar-scroll" aria-label="Cuadrante de reservas"></div>
@@ -44,17 +44,155 @@
   <dialog id="booking-dialog" aria-labelledby="booking-title">
     <form id="booking-form">
       <header class="modal-header"><div><div class="eyebrow">AGENDA DEL EQUIPO</div><h2 id="booking-title">Nueva reserva</h2></div><button type="button" class="icon-button" data-close="booking-dialog" aria-label="Cerrar">×</button></header>
-      <div class="modal-body"><div class="form-grid">
-        <div class="full client-picker-field"><span class="field-label">1. Selecciona el cliente</span><div class="client-picker"><input id="client-search" type="search" placeholder="Buscar cliente por nombre…" autocomplete="off" aria-controls="client-results" aria-autocomplete="list"><button type="button" id="clear-client-search" class="client-search-clear" aria-label="Limpiar búsqueda">×</button></div><div id="client-results" class="client-results" role="listbox" aria-label="Clientes"></div><select id="booking-client" required="" hidden="" aria-hidden="true"></select><button type="button" class="button secondary client-add-button" id="add-client">＋ Añadir nuevo cliente</button></div>
-        <div class="new-client-fields full" id="new-client-fields" hidden=""><label>Nombre y apellidos<input id="client-name" maxlength="100" autocomplete="name"></label><label>Correo electrónico (opcional)<input id="client-email" type="email" maxlength="150" autocomplete="email"></label><label>Teléfono (opcional)<input id="client-phone" type="tel" maxlength="30" autocomplete="tel"></label></div>
-        <button type="button" class="text-button full" id="view-client">Ver ficha del cliente ↗</button><section id="booking-package-panel" class="full package-step" aria-labelledby="package-heading"><h3 id="package-heading">2. Elige cómo se utiliza esta sesión</h3><p id="booking-package-message" role="status">Selecciona primero un cliente para consultar sus bonos.</p><label>Bono del cliente<select id="booking-package"><option value="">Reservar sin bono · pago pendiente</option></select></label><button type="button" id="create-pending-package" class="button secondary" hidden>Crear bono pendiente de pago para este servicio</button><p id="package-create-result" role="status"></p></section>
-        <label>3. Trabajador y disponibilidad<select id="booking-employee"></select></label><label>Centro de trabajo<select id="booking-center" required=""></select></label><label>Servicio<select id="booking-service" required=""></select></label>
-        <label>Sala o espacio<select id="booking-room" required=""></select></label><label>Fecha<input type="date" id="booking-date" required=""></label>
-        <label>Inicio<input type="time" id="booking-start" step="900" required=""></label><label>Fin<input type="time" id="booking-end" step="900" required=""></label>
-        <label class="full">Estado<select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de confirmación</option><option value="completed">Realizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select></label>
-        <label class="full">Notas (opcional)<textarea id="booking-notes" rows="3" maxlength="1000" placeholder="Indicaciones para esta sesión…"></textarea></label>
-      </div><p class="form-hint" id="booking-hours"></p><label id="available-slots-wrap">Horarios libres para este trabajador<select id="booking-available-slot"><option value="">Consulta los horarios disponibles</option></select></label><p id="booking-center-info"></p><div id="booking-debt" role="status" hidden=""></div><button type="button" class="button primary" id="collect-booking" hidden>Registrar cobro pendiente</button><button type="button" class="button secondary" id="view-training-plan" hidden>Ver planning de hoy</button><div id="booking-renewal-alert" role="status" hidden=""></div><div id="booking-history"></div><p class="form-error" id="booking-error" role="alert" hidden=""></p></div>
-      <footer class="modal-footer"><button type="button" class="button secondary" id="reschedule-booking" hidden="">Pendiente de reprogramar</button><button type="button" class="button secondary" id="worker-complete" hidden="">Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden="">Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden="">Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
+      <div class="modal-body">
+        <div id="booking-slot-summary" class="booking-slot-summary">
+          <div class="booking-slot-item">
+            <span class="booking-slot-label">Entrenador</span>
+            <strong id="summary-employee-name">-</strong>
+          </div>
+          <div class="booking-slot-item">
+            <span class="booking-slot-label">Fecha y horario</span>
+            <strong id="summary-datetime">-</strong>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="full client-picker-field"><span class="field-label">1. Selecciona el cliente</span><div class="client-picker"><input id="client-search" type="search" placeholder="Buscar cliente por nombre…" autocomplete="off" aria-controls="client-results" aria-autocomplete="list"><button type="button" id="clear-client-search" class="client-search-clear" aria-label="Limpiar búsqueda">×</button></div><div id="client-results" class="client-results" role="listbox" aria-label="Clientes"></div><select id="booking-client" required="" hidden="" aria-hidden="true"></select><button type="button" class="button secondary client-add-button" id="add-client">＋ Añadir nuevo cliente</button></div>
+          <div class="new-client-fields full" id="new-client-fields" hidden=""><label>Nombre y apellidos<input id="client-name" maxlength="100" autocomplete="name"></label><label>Correo electrónico (opcional)<input id="client-email" type="email" maxlength="150" autocomplete="email"></label><label>Teléfono (opcional)<input id="client-phone" type="tel" maxlength="30" autocomplete="tel"></label></div>
+          <button type="button" class="text-button full" id="view-client">Ver ficha del cliente ↗</button>
+          <section id="booking-package-panel" class="full package-step" aria-labelledby="package-heading">
+            <h3 id="package-heading">2. Bono o sesión a consumir</h3>
+            <div id="booking-package-message" role="status">Selecciona primero un cliente para consultar sus bonos.</div>
+            
+            <div id="existing-package-wrap" style="margin-top:10px;" hidden>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <label for="booking-package" style="font-size:12px; font-weight:600; margin:0;">Bono disponible del cliente</label>
+                <button type="button" class="text-button" id="toggle-buy-package-btn" style="font-size:11px; padding:0;">＋ Contratar otro bono</button>
+              </div>
+              <select id="booking-package">
+                <option value="">Reservar sin bono · pago pendiente</option>
+              </select>
+            </div>
+
+            <div id="buy-package-card" class="buy-package-card" hidden>
+              <div class="buy-package-header">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                  <div>
+                    <strong style="display:flex; align-items:center; gap:6px;">
+                      <span>🎟️</span>
+                      <span>Adquirir bono para este cliente</span>
+                    </strong>
+                    <span class="buy-package-sub" id="buy-package-sub-text">El cliente no tiene bono disponible. Elige el bono y si se cobra ahora o queda pendiente:</span>
+                  </div>
+                  <button type="button" class="text-button" id="cancel-buy-package-btn" style="font-size:11px; padding:0;" hidden>← Usar bono existente</button>
+                </div>
+              </div>
+
+              <div class="buy-package-row" style="margin-top:10px;">
+                <label>Tipo de bono
+                  <select id="buy-package-service"></select>
+                </label>
+              </div>
+
+              <div class="buy-package-mode-wrap">
+                <span style="font-size:11px; font-weight:600; color:#475569; display:block; margin-bottom:8px;">Modalidad de cobro del bono:</span>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                    <input type="radio" name="buy-pkg-mode" id="buy-mode-now" value="now" checked>
+                    <span>💳 <strong>Pagar ahora</strong> (cobro al momento)</span>
+                  </label>
+                  <div id="buy-package-method-row" style="margin-left:24px;">
+                    <label style="font-size:11px; color:#475569; display:flex; align-items:center; gap:6px;">
+                      Método:
+                      <select id="buy-package-method" style="padding:4px 8px; border-radius:4px; font-size:12px; border:1px solid #cbd5e1;">
+                        <option value="TARJETA">💳 Tarjeta</option>
+                        <option value="EFECTIVO">💵 Efectivo</option>
+                        <option value="BIZUM">📱 Bizum</option>
+                        <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                    <input type="radio" name="buy-pkg-mode" id="buy-mode-later" value="later">
+                    <span>⏱️ <strong>Pagar más adelante</strong> (dejar como deuda pendiente en su ficha)</span>
+                  </label>
+
+                  <label id="buy-mode-none-wrap" style="display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b; cursor:pointer; margin-top:2px;">
+                    <input type="radio" name="buy-pkg-mode" id="buy-mode-none" value="none">
+                    <span>Sin bono (cita suelta, cobro en sala)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="buy-package-actions">
+                <button type="button" class="button primary" id="buy-package-now-btn">💳 Cobrar bono ahora y vincular</button>
+                <button type="button" class="button secondary" id="buy-package-later-btn">⏱️ Registrar deuda y vincular</button>
+              </div>
+              <p id="buy-package-result" class="buy-package-result" role="status" hidden></p>
+            </div>
+          </section>
+
+          <div style="display:none;" aria-hidden="true">
+            <select id="booking-employee"></select>
+            <select id="booking-service" required=""></select>
+            <select id="booking-room" required=""></select>
+            <input type="date" id="booking-date" required="">
+            <input type="time" id="booking-start" step="900" required="">
+            <input type="time" id="booking-end" step="900" required="">
+            <select id="booking-status"><option value="confirmed">Confirmada</option><option value="pending">Pendiente de confirmación</option><option value="completed">Realizada</option><option value="no_show">No presentado</option><option value="cancelled">Cancelada</option></select>
+            <textarea id="booking-notes" rows="2" maxlength="1000"></textarea>
+            <p id="booking-hours"></p>
+            <select id="booking-available-slot"><option value=""></option></select>
+            <button type="button" id="create-pending-package" hidden></button>
+            <p id="package-create-result" hidden></p>
+          </div>
+        </div>
+        <div id="booking-debt" role="status" hidden=""></div>
+        <button type="button" class="button primary" id="collect-booking" hidden>Registrar cobro pendiente</button>
+        <button type="button" class="button secondary" id="view-training-plan" hidden>Ver planning de hoy</button>
+        <div id="booking-renewal-alert" role="status" hidden=""></div>
+        <div id="booking-history"></div>
+        <p class="form-error" id="booking-error" role="alert" hidden=""></p>
+      </div>
+      <footer class="modal-footer"><button type="button" class="button secondary" id="unassign-booking" hidden="" title="Mover la cita a Sin asignar para reorganizar después">📦 Mover a Sin asignar</button><button type="button" class="button secondary" id="reschedule-booking" hidden="">Pendiente de reprogramar</button><button type="button" class="button secondary" id="worker-complete" hidden="">Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden="">Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden="">Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
+    </form>
+  </dialog>
+  <dialog id="shift-dialog" aria-labelledby="shift-title">
+    <form id="shift-form">
+      <header class="modal-header">
+        <div>
+          <div class="eyebrow">PLANIFICACIÓN DEL EQUIPO</div>
+          <h2 id="shift-title">Turno de trabajo</h2>
+        </div>
+        <button type="button" class="icon-button" data-close="shift-dialog" aria-label="Cerrar">×</button>
+      </header>
+      <div class="modal-body">
+        <p id="shift-subtitle" style="font-size:13px; color:var(--tp-muted); margin-bottom:12px;"></p>
+        <input type="hidden" id="shift-date">
+        <label id="shift-employee-wrap">Entrenador
+          <select id="shift-employee" required></select>
+        </label>
+        <div class="form-grid" style="margin-top:10px;">
+          <label>Hora de inicio
+            <input type="time" id="shift-open" step="1800" required>
+          </label>
+          <label>Hora de fin
+            <input type="time" id="shift-close" step="1800" required>
+          </label>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; margin-top:14px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="shift-off">
+          <span>Día libre (este entrenador no trabaja este día)</span>
+        </label>
+        <p id="shift-error" class="form-error" role="alert" hidden></p>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="button danger" id="shift-delete-btn" hidden>Quitar de este día</button>
+        <div class="footer-actions">
+          <button type="button" class="button secondary" data-close="shift-dialog">Cancelar</button>
+          <button type="submit" class="button primary" id="shift-submit-btn">Guardar turno</button>
+        </div>
+      </footer>
     </form>
   </dialog>
   <dialog id="client-dialog" aria-labelledby="client-title"><header class="modal-header"><div><div class="eyebrow">FICHA DEL CLIENTE</div><h2 id="client-title"></h2></div><button class="icon-button" data-close="client-dialog" aria-label="Cerrar ficha">×</button></header><div class="modal-body" id="client-detail"></div><footer class="modal-footer"><button class="button secondary" data-close="client-dialog">Volver a la reserva</button></footer></dialog>

@@ -37,6 +37,10 @@ export const staticFiles: Record<string, {
   "/ventas.html": { file: "web/inventory/ventas.html", contentType: "text/html; charset=utf-8" },
   "/ventas.js": { file: "web/inventory/ventas.js", contentType: "text/javascript; charset=utf-8" },
   "/productos.css": { file: "web/inventory/productos.css", contentType: "text/css; charset=utf-8" },
+  "/tienda.html": { file: "web/inventory/tienda.html", contentType: "text/html; charset=utf-8" },
+  "/tienda": { file: "web/inventory/tienda.html", contentType: "text/html; charset=utf-8" },
+  "/tienda.js": { file: "web/inventory/tienda.js", contentType: "text/javascript; charset=utf-8" },
+  "/tienda.css": { file: "web/inventory/tienda.css", contentType: "text/css; charset=utf-8" },
   "/pendientes.html": { file: "web/planning/pendientes.html", contentType: "text/html; charset=utf-8" },
   "/pendientes.js": { file: "web/planning/pendientes.js", contentType: "text/javascript; charset=utf-8" },
   "/pendientes.css": { file: "web/planning/pendientes.css", contentType: "text/css; charset=utf-8" },
@@ -79,6 +83,8 @@ export const staticFiles: Record<string, {
   "/services.html": { file: "web/services/services.html", contentType: "text/html; charset=utf-8" },
   "/services.css": { file: "web/services/services.css", contentType: "text/css; charset=utf-8" },
   "/services.js": { file: "web/services/services.js", contentType: "text/javascript; charset=utf-8" },
+  '/permisos-pagina.html': { file: 'web/admin/permisos-pagina.html', contentType: 'text/html; charset=utf-8' },
+  '/permisos-pagina.js': { file: 'web/admin/permisos-pagina.js', contentType: 'text/javascript; charset=utf-8' },
 };
 // Historical URLs remain available while each feature has one canonical implementation.
 staticFiles['/gimnasios.html'] = staticFiles['/gyms.html'];

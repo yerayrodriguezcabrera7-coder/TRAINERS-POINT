@@ -22,6 +22,9 @@ const money = z.number().positive().max(1000000000).refine(v => Math.abs(v * 100
 const paymentInput = z.object({ requestKey: z.string().uuid(), amount: money, method: paymentMethod, paidAt: z.string().datetime().refine(v => new Date(v).getTime() <= Date.now(), 'La fecha del pago no puede ser futura.').optional(), note: z.string().trim().max(1000).default('') });
 const saleInput = z.object({ paymentMode: z.enum(['PAID', 'PENDING']).default('PAID'), paymentMethod: paymentMethod.default('EFECTIVO'), requestKey: z.string().uuid(), clientId: z.string().uuid().nullable(), lines: z.array(z.object({ productId: z.string().uuid(), quantity: z.number().int().min(1).max(10000), expectedUnitPrice: z.number().nonnegative().max(1000000).optional() })).min(1).max(100) });
 const returnInput = z.object({ reason: z.string().trim().min(3).max(500).default('Devolución de producto'), requestKey: z.string().uuid(), lines: z.array(z.object({ restock: z.boolean().default(true), lineId: z.string().uuid(), quantity: z.number().int().min(1).max(10000) })).min(1).max(100) });
+const restockStatusEnum = z.enum(['PENDIENTE', 'PEDIDO', 'RECIBIDO', 'CANCELADO']);
+const restockInput = z.object({ productId: z.string().uuid().nullable().optional(), productName: z.string().trim().min(1).max(200).optional(), quantity: z.number().int().min(1).max(10000).default(1), notes: z.string().trim().max(1000).default('') });
+const restockUpdateInput = z.object({ status: restockStatusEnum.optional(), quantity: z.number().int().min(1).max(10000).optional(), notes: z.string().trim().max(1000).optional(), addToStock: z.boolean().default(false) });
 export function saleBalance(sale: any) {
   const original = cents(sale.totalAmount);
   const returned = sale.lines.reduce((sum: number, l: any) => sum + cents(l.unitPrice) * (l.returnedQuantity || 0), 0);
@@ -243,10 +246,131 @@ export class Inventory {
     });
   }
   async debtSummary(gym: string) { return clientDebts(this.db, gym); }
+  async restockRequests(gym: string, status?: string) {
+    const where: any = { gymKey: gym };
+    if (status && status !== 'ALL') where.status = status;
+    return (this.db as any).restockRequest.findMany({
+      where,
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            stock: true,
+            unitPrice: true,
+            isActive: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+  async saveRestockRequest(gym: string, actor: { id: string; name?: string }, raw: unknown) {
+    const v = restockInput.parse(raw);
+    let resolvedName = v.productName;
+    let product = null;
+    if (v.productId) {
+      product = await this.db.product.findFirst({ where: { id: v.productId, gymKey: gym } });
+      if (!product) throw new ApiError(404, 'Producto no encontrado en el catálogo.');
+      if (!resolvedName) resolvedName = product.name;
+    }
+    if (!resolvedName || !resolvedName.trim()) {
+      throw new ApiError(400, 'Indica el nombre del producto que falta para pedir.');
+    }
+    return (this.db as any).restockRequest.create({
+      data: {
+        gymKey: gym,
+        productId: product ? product.id : null,
+        productName: resolvedName.trim(),
+        quantity: v.quantity,
+        status: 'PENDIENTE',
+        notes: v.notes || null,
+        requestedBy: actor.id,
+        requestedByName: actor.name || null
+      },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            stock: true,
+            unitPrice: true,
+            isActive: true
+          }
+        }
+      }
+    });
+  }
+  async updateRestockRequest(gym: string, actor: { id: string; name?: string }, id: string, raw: unknown) {
+    const v = restockUpdateInput.parse(raw);
+    return this.transaction(gym, async (tx) => {
+      const existing = await (tx as any).restockRequest.findFirst({
+        where: { id, gymKey: gym },
+        include: { product: true }
+      });
+      if (!existing) throw new ApiError(404, 'Aviso de reposición no encontrado.');
+      const data: any = {};
+      if (v.status) {
+        data.status = v.status;
+        if (v.status === 'RECIBIDO' || v.status === 'CANCELADO') {
+          data.resolvedAt = new Date();
+        } else {
+          data.resolvedAt = null;
+        }
+      }
+      if (v.quantity !== undefined) data.quantity = v.quantity;
+      if (v.notes !== undefined) data.notes = v.notes || null;
+
+      if (v.status === 'RECIBIDO' && v.addToStock && existing.productId && existing.product) {
+        const qtyToAdd = v.quantity !== undefined ? v.quantity : existing.quantity;
+        if (qtyToAdd > 0) {
+          await tx.product.update({
+            where: { id: existing.productId },
+            data: {
+              stock: { increment: qtyToAdd },
+              isActive: true,
+              revision: { increment: 1 }
+            }
+          });
+          await tx.stockMovement.create({
+            data: {
+              productId: existing.productId,
+              type: 'ENTRADA',
+              quantity: qtyToAdd,
+              reference: `Reposición recibida: ${existing.id}`,
+              notes: `Pedido recibido y repuesto en mostrador por ${actor.name || actor.id}`
+            }
+          });
+        }
+      }
+
+      return (tx as any).restockRequest.update({
+        where: { id },
+        data,
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              stock: true,
+              unitPrice: true,
+              isActive: true
+            }
+          }
+        }
+      });
+    });
+  }
+  async removeRestockRequest(gym: string, id: string) {
+    const existing = await (this.db as any).restockRequest.findFirst({ where: { id, gymKey: gym } });
+    if (!existing) throw new ApiError(404, 'Aviso de reposición no encontrado.');
+    await (this.db as any).restockRequest.delete({ where: { id } });
+    return { success: true };
+  }
 }
 export function inventoryPermission(actor: Identity | undefined, action: string) {
   if (!actor)
     throw new ApiError(401, 'Inicia sesión.');
-  if (actor.role !== 'ADMIN' && !(actor.role === 'RECEPTION' && ['read', 'sell', 'return'].includes(action)))
+  if (actor.role !== 'ADMIN' && !(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock'].includes(action)))
     throw new ApiError(403, 'No tienes permiso para esta operación.');
 }

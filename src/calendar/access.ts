@@ -52,7 +52,7 @@ async function verifyPassword(password: string, encoded: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 export const roles = ["ADMIN", "RECEPTION", "TRAINER", "CLIENT"] as const;
-export type Identity = { id: string; name: string; username?: string; role: typeof roles[number]; employeeId: string | null; clientId: string | null; mustChangePassword: boolean };
+export type Identity = { id: string; name: string; username?: string; role: typeof roles[number]; employeeId: string | null; clientId: string | null; mustChangePassword: boolean; pagePermissions?: string[] | null };
 type LinkedClient = { id: string; name: string; email?: string; phone?: string; notes?: string; status?: string };
 const slugUsername = (name: string) => name.toLocaleLowerCase("es").normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "").slice(0, 60) || "cliente";
@@ -68,6 +68,7 @@ const accountSchema = z.object({
   password: z.string().min(4).max(128).optional().nullable(),
   mustChangePassword: z.boolean().optional(),
   resetPassword: z.boolean().optional(),
+  pagePermissions: z.array(z.string()).optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.role === "CLIENT") {
     if (!data.clientId) ctx.addIssue({ code: "custom", message: "Selecciona el cliente que tendrá acceso.", path: ["clientId"] });
@@ -107,7 +108,9 @@ CREATE TABLE IF NOT EXISTS calendar.external_identities (
  PRIMARY KEY(gym_id,issuer,subject), UNIQUE(gym_id,issuer,user_id));
 CREATE INDEX IF NOT EXISTS sessions_user ON calendar.sessions(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS staff_network_username ON calendar.users(lower(username)) WHERE role<>'CLIENT';
-CREATE UNIQUE INDEX IF NOT EXISTS staff_network_employee ON calendar.users(employee_id) WHERE role<>'CLIENT' AND employee_id IS NOT NULL;`;
+CREATE UNIQUE INDEX IF NOT EXISTS staff_network_employee ON calendar.users(employee_id) WHERE role<>'CLIENT' AND employee_id IS NOT NULL;
+ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS page_permissions jsonb;
+ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS permissions_audit jsonb;`;
 
 export class Access {
   constructor(private pool: Pool, private clientsDb?: PrismaClient) {}
@@ -145,7 +148,7 @@ export class Access {
   async list(gym: string, linkedClients: LinkedClient[] = []) {
     const [usersRes, gymRes] = await Promise.all([
       this.pool.query(`SELECT id,employee_id AS "employeeId",client_id AS "clientId",username,role,enabled,
-        must_change_password AS "mustChangePassword"
+        must_change_password AS "mustChangePassword",page_permissions AS "pagePermissions", permissions_audit AS "permissionsAudit"
         FROM calendar.users WHERE role<>'CLIENT' OR gym_id=$1 OR client_id=ANY($2::text[]) ORDER BY username`, [gym,linkedClients.map(client=>client.id)]),
       this.pool.query(`SELECT config FROM calendar.gyms WHERE id=$1`, [gym]),
     ]);
@@ -261,11 +264,15 @@ export class Access {
       }
 
       if (input.role !== "CLIENT") await saveStaff(db,config.employees.find((e:any)=>e.id===employeeId));
-      await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,client_id,username,role,password_hash,enabled,must_change_password)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET
+      const pagePermissionsValue = input.pagePermissions !== undefined ? input.pagePermissions : (old?.page_permissions ?? null);
+
+      await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,client_id,username,role,password_hash,enabled,must_change_password,page_permissions)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET
         employee_id=EXCLUDED.employee_id,client_id=EXCLUDED.client_id,username=EXCLUDED.username,role=EXCLUDED.role,
-        password_hash=EXCLUDED.password_hash,enabled=EXCLUDED.enabled,must_change_password=EXCLUDED.must_change_password`,
-      [userId,gym,employeeId,clientId,input.username,input.role,passwordHash,input.enabled,mustChangePassword]);
+        password_hash=EXCLUDED.password_hash,enabled=EXCLUDED.enabled,must_change_password=EXCLUDED.must_change_password,
+        page_permissions=EXCLUDED.page_permissions`,
+      [userId,gym,employeeId,clientId,input.username,input.role,passwordHash,input.enabled,mustChangePassword,
+       pagePermissionsValue ? JSON.stringify(pagePermissionsValue) : null]);
       // Al invalidar sesiones del usuario modificado, preservar la sesión del admin que realiza la operación
       // (en caso de que el admin esté editando su propia cuenta).
       const callerTokenHash = callerToken ? digest(callerToken) : null;
@@ -300,6 +307,17 @@ export class Access {
       }
       throw e;
     } finally { db.release(); }
+  }
+  async setPagePermissions(gym:string,id:string,pages:string[]|null,actor:Identity) {
+    const db=await this.pool.connect();
+    try{
+      await db.query('BEGIN');await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[networkLock]);
+      const user=(await db.query('SELECT * FROM calendar.users WHERE id=$1 FOR UPDATE',[id])).rows[0];
+      if(!user || (user.role==='CLIENT' && !await this.clientAllowed(gym,user)))throw new ApiError(404,'Usuario no encontrado.');
+      const auditEntry={changedBy:actor.name||actor.username||'Administrador',changedById:actor.id,changedAt:new Date().toISOString(),mode:pages ? `${pages.length} páginas` : 'restaurado al rol'};
+      await db.query('UPDATE calendar.users SET page_permissions=$2,permissions_audit=$3 WHERE id=$1',[id,pages?JSON.stringify(pages):null,JSON.stringify(auditEntry)]);
+      await db.query('COMMIT');return {ok:true,pagePermissions:pages,permissionsAudit:auditEntry};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   async createClientAccount(gym: string, gymName: string, client: LinkedClient) {
     const db = await this.pool.connect();
@@ -518,11 +536,11 @@ export class Access {
       const client = (row.client_id ? await this.findExternalClient(row.gym_id,row.client_id) : null) ||
         row?.config.clients.find((c: any) => c.id === row.client_id);
       if (!client || client.status === "BLOCKED") throw new ApiError(401, "Inicia sesión para continuar.");
-      return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword };
+      return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword, pagePermissions: row.page_permissions ?? null };
     }
     const employee = (await sharedStaff(this.pool)).find((e: any) => e.id === row.employee_id);
     if (!employee || employee.active === false) throw new ApiError(401, "Inicia sesión para continuar.");
-    return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword };
+    return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword, pagePermissions: row.page_permissions ?? null };
   }
   async logout(token: string) {
     await this.pool.query("DELETE FROM calendar.sessions WHERE token_hash=$1", [digest(token)]);

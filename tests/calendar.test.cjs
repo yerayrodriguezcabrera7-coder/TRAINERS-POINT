@@ -398,6 +398,7 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
     assert.equal(d.getElementById('mode-title').textContent,'Servidor conectado');
     const jump=d.getElementById('jump-date');jump.value='2030-10-22';jump.dispatchEvent(new w.Event('change'));
     d.getElementById('new-booking').click();
+    d.getElementById('booking-client').value='c0';d.getElementById('booking-client').dispatchEvent(new w.Event('change'));
     d.getElementById('booking-start').value='10:00';d.getElementById('booking-start').dispatchEvent(new w.Event('change'));
     assert.equal(d.getElementById('booking-end').value,'11:00');
     d.getElementById('booking-form').dispatchEvent(new w.Event('submit',{cancelable:true}));
@@ -554,6 +555,7 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
     await until(()=>!d.getElementById('editor').open);
     assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
     assert.deepEqual((await other.state(g)).employees[0].weeklyPeriods[1],[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+    await store.updateEmployeeShift(g,'e1','2030-10-22',[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
     dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
     await until(()=>d.querySelector('[data-slot="2030-10-22"]'));
     d.getElementById('service-filter').value='s2';d.getElementById('service-filter').dispatchEvent(new dom.window.Event('change'));

@@ -30,6 +30,17 @@ before(async()=>{
 after(async()=>{await db?.$disconnect();await pool?.end();await pg?.stop();});
 const booking=(client=client1,employee=people[1],extra={})=>({clientId:client.id,employeeId:employee.id,serviceId:service.id,roomId:'r1',date:'2031-05-05',start:'10:00',status:'CONFIRMED',...extra});
 
+test('Integración: planificar y repetir semana persiste la plantilla compartida y protege citas de otras sedes',async()=>{
+ await store.updateEmployeeShift(B.id,people[1].id,'2031-07-07',[{open:'09:00',close:'12:00'}]);
+ assert.deepEqual((await store.state(A.id)).employees.find(e=>e.id===people[1].id).shifts.find(s=>s.date==='2031-07-07').periods,[{open:'09:00',close:'12:00'}]);
+ await store.copyWeekShifts(C.id,'2031-07-07','2031-07-14');
+ await store.save(A.id,booking(client1,people[1],{date:'2031-07-14'}));
+ await assert.rejects(store.updateEmployeeShift(C.id,people[1].id,'2031-07-14',[{open:'15:00',close:'18:00'}]),/horario|turno/);
+ await store.updateEmployeeShift(B.id,people[1].id,'2031-07-07',[{open:'15:00',close:'18:00'}]);
+ await assert.rejects(store.copyWeekShifts(C.id,'2031-07-07','2031-07-14'),/horario|turno/);
+ assert.deepEqual((await store.state(B.id)).employees.find(e=>e.id===people[1].id).shifts.find(s=>s.date==='2031-07-14').periods,[{open:'09:00',close:'12:00'}]);
+});
+
 test('Red: un fichaje abierto aparece al cambiar de centro y no permite una segunda entrada',async()=>{
  const worker=await access.identify(B.id,trainer.token);
  const entered=await store.clock(A.id,{employeeId:worker.employeeId,action:'IN'},worker);
@@ -175,5 +186,14 @@ test('Red HTTP: cambiar de sede conserva permisos, permite gestionar la ficha TP
   assert.equal(attempts.filter(response=>response.status===201).length,1);assert.equal(attempts.filter(response=>response.status===409).length,1);
   assert.equal((await(await api('/api/pending-packages')).json()).packages.some(p=>p.packageId===pending.id),false);
   assert.equal(await db.sale.count(),saleCount);assert.equal(await db.payment.count(),paymentCount); // Scheduling consumes the existing right; it never sells or charges again.
+  const account=(await access.list(A.id)).find(user=>user.role==='RECEPTION');
+  const setPermissions=pages=>api('/api/manage/users/'+account.id+'/permissions',admin.token,A.id,'PUT',{pagePermissions:pages});
+  assert.equal((await setPermissions(['tienda.html'])).status,200);
+  assert.equal((await api('/api/inventory/products')).status,200);assert.equal((await api('/api/cash/current')).status,403);
+  assert.equal((await api('/api/clients?all=true')).status,403);assert.equal((await api('/api/pending-packages')).status,403);
+  assert.equal((await api('/api/gyms')).status,200); // Switching centre is independent of managing centres.
+  assert.equal((await setPermissions([])).status,200);assert.equal((await api('/api/inventory/products')).status,403);
+  const audit=(await access.list(C.id)).find(user=>user.id===account.id).permissionsAudit;assert.ok(audit.changedById);assert.equal(audit.mode,'0 páginas');
+  assert.equal((await setPermissions(null)).status,200);assert.equal((await api('/api/cash/current')).status,200);
  }finally{child.kill('SIGTERM');await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}
 });

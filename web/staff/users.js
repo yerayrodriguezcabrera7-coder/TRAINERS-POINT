@@ -146,6 +146,7 @@
 
       const isEnabled = user.enabled !== false;
       const signalType = isEnabled ? 'ok' : 'neutral';
+      const hasCustomPerms = Array.isArray(user.pagePermissions);
       const card = document.createElement('article');
       card.className = `client-card client-card-modern client-card-signal-${signalType}`;
       card.tabIndex = 0;
@@ -168,16 +169,28 @@
             <span class="client-status ${isEnabled ? 'status-ACTIVO' : 'status-INACTIVO'}">
               ${isEnabled ? 'Activo' : 'Deshabilitado'}</span>
             ${user.mustChangePassword ? '<span class="badge" style="padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; background:#fff3e0; color:#d97706;">Requiere cambio clave</span>' : ''}
+            ${hasCustomPerms ? `<span class="badge" style="padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; background:#e0f2fe; color:#0369a1;" title="Permisos personalizados: ${user.pagePermissions.length} páginas">🛡️ ${user.pagePermissions.length} págs</span>` : ''}
           </div>
           <span class="client-card-center">${user.role === 'CLIENT' ? 'Cuenta de cliente' : 'Cuenta de empleado'}</span>
         </div>
-        <button type="button" class="history-action btn-card-reset-pwd" data-user-id="${esc(user.id)}" data-user-name="${esc(personName)}" title="Restablecer contraseña a Trainerspoint" style="margin-left:auto; margin-right:10px; padding:4px 10px; font-size:11px;">
-          🔑 Restablecer clave
-        </button>
+        <div style="margin-left:auto; display:flex; align-items:center; gap:6px; margin-right:10px;">
+          ${user.role !== 'ADMIN' ? `
+          <a href="/permisos-pagina.html?userId=${encodeURIComponent(user.id)}" class="history-action btn-card-perms" title="Configurar permisos de página" style="padding:4px 8px; font-size:11px; text-decoration:none; display:inline-flex; align-items:center; gap:3px; color:inherit;">
+            🛡️ Permisos
+          </a>` : ''}
+          <button type="button" class="history-action btn-card-reset-pwd" data-user-id="${esc(user.id)}" data-user-name="${esc(personName)}" title="Restablecer contraseña a Trainerspoint" style="padding:4px 8px; font-size:11px;">
+            🔑 Clave
+          </button>
+        </div>
         <span class="card-arrow" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
         </span>
       `;
+
+      // Evitar que el clic en el enlace de permisos abra el editor modal
+      card.querySelector('.btn-card-perms')?.addEventListener('click', e => {
+        e.stopPropagation();
+      });
 
       card.addEventListener('click', () => openEditor(user));
       card.addEventListener('keydown', e => {

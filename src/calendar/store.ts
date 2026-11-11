@@ -104,7 +104,6 @@ export class Store {
     if (services.length) {
       const saved = config.services;
       const savedById = new Map(saved.map(service => [service.id, service]));
-      const serviceIds = new Set(services.map(service => service.id));
       config.services = services.map(service => ({
         ...savedById.get(service.id),
         id: service.id,
@@ -123,7 +122,6 @@ export class Store {
         category: service.category,
         color: service.color,
       }));
-      config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }
     const allCenters = await this.centers();
     config.centers = allCenters;
@@ -491,6 +489,14 @@ export class Store {
     if (admins.length && !admins.some(r => config.employees.find(e => e.id === r.employee_id)?.active !== false))
       throw new ApiError(409, "Debe quedar al menos un administrador activo.");
   }
+  private async validateOtherRosters(db:PoolClient,gym:string,config:Config) {
+    const others=(await db.query("SELECT id,config FROM calendar.gyms WHERE id<>$1",[gym])).rows;
+    for(const other of others){
+      const context=await this.externalConfig(other.id,other.config);context.employees=config.employees;
+      const existing=(await db.query("SELECT data FROM calendar.bookings WHERE gym_id=$1",[other.id])).rows.map(row=>row.data);
+      await this.validateConfig(db,other.id,context,existing);
+    }
+  }
   async manage(gym: string, kind: string, raw: unknown, revision: number, id?: string) {
     if (!["clients","services","employees"].includes(kind)) throw new ApiError(404, "Sección desconocida.");
     const schema = kind === "clients" ? clientSchema : kind === "services" ? serviceSchema : employeeSchema;
@@ -503,12 +509,7 @@ export class Store {
       if (id) list[index] = record; else list.push(record);
       await this.validateConfig(db,gym,c,bookings);
       if (kind === "employees") {
-        const others = (await db.query("SELECT id,config FROM calendar.gyms WHERE id<>$1",[gym])).rows;
-        for (const other of others) {
-          const context = await this.externalConfig(other.id,other.config); context.employees=c.employees;
-          const existing=(await db.query("SELECT data FROM calendar.bookings WHERE gym_id=$1",[other.id])).rows.map(row=>row.data);
-          await this.validateConfig(db,other.id,context,existing);
-        }
+        await this.validateOtherRosters(db,gym,c);
         await saveStaff(db,record,gym);
       }
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym,c]);
@@ -768,5 +769,69 @@ export class Store {
     } finally {
       db.release();
     }
+  }
+
+  async updateEmployeeShift(gym: string, employeeId: string, dateStr: string, periods: Array<{ open: string; close: string }> | null) {
+    date.parse(dateStr);
+    return this.transaction(gym, async (db, c, bookings) => {
+      const employee = c.employees.find(e => e.id === employeeId);
+      if (!employee) throw new ApiError(404, "Empleado no encontrado.");
+      employee.shifts = employee.shifts || [];
+      const existingIdx = employee.shifts.findIndex(s => s.date === dateStr);
+      if (periods === null) {
+        if (existingIdx >= 0) employee.shifts.splice(existingIdx, 1);
+      } else {
+        const sorted = [...periods].sort((a,b) => a.open.localeCompare(b.open));
+        if (existingIdx >= 0) employee.shifts[existingIdx].periods = sorted;
+        else employee.shifts.push({ date: dateStr, periods: sorted });
+      }
+      await this.validateConfig(db,gym,c,bookings);
+      await this.validateOtherRosters(db,gym,c);
+      await saveStaff(db,employeeSchema.parse(employee),gym);
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, employeeId, date: dateStr, periods };
+    });
+  }
+
+  async copyWeekShifts(gym: string, fromMonday: string, toMonday: string) {
+    date.parse(fromMonday);date.parse(toMonday);
+    if([fromMonday,toMonday].some(value=>DateTime.fromISO(value).weekday!==1))throw new ApiError(400,"Selecciona el lunes de cada semana.");
+    return this.transaction(gym, async (db, c, bookings) => {
+      const previous=new Map(c.employees.map(employee=>[employee.id,JSON.stringify(employee)]));
+      const fromDates: string[] = [];
+      const toDates: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        fromDates.push(DateTime.fromISO(fromMonday).plus({ days: i }).toISODate()!);
+        toDates.push(DateTime.fromISO(toMonday).plus({ days: i }).toISODate()!);
+      }
+      for (const employee of c.employees) {
+        employee.shifts = employee.shifts || [];
+        for (let i = 0; i < 7; i++) {
+          const srcDate = fromDates[i];
+          const tgtDate = toDates[i];
+          const srcShift = employee.shifts.find(s => s.date === srcDate);
+          const tgtIdx = employee.shifts.findIndex(s => s.date === tgtDate);
+
+          if (srcShift && srcShift.periods && srcShift.periods.length > 0) {
+            const periodsToCopy = srcShift.periods.map(p => ({ open: p.open, close: p.close }));
+            if (tgtIdx >= 0) {
+              employee.shifts[tgtIdx].periods = periodsToCopy;
+            } else {
+              employee.shifts.push({ date: tgtDate, periods: periodsToCopy });
+            }
+          } else {
+            // If employee had no shift or had day off on srcDate, remove any shift on target date
+            if (tgtIdx >= 0) {
+              employee.shifts.splice(tgtIdx, 1);
+            }
+          }
+        }
+      }
+      await this.validateConfig(db,gym,c,bookings);
+      await this.validateOtherRosters(db,gym,c);
+      for(const employee of c.employees)if(previous.get(employee.id)!==JSON.stringify(employee))await saveStaff(db,employeeSchema.parse(employee),gym);
+      await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
+      return { ok: true, fromMonday, toMonday };
+    });
   }
 }
