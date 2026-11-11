@@ -1,0 +1,40 @@
+.planning-page .page-content{display:grid;gap:24px;min-width:0}
+.planning-page .attendance-header,.planning-page .section-links,.planning-page #notice{margin:0}
+.planning-page #notice:empty{display:none}
+.pending-toolbar{display:flex;align-items:end;gap:16px}
+.pending-toolbar label{display:grid;gap:8px;flex:1;max-width:560px;font-weight:600}
+.pending-toolbar input{width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--tp-line,#ded6ca);border-radius:10px;background:var(--tp-surface,#fff);color:inherit}
+.pending-heading{display:flex;justify-content:space-between;align-items:start;gap:16px;margin-bottom:20px}
+.pending-heading h2{margin:0 0 8px;font-size:1.3rem}
+.pending-heading p{margin:0;color:var(--tp-muted,#65747b);line-height:1.5;max-width:75ch}
+.pending-heading .eyebrow{margin-bottom:8px;font-size:.7rem}
+.pending-count{flex-shrink:0;font-size:.8rem;color:var(--tp-muted,#65747b)}
+.pending-urgent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.pending-urgent-card{display:flex;flex-direction:column;gap:12px;min-width:0;padding:20px;border:1px solid #e8c8a4;border-top:4px solid #ff7f0a;border-radius:14px;background:var(--tp-surface,#fff)}
+.pending-urgent-card h3,.pending-urgent-card p{margin:0;overflow-wrap:anywhere}
+.pending-urgent-card h3{font-size:1rem}
+.pending-urgent-card p,.pending-urgent-card small{font-size:.85rem;line-height:1.5;color:var(--tp-muted,#65747b)}
+.pending-urgent-card .pending-reason{color:#8c4706;font-weight:700}
+.pending-rank{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8c4706}
+.pending-urgent-card button{margin-top:auto;min-height:42px;padding:10px 12px;border:1px solid #e8c8a4;border-radius:8px;background:#fff8ef;color:#7c3c00;font-weight:700}
+.planning-page .management-card{padding:24px;min-width:0;max-width:100%;margin:0}
+.planning-page .history-scroll{max-width:100%;overflow-x:auto}
+.pending-table{width:100%;min-width:780px;border-collapse:collapse}
+.pending-table th,.pending-table td{text-align:left;padding:16px 14px;vertical-align:top;line-height:1.5}
+.pending-table small{display:block;margin-top:6px;color:var(--tp-muted,#65747b)}
+.pending-actions button{display:block;margin-bottom:8px;min-height:40px}
+.pending-actions a{font-size:.8rem}
+.pending-table a{color:#914600;text-underline-offset:3px}
+.pending-table td:first-child a{color:var(--tp-ink,#283238);text-decoration:none}
+.pending-table td:first-child a:hover{color:#914600;text-decoration:underline}
+.pending-actions button{padding:10px 12px;background:#fff8ef;color:#7c3c00;border:1px solid #e8c8a4;border-radius:8px;font-weight:700}
+.pending-slots{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.pending-slots p{width:100%;margin:0}
+.pending-slots button{border:1px solid var(--tp-line,#ded6ca);background:#fff8ef;border-radius:8px;padding:8px 12px}
+.planning-page #editor{width:min(640px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}
+.planning-page #editor form{padding:24px}
+.planning-page #original{overflow-wrap:anywhere;line-height:1.6}
+.planning-page #error{color:#a72c22}
+.planning-page .section-links [aria-current=page]{font-weight:700;text-decoration:underline;text-underline-offset:6px}
+@media(max-width:1150px){.pending-urgent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.pending-urgent-grid{grid-template-columns:1fr}.pending-toolbar{align-items:stretch;flex-direction:column}.pending-heading{flex-direction:column;gap:8px}.planning-page .management-card{padding:16px}.planning-page .page-content{gap:20px}.planning-page #editor .form-grid{grid-template-columns:1fr}}

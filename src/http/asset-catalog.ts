@@ -39,6 +39,7 @@ export const staticFiles: Record<string, {
   "/productos.css": { file: "web/inventory/productos.css", contentType: "text/css; charset=utf-8" },
   "/pendientes.html": { file: "web/planning/pendientes.html", contentType: "text/html; charset=utf-8" },
   "/pendientes.js": { file: "web/planning/pendientes.js", contentType: "text/javascript; charset=utf-8" },
+  "/pendientes.css": { file: "web/planning/pendientes.css", contentType: "text/css; charset=utf-8" },
   "/gestion.html": { file: "web/staff/gestion.html", contentType: "text/html; charset=utf-8" },
   "/gestion.css": { file: "web/staff/gestion.css", contentType: "text/css; charset=utf-8" },
   "/gestion.js": { file: "web/staff/gestion.js", contentType: "text/javascript; charset=utf-8" },

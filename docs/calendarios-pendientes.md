@@ -9,7 +9,23 @@ Recepción y trabajadores utilizan `calendar.bookings`, sin duplicar reservas. L
 - Una reserva puede guardarse sin trabajador: `employeeId=null`, estado `PENDING`. No puede confirmarse ni cerrarse sin asignación.
 - La reserva mantiene el color del servicio y muestra el trabajador y el centro. Su ficha incluye la dirección del centro cuando está configurada.
 - El aviso visible enlaza a «Pendientes de asignación» y se actualiza con el sondeo existente cada dos segundos.
-- La pantalla de pendientes permite asignar trabajador, consultar sus huecos, modificar fecha/hora, seleccionar centro y confirmar. El servidor vuelve a comprobar duración, servicio, horario, ausencia y ocupación antes de guardar.
+- La pantalla de pendientes utiliza el centro activo del menú global: no ofrece otro filtro, columna o selector de centro. Permite asignar trabajador, consultar sus huecos y modificar fecha/hora y sala. Las citas antiguas conservan su centro de trabajo al editarlas; no se trasladan automáticamente. El servidor vuelve a comprobar duración, servicio, horario, ausencia y ocupación antes de guardar.
+
+## Bonos pendientes de agendar y urgentes
+
+«Pendientes de asignación» reúne las citas sin trabajador y los clientes habilitados para reservar con sesiones libres de bonos vigentes. Incluye las fichas recién creadas como nuevos interesados cuando ya tienen un bono; excluye las inactivas y dadas de baja. Los bonos pagados y los que permiten reservar con pago pendiente se muestran diferenciados; no se crea una venta ni un cobro al consultarlos o agendar una sesión.
+
+El cálculo descuenta las sesiones realizadas, perdidas, ya reservadas en cualquier sede y los créditos de recuperación pendientes. Las cancelaciones ordinarias liberan la sesión. Los bonos caducados, fallidos o de servicios inactivos no se ofrecen para agendar.
+
+Arriba aparecen hasta cuatro clientes, sin repetirlos aunque tengan varios bonos. Se ordenan por la fecha más próxima entre la caducidad de sus bonos y sus citas pendientes; a igualdad de día, por las sesiones que necesitan más huecos antes de caducar. El listado inferior contiene todos los resultados. El buscador filtra por cliente o servicio y actualiza ambos bloques.
+
+«Agendar una sesión» utiliza el bono seleccionado: recepción elige trabajador, fecha, hora y sala, consulta los huecos y confirma. La reserva se guarda en el calendario existente con su `packageId`, sin comprar otro bono. Las sesiones propuestas deben terminar dentro de su vigencia. Después se actualizan la agenda y el número de pendientes. La comprobación transaccional existente impide consumir una misma sesión desde dos ventanas a la vez.
+
+La consulta `GET /api/pending-packages` está restringida a administración y recepción; emplea una consulta agregada y las reglas de acceso multicentro de clientes. Los clientes Trainers Point siguen siendo compartidos entre sedes Trainers Point y los de Cobosu permanecen locales.
+
+## Clientes y ficha
+
+El listado no incluye filtro de centros ni bloque inferior de centros. El alta no pide un centro: el servidor asigna el contexto activo, incluso si una petición antigua envía un `gymId` diferente. La ficha conserva la información del centro de origen y deja de ofrecer «Cambiar centro». La gestión de sedes permanece en el apartado Centros.
 
 ## Reprogramación
 

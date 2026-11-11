@@ -12,6 +12,7 @@ import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
 import { mobileStaffView, staffClientIds } from "./mobile-view";
 import type { CognitoVerifier } from "../cloud/cognito";
+import { pendingPackages } from "../planning/pending-packages";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -103,6 +104,10 @@ export function server(
             throw new ApiError(403, "Debes cambiar la contraseña antes de continuar.");
 
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
+          if (req.method === "GET" && path === "/api/pending-packages") {
+            if(!office)throw new ApiError(403,"Solo recepción y administración pueden organizar los bonos pendientes.");
+            send(res,200,{packages:store.clientsDb ? await pendingPackages(store.clientsDb,gym) : []});return;
+          }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
           if (req.method === "POST" && path === "/api/password/change") {
             send(res,200,await access.changePassword(gym,bearer,await body(req)));

@@ -9,7 +9,6 @@ async function fetchUserRole() {
         document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
         document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
         document.querySelector("#btn-renew-bono-banner")?.setAttribute("hidden", "");
-        document.querySelector("#profile-gym-form")?.setAttribute("hidden", "");
         const detailsForm = document.querySelector("#client-details-form");
         if (detailsForm) {
           detailsForm.querySelectorAll("button[type=submit], input, select").forEach(el => el.disabled = true);
@@ -113,9 +112,6 @@ const objectiveInput = document.querySelector("#objective-input");
 const objectiveFeedback = document.querySelector("#objective-feedback");
 const clientDetailsForm = document.querySelector("#client-details-form");
 const clientDetailsFeedback = document.querySelector("#client-details-feedback");
-const gymForm = document.querySelector("#profile-gym-form");
-const gymSelect = document.querySelector("#profile-gym-select");
-const gymFeedback = document.querySelector("#profile-gym-feedback");
 const purchaseHistory = document.querySelector("#purchase-history");
 const bookingHistory = document.querySelector("#client-booking-history");
 const measurementDialog = document.querySelector("#measurement-dialog");
@@ -177,7 +173,6 @@ function renderHeader(client) {
   document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
-  gymSelect.value = client.gym?.id || "";
 }
 
 function currencyText(value, currency = "EUR") {
@@ -392,25 +387,6 @@ async function loadPurchaseHistory() {
       message.textContent = error instanceof Error ? error.message : "No se pudo cargar el historial.";
       container.replaceChildren(message);
     }
-  }
-}
-
-async function loadAvailableGyms() {
-  try {
-    const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
-    const data = await response.json();
-    if (!response.ok) return;
-    gymSelect.replaceChildren();
-    for (const gym of data.gyms) {
-      const option = document.createElement("option");
-      option.value = gym.id;
-      option.textContent = gym.name;
-      gymSelect.append(option);
-    }
-    gymSelect.value = progress.client.gym?.id || "";
-    gymForm.hidden = data.gyms.length < 2;
-  } catch {
-    gymForm.hidden = true;
   }
 }
 
@@ -674,7 +650,6 @@ async function loadProfile() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo cargar esta ficha.");
     renderProgress(data); loading.hidden = true; view.hidden = false;
-    void loadAvailableGyms();
     void loadPurchaseHistory();
     void loadBonoServices();
   } catch (error) {
@@ -683,31 +658,6 @@ async function loadProfile() {
       : "No se pudo cargar esta ficha. Inténtalo de nuevo.");
   }
 }
-
-gymForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  gymFeedback.textContent = "Guardando…";
-  const submit = gymForm.querySelector('button[type="submit"]');
-  submit.disabled = true;
-  try {
-    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/gym`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ gymId: gymSelect.value }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo cambiar el centro.");
-    progress.client.gym = { ...progress.client.gym, ...data.client.gym };
-    document.querySelector("#profile-gym").textContent = data.client.gym.name;
-    document.querySelector("#profile-location").textContent = [data.client.gym.city, data.client.gym.province].filter(Boolean).join(", ") || "Sin ubicación";
-    gymSelect.value = data.client.gym.id;
-    gymFeedback.textContent = "Centro actualizado.";
-  } catch (error) {
-    gymFeedback.textContent = error instanceof Error ? error.message : "No se pudo cambiar el centro.";
-  } finally {
-    submit.disabled = false;
-  }
-});
 
 clientDetailsForm.addEventListener("submit", async (event) => {
   event.preventDefault();

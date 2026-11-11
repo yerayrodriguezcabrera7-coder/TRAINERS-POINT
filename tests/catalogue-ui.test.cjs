@@ -78,10 +78,11 @@ test('Clientes: marcas separadas, búsqueda compartida y ningún acceso rápido 
     await until(()=>p.d.querySelector('[data-brand=TRAINERS_POINT]').textContent.includes('No hay clientes'));
     assert.match(p.d.querySelector('[data-brand=COBOSU]').textContent,/Bea/);assert.deepEqual(p.errors,[]);
     const form=p.d.getElementById('create-form');
-    form.elements.namedItem('brand').value='COBOSU';form.elements.namedItem('firstName').value='Nueva';form.elements.namedItem('lastName').value='Cobosu';form.elements.namedItem('email').value='nueva@example.invalid';form.elements.namedItem('phone').value='600000002';form.elements.namedItem('gymId').value=gym.id;form.elements.namedItem('consentData').checked=true;
+    form.elements.namedItem('brand').value='COBOSU';form.elements.namedItem('firstName').value='Nueva';form.elements.namedItem('lastName').value='Cobosu';form.elements.namedItem('email').value='nueva@example.invalid';form.elements.namedItem('phone').value='600000002';form.elements.namedItem('consentData').checked=true;
+    assert.equal(form.elements.namedItem('gymId'),null);assert.equal(p.d.getElementById('gym-filter'),null);assert.equal(p.d.getElementById('gyms'),null);
     p.w.eval('updateIntakeStep(3,false); renderProposal();');
     assert.equal(p.d.getElementById('submit-create').hidden,true);
     form.requestSubmit(p.d.getElementById('create-client-only'));await until(()=>submitted);
-    await new Promise(r=>setTimeout(r,30));assert.equal(submitted.brand,'COBOSU');assert.equal(clientPosts,1);assert.equal(packagePosts,0);
+    await new Promise(r=>setTimeout(r,30));assert.equal(submitted.brand,'COBOSU');assert.equal(submitted.gymId,undefined);assert.equal(clientPosts,1);assert.equal(packagePosts,0);
   }finally{p.dom.window.close();}
 });

@@ -305,19 +305,13 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
   if (request.method === "GET" && url.pathname === "/api/clients") {
     const search = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
     const status = url.searchParams.get("status") ?? "";
-    const gymId = url.searchParams.get("gymId") ?? "";
     if (status && !validStatuses.includes(status as ClientStatus)) {
       sendError(response, 400, "El filtro de estado no es válido.");
       return true;
     }
-    if (gymId &&
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gymId)) {
-      sendError(response, 400, "El filtro de gimnasio no es válido.");
-      return true;
-    }
     const where: Prisma.ClientWhereInput = {
       ...(status ? { status: status as ClientStatus } : {}),
-      AND: [await clientScope(prisma,gymId || selectedGym)],
+      AND: [await clientScope(prisma,selectedGym)],
       ...(search
         ? {
           OR: [
@@ -350,7 +344,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       if (trainerBookings.length)
         trainerConditions.push({ id: { in: trainerBookings } });
       if (trainerConditions.length) {
-        where.AND = [{ OR: trainerConditions }];
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : []),{ OR: trainerConditions }];
       }
       else {
         where.id = "00000000-0000-0000-0000-000000000000";
@@ -449,7 +443,8 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       sendError(response, 403, "Origen de la solicitud no permitido.");
       return true;
     }
-    const input = parseClientInput(await readJsonBody(request));
+    const raw = await readJsonBody(request);
+    const input = parseClientInput(isRecord(raw) ? {...raw,gymId:selectedGym} : raw);
     if (typeof input === "string") {
       sendError(response, 400, input);
       return true;

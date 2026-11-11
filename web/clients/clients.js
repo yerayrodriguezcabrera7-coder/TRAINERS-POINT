@@ -28,25 +28,14 @@ const limitNote = document.querySelector("#limit-note");
 const resultsCount = document.querySelector("#results-count");
 const searchInput = document.querySelector("#search-input");
 const clearSearchButton = document.querySelector("#clear-search");
-const gymFilter = document.querySelector("#gym-filter");
-const gymFilterWrapper = document.querySelector("#gym-filter-wrapper");
 const clientFilterButtons = [...document.querySelectorAll(".filter-chip")];
 const validFilters = new Set(["all", "attention", "pending-payment", "no-sessions", "low-sessions", "inactive"]);
 const initialFilter = new URLSearchParams(window.location.search).get("filtro");
 const explicitlySelectedToday = sessionStorage.getItem("clients-today-filter-explicit") === "true";
-const initialGymId =
-  new URLSearchParams(window.location.search).get("gymId") ||
-  localStorage.getItem("calendar-selected-gym") ||
-  "";
-const gymCards = document.querySelector("#gym-cards");
 const createDialog = document.querySelector("#create-dialog");
 const createForm = document.querySelector("#create-form");
 const submitButton = document.querySelector("#submit-create");
 const formError = document.querySelector("#form-error");
-const gymDialog = document.querySelector("#gym-dialog");
-const gymForm = document.querySelector("#gym-form");
-const gymSubmitButton = document.querySelector("#submit-gym");
-const gymFormError = document.querySelector("#gym-form-error");
 const historyDialog = document.querySelector("#service-history-dialog");
 const packageList = document.querySelector("#service-package-list");
 const bookingRows = document.querySelector("#booking-history-rows");
@@ -74,7 +63,6 @@ const duplicateChecks = { phone: 0, email: 0 };
 let searchTimer;
 let toastTimer;
 let refreshController;
-let gyms = [];
 let services = [];
 let historyClientId;
 let clientsData = [];
@@ -224,7 +212,7 @@ function renderTodayEmpty() {
   todayView.replaceChildren();
   const message = document.createElement("p");
   message.className = "today-empty";
-  message.textContent = searchInput.value || gymFilter.value
+  message.textContent = searchInput.value
     ? "No hay sesiones hoy con estos filtros."
     : "Hoy no hay reservas. Puedes crear una desde el calendario.";
   todayView.append(message);
@@ -373,7 +361,7 @@ function renderAllClients() {
   rows.replaceChildren();
   const visibleClients = getVisibleClients();
   if (!visibleClients.length) {
-    const hasFilters = searchInput.value || gymFilter.value || activeFilter !== "all";
+    const hasFilters = searchInput.value || activeFilter !== "all";
     renderEmpty(
       hasFilters ? "No hay clientes con estos filtros" : "Aún no hay clientes",
       hasFilters
@@ -445,7 +433,6 @@ async function loadClients() {
   const params = new URLSearchParams();
   params.set("all", "true");
   if (searchInput.value.trim()) params.set("q", searchInput.value.trim());
-  if (gymFilter.value) params.set("gymId", gymFilter.value);
 
   try {
     const response = await fetch(`/api/clients?${params}`, {
@@ -479,110 +466,6 @@ async function loadClients() {
     if (activeFilter === "today") todayView.replaceChildren(message);
     else rows.append(message);
     resultsCount.textContent = "";
-  }
-}
-
-function renderGyms() {
-  const selectedGymId = gymFilter.value;
-  const selectedCreateGymId = document.querySelector("#create-gym-select").value;
-  gymFilterWrapper.hidden = gyms.length <= 1;
-  gymCards.replaceChildren();
-  gymFilter.replaceChildren();
-  const allOption = document.createElement("option");
-  allOption.value = "";
-  allOption.textContent = "Todos los centros";
-  gymFilter.append(allOption);
-
-  const createGymSelect = document.querySelector("#create-gym-select");
-  createGymSelect.replaceChildren();
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = gyms.length ? "Selecciona un centro" : "Añade un centro primero";
-  createGymSelect.append(placeholder);
-  createGymSelect.disabled = gyms.length === 0;
-  document.querySelector("#open-create").disabled = gyms.length === 0;
-
-  if (gyms.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "gym-loading";
-    empty.textContent = "No hay centros. Añade uno para poder crear fichas.";
-    gymCards.append(empty);
-    return;
-  }
-
-  gyms.forEach((gym) => {
-    const filterOption = document.createElement("option");
-    filterOption.value = gym.id;
-    filterOption.textContent = gym.name;
-    gymFilter.append(filterOption);
-
-    const clientOption = document.createElement("option");
-    clientOption.value = gym.id;
-    clientOption.textContent = gym.name;
-    createGymSelect.append(clientOption);
-
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = `gym-card${gymFilter.value === gym.id ? " selected" : ""}`;
-    card.setAttribute("aria-label", `Ver clientes de ${gym.name}`);
-    const icon = document.createElement("span");
-    icon.className = "gym-card-icon";
-    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>';
-    const details = document.createElement("span");
-    details.className = "gym-card-details";
-    const name = document.createElement("strong");
-    name.textContent = gym.name;
-    const location = document.createElement("small");
-    location.textContent = [gym.city, gym.province].filter(Boolean).join(", ") || "Sin ubicación";
-    details.append(name, location);
-    const count = document.createElement("span");
-    count.className = "gym-card-count";
-    count.textContent = String(gym._count.clients);
-    const clientLabel = document.createElement("small");
-    clientLabel.className = "gym-card-client-label";
-    clientLabel.textContent = gym._count.clients === 1 ? "cliente" : "clientes";
-    const countBlock = document.createElement("span");
-    countBlock.className = "gym-card-total";
-    countBlock.append(count, clientLabel);
-    card.append(icon, details, countBlock);
-    card.addEventListener("click", () => {
-      gymFilter.value = gymFilter.value === gym.id ? "" : gym.id;
-      renderGyms();
-      loadClients();
-    });
-    gymCards.append(card);
-  });
-
-  gymFilter.value = selectedGymId;
-  if (selectedCreateGymId && gyms.some((gym) => gym.id === selectedCreateGymId)) {
-    document.querySelector("#create-gym-select").value = selectedCreateGymId;
-  } else if (gyms.length === 1) {
-    document.querySelector("#create-gym-select").value = gyms[0].id;
-  }
-
-  for (const card of gymCards.querySelectorAll(".gym-card")) {
-    card.classList.toggle("selected", card.querySelector(".gym-card-details strong").textContent === gyms.find((gym) => gym.id === gymFilter.value)?.name);
-  }
-}
-
-async function loadGyms() {
-  try {
-    const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
-    const data = await response.json();
-    if (!response.ok) throw new Error("No se pudieron cargar los centros. Inténtalo de nuevo.");
-    gyms = data.gyms;
-    const activeGym = gyms.find((gym) => gym.id === initialGymId) ?? gyms[0];
-    if (activeGym) {
-      gymFilter.value = activeGym.id;
-      localStorage.setItem("calendar-selected-gym", activeGym.id);
-    }
-    renderGyms();
-  } catch (error) {
-    gymCards.replaceChildren();
-    const message = document.createElement("p");
-    message.className = "gym-loading error";
-    message.textContent = "No se pudieron cargar los centros. Inténtalo de nuevo.";
-    gymCards.append(message);
   }
 }
 
@@ -942,7 +825,7 @@ function validateIntakeStep(step) {
     control?.removeAttribute("aria-invalid");
   });
   const requiredByStep = step === 0
-    ? ["firstName", "lastName", "phone", "email", "gymId"]
+    ? ["firstName", "lastName", "phone", "email"]
     : step === 2
       ? ["consentData"]
       : [];
@@ -951,7 +834,6 @@ function validateIntakeStep(step) {
     lastName: "Faltan los apellidos.",
     phone: "Falta el teléfono.",
     email: "Revisa el correo electrónico.",
-    gymId: "Selecciona un centro.",
     consentData: "Confirma el uso de datos personales.",
   };
   for (const name of requiredByStep) {
@@ -1004,7 +886,6 @@ function intakeDraft() {
     phone: form.elements.namedItem("phone").value.trim(),
     dni: form.elements.namedItem("dni").value.trim(),
     address: form.elements.namedItem("address").value.trim(),
-    gymId: form.elements.namedItem("gymId").value,
     brand: form.elements.namedItem("brand").value,
     preferredName: form.elements.namedItem("preferredName").value.trim(),
     birthDate: form.elements.namedItem("birthDate").value,
@@ -1263,8 +1144,6 @@ async function createIntakeClient(mode) {
     createDialog.close();
     searchInput.value = "";
     clearSearchButton.hidden = true;
-    gymFilter.value = "";
-    await loadGyms();
     await loadClients();
     const name = `${data.client.firstName} ${data.client.lastName}`;
     if (packageFailed) {
@@ -1291,7 +1170,6 @@ async function createIntakeClient(mode) {
 
 document.querySelector("#open-create").addEventListener("click", () => {
   createForm.reset();
-  createForm.elements.gymId.value = gymFilter.value || gyms[0]?.id || "";
   formError.hidden = true;
   createForm.querySelectorAll("[data-field-error]").forEach((error) => {
     error.hidden = true;
@@ -1371,14 +1249,6 @@ clientFilterButtons.forEach((button) => {
 document.querySelectorAll(".stat-card[data-filter]").forEach((button) => {
   button.addEventListener("click", () => setActiveFilter(button.dataset.filter));
 });
-document.querySelector("#manage-gyms").addEventListener("click", () => {
-  gymForm.reset();
-  gymFormError.hidden = true;
-  gymDialog.showModal();
-  gymForm.elements.name.focus();
-});
-document.querySelector("#close-gym-dialog").addEventListener("click", () => gymDialog.close());
-document.querySelector("#cancel-gym").addEventListener("click", () => gymDialog.close());
 document.querySelector("#close-history-dialog").addEventListener("click", () => historyDialog.close());
 document.querySelector("#close-service-create").addEventListener("click", () => serviceCreateDialog.close());
 document.querySelector("#cancel-service-create").addEventListener("click", () => serviceCreateDialog.close());
@@ -1400,34 +1270,7 @@ clearSearchButton.addEventListener("click", () => {
   searchInput.focus();
   loadClients();
 });
-gymFilter.addEventListener("change", () => {
-  renderGyms();
-  loadClients();
-});
-
 rows.addEventListener("change", async (event) => {
-  const gymSelect = event.target.closest(".gym-client-select");
-  if (gymSelect) {
-    gymSelect.disabled = true;
-    try {
-      const response = await fetch(`/api/clients/${encodeURIComponent(gymSelect.dataset.clientId)}/gym`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ gymId: gymSelect.value }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error("No se pudo cambiar el centro. Inténtalo de nuevo.");
-      showToast("Centro actualizado.");
-      await Promise.all([loadGyms(), loadClients()]);
-    } catch (error) {
-      gymSelect.value = gymSelect.dataset.previousGymId;
-      showToast("No se pudo cambiar el centro. Inténtalo de nuevo.", true);
-    } finally {
-      gymSelect.disabled = false;
-    }
-    return;
-  }
-
   const select = event.target.closest(".status-select");
   if (!select) return;
 
@@ -1565,40 +1408,6 @@ serviceCreateForm.addEventListener("submit", async (event) => {
     serviceCreateSubmit.textContent = "Crear servicio";
   }
 });
-
-gymForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  gymFormError.hidden = true;
-  if (!gymForm.reportValidity()) return;
-
-  const gymData = Object.fromEntries(new FormData(gymForm).entries());
-  gymSubmitButton.disabled = true;
-  gymSubmitButton.textContent = "Guardando…";
-  try {
-    const response = await fetch("/api/gyms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(gymData),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error("No se pudo guardar el centro. Inténtalo de nuevo.");
-
-    gymDialog.close();
-    await loadGyms();
-    gymFilter.value = data.gym.id;
-    renderGyms();
-    await loadClients();
-    createForm.elements.gymId.value = data.gym.id;
-    showToast("Centro añadido.");
-  } catch (error) {
-    gymFormError.textContent = "No se pudo guardar el centro. Inténtalo de nuevo.";
-    gymFormError.hidden = false;
-  } finally {
-    gymSubmitButton.disabled = false;
-    gymSubmitButton.textContent = "Guardar centro";
-  }
-});
-
 
 function sessionBadge(value) {
   const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60000);
@@ -1915,7 +1724,7 @@ document.querySelector("#detail-checkin").addEventListener("click", async (event
 
 syncTimelineTimer();
 syncFilterControls();
-loadGyms().then(loadClients);
+loadClients();
 
 
 const purchaseServiceSelect = document.querySelector("#purchase-service");
