@@ -6,6 +6,7 @@ import { accessMigration, type Identity } from "./access";
 import {
 ApiError,
 Booking,
+COBOSU_ID,
 Config,
 LeaveRequest,
 assertAvailable,
@@ -533,13 +534,14 @@ export class Store {
     const day = date.parse(query.date),
       c = (await this.state(gym)) as Config & { bookings: Booking[] };
     const service = c.services.find((s) => s.id === query.serviceId);
+    const isCobosu = query.employeeId === COBOSU_ID;
     if (
       !service ||
-      !c.employees.some((e) => e.id === query.employeeId) ||
+      (!isCobosu && !c.employees.some((e) => e.id === query.employeeId)) ||
       !c.rooms.some((r) => r.id === query.roomId)
     )
       throw new ApiError(400, "Recursos desconocidos.");
-    if (service.active === false || c.employees.find(e => e.id === query.employeeId)?.active === false) return [];
+    if (service.active === false || (!isCobosu && c.employees.find(e => e.id === query.employeeId)?.active === false)) return [];
     c.centers = await this.centers();
     const slots = [];
     for (let start = 0; start + service.duration < 1440; start += 15) {

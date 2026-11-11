@@ -139,8 +139,17 @@ function saveData() {
   if (!storageWritable) return false;
   try { localStorage.setItem(KEY, JSON.stringify(data)); return true; } catch { warn('No hay espacio disponible en el navegador para guardar los cambios.'); return false; }
 }
+const COBOSU_ID = '__cobosu';
+function cobosuColumn() {
+  return { id: COBOSU_ID, name: 'Cobosu', color: '#1e3a8a', schedule: data.schedule, isCobosu: true };
+}
 const lookupIndexes = new Map();
-function lookup(collection, id) { const items=data[collection]; let index=lookupIndexes.get(collection); if(!index||index.items!==items||index.size!==items.length){index={items,size:items.length,byId:new Map(items.map(item=>[item.id,item]))};lookupIndexes.set(collection,index);} return index.byId.get(id) || { name: 'Sin asignar' }; }
+function lookup(collection, id) {
+  if (collection === 'employees' && id === COBOSU_ID) return cobosuColumn();
+  const items=data[collection]; let index=lookupIndexes.get(collection);
+  if(!index||index.items!==items||index.size!==items.length){index={items,size:items.length,byId:new Map(items.map(item=>[item.id,item]))};lookupIndexes.set(collection,index);}
+  return index.byId.get(id) || { name: 'Sin asignar' };
+}
 function toast(message) {
   $('toast').textContent = message;
   $('toast').hidden = false;
@@ -161,10 +170,10 @@ function visibleBookings() {
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
-  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
+  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option><option value="__cobosu">Cobosu</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
   fillSelect('service-filter', data.services.filter(s => s.active !== false), '<option value="all">Todos los servicios</option>');
   fillSelect('room-filter', data.rooms, '<option value="all">Todos los espacios</option>');
-  fillSelect('booking-employee', data.employees.filter(e => e.active !== false),serverMode?'<option value="">Sin asignar</option>':'');
+  fillSelect('booking-employee', data.employees.filter(e => e.active !== false), '<option value="__cobosu">Cobosu</option>' + (serverMode?'<option value="">Sin asignar</option>':''));
   fillSelect('booking-service', data.services.filter(s => s.active !== false));
   fillSelect('booking-room', data.rooms);
   for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
@@ -204,6 +213,7 @@ function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('cli
 
 function employeesForDate(date, dayBookings, allEmployees) {
   if (state.employee !== 'all') {
+    if (state.employee === COBOSU_ID) return [cobosuColumn()];
     if (state.employee === '__unassigned') {
       return [{ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
     }
@@ -211,15 +221,19 @@ function employeesForDate(date, dayBookings, allEmployees) {
     return emp ? [emp] : [];
   }
 
-  const scheduled = allEmployees.filter(emp => {
-    if (emp.id === '__unassigned') return false;
+  const scheduled = [cobosuColumn()];
+
+  for (const emp of allEmployees) {
+    if (emp.id === '__unassigned' || emp.id === COBOSU_ID) continue;
     const shift = emp.shifts?.find(s => s.date === date);
-    return Boolean(shift && shift.periods && shift.periods.length > 0);
-  });
+    if (shift && shift.periods && shift.periods.length > 0) {
+      scheduled.push(emp);
+    }
+  }
 
   const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
   for (const emp of allEmployees) {
-    if (bookingEmpIds.has(emp.id) && !scheduled.some(s => s.id === emp.id)) {
+    if (emp.id !== COBOSU_ID && bookingEmpIds.has(emp.id) && !scheduled.some(s => s.id === emp.id)) {
       scheduled.push(emp);
     }
   }
@@ -268,11 +282,12 @@ function renderTimeGrid(dates, bookings, employees) {
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
-        const periods = C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre');
+        const isCobosu = employee.id === COBOSU_ID;
+        const periods = isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
+        const shiftText = isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre'));
         const isOff = !periods.length && employee.id !== '__unassigned';
-        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned';
-        html += `<div class="employee-heading" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
           <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
@@ -292,9 +307,10 @@ function renderTimeGrid(dates, bookings, employees) {
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''}" style="grid-column:${d.startCol + j};grid-row:3">`;
-        const absent = (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
-        const serviceWorker = !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
+        const isCobosu = employee.id === COBOSU_ID;
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" style="grid-column:${d.startCol + j};grid-row:3">`;
+        const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
+        const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
         for (let slot = 0; slot < 48; slot++) {
           const start = slot * 30;
@@ -415,6 +431,10 @@ function updateHoursHint() {
   if(!$('booking-employee').value){$('booking-hours').textContent='Pendiente de asignación: se guarda sin confirmar. La disponibilidad se comprobará al asignar un trabajador.';return;}
   if (!C.validDate(date)) { $('booking-hours').textContent = ''; return; }
   const hours = C.hoursFor(date, data.schedule);
+  if ($('booking-employee').value === COBOSU_ID) {
+    $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : `Columna Cobosu. Apertura: ${hours.open} – ${hours.close}.`;
+    return;
+  }
   const employee=lookup('employees',$('booking-employee').value);
   const periods=employee?C.employeePeriods(employee,date,data.schedule):[];
   $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : !periods.length ? 'Este empleado no trabaja este día.' : `Apertura: ${hours.open} – ${hours.close}. Turno: ${periods.map(p=>p.open+'–'+p.close).join(' y ')}. La reserva completa debe caber en una franja.`;
@@ -433,7 +453,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const bookingClients = serverMode && awsClientsLoaded ? awsClients : data.clients;
   fillSelect('booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===b?.clientId), '');
   fillSelect('booking-service', data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
-  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId),serverMode?'<option value="">Sin asignar</option>':'');
+  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId), '<option value="__cobosu">Cobosu</option>' + (serverMode?'<option value="">Sin asignar</option>':''));
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const start = minute ?? C.minutes(hours.open);

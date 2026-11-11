@@ -279,3 +279,21 @@
   border: 1px solid #a7f3d0;
   color: #15803d;
 }
+.employee-heading.is-cobosu {
+  background: #eff6ff;
+  border-bottom: 2px solid #1e3a8a;
+  flex-direction: column;
+  gap: 2px;
+  height: 44px;
+}
+.employee-heading.is-cobosu .employee-heading-name {
+  color: #1e3a8a;
+  font-weight: 700;
+}
+.employee-heading.is-cobosu .employee-shift-tag {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.time-column.is-cobosu-column {
+  background: #f8fbff;
+}

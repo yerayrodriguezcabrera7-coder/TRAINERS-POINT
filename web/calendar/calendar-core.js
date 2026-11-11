@@ -36,7 +36,8 @@
     if (minutes(booking.start) >= minutes(booking.end)) return 'La hora de fin debe ser posterior al inicio.';
     if (booking.status === 'cancelled') return '';
     if (!isOpen(booking.date, minutes(booking.start), minutes(booking.end), schedule)) return 'La reserva debe quedar dentro del horario de apertura.';
-    const clash = bookings.find(other => other.id !== booking.id && other.date === booking.date && other.status !== 'cancelled' && overlap(booking, other) && (other.employeeId === booking.employeeId || other.roomId === booking.roomId));
+    const isCobosu = booking.employeeId === '__cobosu';
+    const clash = isCobosu ? null : bookings.find(other => other.id !== booking.id && other.date === booking.date && other.status !== 'cancelled' && overlap(booking, other) && other.employeeId !== '__cobosu' && (other.employeeId === booking.employeeId || other.roomId === booking.roomId));
     if (clash) return clash.employeeId === booking.employeeId ? 'Este entrenador ya tiene una reserva en ese horario.' : 'La sala ya está ocupada en ese horario.';
     if (centers && booking.centerId) {
       const center = centers.find(c => c.id === booking.centerId);

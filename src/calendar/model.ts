@@ -190,11 +190,13 @@ export const label = (n: number) =>
   `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 export const overlaps = (a: Booking, b: Booking) =>
   a.date === b.date && a.start < b.end && b.start < a.end;
+export const COBOSU_ID = "__cobosu";
 export function normalize(input: Input, c: Config): Booking {
   const service = c.services.find((x) => x.id === input.serviceId);
+  const isCobosu = input.employeeId === COBOSU_ID;
   if (
     !service ||
-    (input.employeeId !== null && !c.employees.some((x) => x.id === input.employeeId)) ||
+    (input.employeeId !== null && !isCobosu && !c.employees.some((x) => x.id === input.employeeId)) ||
     !c.rooms.some((x) => x.id === input.roomId) ||
     !c.clients.some((x) => x.id === input.clientId)
   )
@@ -225,11 +227,12 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
   const service = c.services.find(s => s.id === b.serviceId)!;
-  if (b.employeeId && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
+  const isCobosu = b.employeeId === COBOSU_ID;
+  if (b.employeeId && !isCobosu && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
   const serviceHours = service.schedule?.[day];
   if (serviceHours && (serviceHours.closed || b.start < serviceHours.open || b.end > serviceHours.close)) throw new ApiError(409, "Fuera del horario del servicio.");
-  const worker = c.employees.find((x) => x.id === b.employeeId)!;
-  if (c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
+  const worker = isCobosu ? undefined : c.employees.find((x) => x.id === b.employeeId)!;
+  if (!isCobosu && c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
     throw new ApiError(409, "El empleado tiene una ausencia aprobada en esa fecha.");
   for (const h of [c.schedule[day]])
     if (h.closed || b.start < h.open || b.end > h.close)
@@ -246,38 +249,40 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   );
   if (clashes.some((o) => o.clientId === b.clientId))
     throw new ApiError(409, "El cliente ya tiene una reserva en ese horario.");
-  const capacity = c.services.find((s) => s.id === b.serviceId)!.capacity;
-  const same = (o: Booking) =>
-    capacity > 1 &&
-    b.sessionId &&
-    o.sessionId === b.sessionId &&
-    o.employeeId === b.employeeId &&
-    o.centerId === b.centerId &&
-    o.roomId === b.roomId &&
-    o.serviceId === b.serviceId &&
-    o.date === b.date &&
-    o.start === b.start &&
-    o.end === b.end;
-  if (
-    b.sessionId &&
-    all.some(
-      (o) =>
-        o.id !== b.id &&
-        o.status !== "CANCELLED" &&
-        o.sessionId === b.sessionId &&
-        !same(o),
+  if (!isCobosu) {
+    const capacity = c.services.find((s) => s.id === b.serviceId)!.capacity;
+    const same = (o: Booking) =>
+      capacity > 1 &&
+      b.sessionId &&
+      o.sessionId === b.sessionId &&
+      o.employeeId === b.employeeId &&
+      o.centerId === b.centerId &&
+      o.roomId === b.roomId &&
+      o.serviceId === b.serviceId &&
+      o.date === b.date &&
+      o.start === b.start &&
+      o.end === b.end;
+    if (
+      b.sessionId &&
+      all.some(
+        (o) =>
+          o.id !== b.id &&
+          o.status !== "CANCELLED" &&
+          o.sessionId === b.sessionId &&
+          !same(o),
+      )
     )
-  )
-    throw new ApiError(
-      409,
-      "La sesión grupal no coincide con el horario o los recursos.",
+      throw new ApiError(
+        409,
+        "La sesión grupal no coincide con el horario o los recursos.",
+      );
+    const resources = clashes.filter(
+      (o) => (b.employeeId && o.employeeId === b.employeeId) || (o.roomId === b.roomId && o.centerId === b.centerId && o.employeeId !== COBOSU_ID),
     );
-  const resources = clashes.filter(
-    (o) => (b.employeeId && o.employeeId === b.employeeId) || (o.roomId === b.roomId && o.centerId === b.centerId),
-  );
-  if (resources.some((o) => !same(o)))
-    throw new ApiError(409, "Entrenador o sala ya ocupados.");
-  if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
+    if (resources.some((o) => !same(o)))
+      throw new ApiError(409, "Entrenador o sala ya ocupados.");
+    if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
+  }
 
   const targetCenterId = b.centerId || (c as any).gymId;
   const centerConfig = c.centers?.find((x) => x.id === targetCenterId || x.id === b.centerId);
