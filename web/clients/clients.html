@@ -41,11 +41,6 @@
               <strong class="stat-value" id="count-attention">—</strong>
               <span class="stat-foot">Pagos o sesiones</span>
             </button>
-            <button class="stat-card" type="button" data-filter="today" aria-pressed="false">
-              <span class="stat-label">Hoy</span>
-              <strong class="stat-value" id="count-today">—</strong>
-              <span class="stat-foot">Reservas de hoy</span>
-            </button>
             <button class="stat-card" type="button" data-filter="low-sessions" aria-pressed="false">
               <span class="stat-label">Sesiones por acabarse</span>
               <strong class="stat-value" id="count-low-sessions">—</strong>
@@ -62,17 +57,15 @@
             <div class="panel-heading">
               <div>
                 <h2 id="client-list-title">Clientes</h2>
-                <p>Consulta las sesiones de hoy o busca una ficha.</p>
+                <p>Consulta las fichas de cada marca y utiliza los filtros para encontrarlas.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
 
             <div class="client-filter-chips" role="group" aria-label="Filtrar clientes">
               <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">Todos</button>
-              <button class="filter-chip" type="button" data-filter="today" aria-pressed="false">Hoy</button>
               <button class="filter-chip" type="button" data-filter="pending-payment" aria-pressed="false">Pago pendiente</button>
               <button class="filter-chip" type="button" data-filter="no-sessions" aria-pressed="false">Sin sesiones</button>
-              <button class="filter-chip" type="button" data-filter="leads" aria-pressed="false">Nuevos interesados</button>
             </div>
 
             <div class="toolbar">
@@ -167,6 +160,7 @@
             <section class="intake-step" data-intake-step="0" aria-labelledby="intake-title-1">
               <p class="eyebrow">PASO 1</p><h3 id="intake-title-1">Quién es</h3><p class="intake-help">Los datos para encontrar su ficha y contactar.</p>
               <div class="form-grid intake-fields">
+                <label><span>Marca del cliente</span><select name="brand" id="create-brand" required><option value="TRAINERS_POINT">Trainers Point</option><option value="COBOSU">Cobosu</option></select></label>
                 <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required="" maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden=""></span></label>
                 <label class="form-field"><span>Apellidos <b>*</b></span><input name="lastName" required="" maxlength="100" autocomplete="family-name" placeholder="Ej. García López" aria-describedby="intake-error-lastName"><span class="intake-field-error" id="intake-error-lastName" data-field-error="lastName" aria-live="polite" hidden=""></span></label>
                 <label class="form-field form-field-wide"><span>Teléfono <b>*</b></span><input name="phone" type="tel" required="" maxlength="40" autocomplete="tel" placeholder="+34 600 000 000" aria-describedby="intake-error-phone"><span class="intake-field-error" id="intake-error-phone" data-field-error="phone" aria-live="polite" hidden=""></span><span class="duplicate-message" data-duplicate-for="phone" aria-live="polite"></span></label>
@@ -358,7 +352,7 @@
               <div id="purchase-calc-callout" class="form-field form-field-wide bono-calc-callout" hidden="">
                 <div class="bono-calc-chip"><span class="bono-calc-chip-label">Precio/sesión:</span><strong id="purchase-calc-rate">—</strong></div>
                 <div class="bono-calc-chip"><span class="bono-calc-chip-label">Duración:</span><strong id="purchase-calc-duration">—</strong></div>
-                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong>4 semanas solo</strong></div>
+                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong id="purchase-validity-preview">Según servicio</strong></div>
               </div>
               <label class="form-field">
                 <span>Sesiones incluidas <b>*</b></span>
@@ -409,7 +403,7 @@
                   <h3 id="purchase-ticket-service" class="ticket-title">Selecciona un pack</h3>
                   <div class="ticket-tags">
                     <span id="purchase-ticket-duration" class="ticket-tag">60 min</span>
-                    <span class="ticket-tag ticket-tag-validity">4 semanas solo</span>
+                    <span class="ticket-tag ticket-tag-validity" id="purchase-ticket-validity">Según servicio</span>
                   </div>
                 </div>
                 <div class="ticket-right">

@@ -159,6 +159,14 @@ function showProfileToast(message) {
 }
 
 function renderHeader(client) {
+  const cobosu = client.brand === "COBOSU";
+  for (const id of ["open-add-bono", "open-add-bono-top", "btn-renew-bono-banner"]) {
+    const button = document.getElementById(id); if (button) button.hidden = cobosu || currentUserRole === "TRAINER";
+  }
+  let note = document.getElementById("manual-package-info");
+  if (!note) { note = document.createElement("p"); note.id = "manual-package-info"; document.querySelector("#profile-name").parentElement.append(note); }
+  note.hidden = !cobosu;
+  note.textContent = "Cliente Cobosu. Sus bonos se adquieren desde la app; no se añaden manualmente desde el panel.";
   document.title = `Ficha de ${client.firstName} ${client.lastName} | Trainers Point`;
   document.querySelector("#profile-avatar").textContent = initials(client);
   document.querySelector("#profile-name").textContent = `${client.firstName} ${client.lastName}`;
@@ -309,7 +317,7 @@ function renderPurchaseHistory(data) {
     if(pkg.sale){const balance=document.createElement('p');balance.textContent=`Cobrado: ${currencyText(pkg.sale.paidAmount)} · Pendiente: ${currencyText(pkg.sale.outstandingAmount)}`;footer.append(balance);}
     if(currentUserRole!=='TRAINER'&&pkg.paymentStatus!=='PAGADO'){
       const pay=document.createElement('button');pay.type='button';pay.className='profile-secondary-button';pay.textContent='Registrar pago del bono';
-      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/productos.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
+      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/ventas.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
       footer.append(pay);
     }
     card.append(header, progressWrap, footer);
@@ -373,7 +381,7 @@ async function loadPurchaseHistory() {
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
     if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
-      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/productos.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/ventas.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }
     renderBookingHistory(data.bookings);
@@ -985,7 +993,7 @@ function renderBonoCardsGrid() {
 
     const meta = document.createElement("div");
     meta.className = "bono-card-meta";
-    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">4 semanas</span>`;
+    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">${service.validityWeeks || 4} semanas</span>`;
 
     card.append(topRow, name, priceRow, meta);
 
@@ -1014,6 +1022,8 @@ function selectBonoCard(serviceId) {
 }
 
 function updateBonoCalculation() {
+  const selected = activeServicesList.find(service => service.id === bonoServiceSelect?.value);
+  for (const id of ["bono-validity-preview", "ticket-validity"]) { const el = document.getElementById(id); if (el) el.textContent = selected ? `${selected.validityWeeks || 4} semanas de validez` : "Según servicio"; }
   const selectedId = bonoServiceSelect?.value;
   const service = activeServicesList.find((s) => s.id === selectedId);
   const sessions = Number(bonoSessionsInput?.value || 0);
@@ -1060,6 +1070,7 @@ function updateBonoCalculation() {
 }
 
 function openAddBonoModal() {
+  if (progress?.client?.brand === "COBOSU") { showProfileToast("Los bonos Cobosu se adquieren desde la app."); return; }
   if (!addBonoDialog) return;
   addBonoForm.reset();
   if (bonoFormError) bonoFormError.hidden = true;
@@ -1139,7 +1150,7 @@ if (bonoAmountInput) bonoAmountInput.addEventListener("input", updateBonoCalcula
 if (addBonoForm) {
   addBonoForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (currentUserRole === "TRAINER") return;
+    if (currentUserRole === "TRAINER" || progress?.client?.brand === "COBOSU") return;
     if (bonoFormError) bonoFormError.hidden = true;
     if (!addBonoForm.reportValidity()) return;
 

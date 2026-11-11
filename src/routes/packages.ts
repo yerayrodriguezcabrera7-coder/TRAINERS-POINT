@@ -18,7 +18,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true, gymId: true },
+      select: { id: true, firstName: true, lastName: true, brand: true, assignedWorkerId: true, gymId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");

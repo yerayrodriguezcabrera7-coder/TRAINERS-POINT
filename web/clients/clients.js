@@ -31,7 +31,7 @@ const clearSearchButton = document.querySelector("#clear-search");
 const gymFilter = document.querySelector("#gym-filter");
 const gymFilterWrapper = document.querySelector("#gym-filter-wrapper");
 const clientFilterButtons = [...document.querySelectorAll(".filter-chip")];
-const validFilters = new Set(["all", "today", "attention", "pending-payment", "no-sessions", "leads", "low-sessions", "inactive"]);
+const validFilters = new Set(["all", "attention", "pending-payment", "no-sessions", "low-sessions", "inactive"]);
 const initialFilter = new URLSearchParams(window.location.search).get("filtro");
 const explicitlySelectedToday = sessionStorage.getItem("clients-today-filter-explicit") === "true";
 const initialGymId =
@@ -382,7 +382,15 @@ function renderAllClients() {
     );
     return;
   }
-  visibleClients.forEach((client, index) => rows.append(renderClient(client, index)));
+  for (const [brand, label] of [["TRAINERS_POINT", "Trainers Point"], ["COBOSU", "Cobosu"]]) {
+    const group = document.createElement("section"); group.className = "client-brand-group"; group.dataset.brand = brand;
+    const clients = visibleClients.filter(client => (client.brand || "TRAINERS_POINT") === brand);
+    const heading = document.createElement("h3"); heading.textContent = `${label} · ${clients.length} ${clients.length === 1 ? "cliente" : "clientes"}`; group.append(heading);
+    const list = document.createElement("div"); list.className = "client-brand-list";
+    clients.forEach((client,index) => list.append(renderClient(client,index)));
+    if (!clients.length) { const empty = document.createElement("p"); empty.className = "list-message"; empty.textContent = "No hay clientes de esta marca con los filtros actuales."; list.append(empty); }
+    group.append(list); rows.append(group);
+  }
 }
 
 function renderActiveClientView(animateBookingId = "") {
@@ -458,7 +466,6 @@ async function loadClients() {
     clientsData = clients;
     document.querySelector("#heading-count").textContent = `(${data.total})`;
     document.querySelector("#count-attention").textContent = clients.filter((client) => clientMatchesFilter(client, "attention")).length;
-    document.querySelector("#count-today").textContent = clients.filter((client) => client.nextSession && isToday(client.nextSession.startTime)).length;
     document.querySelector("#count-low-sessions").textContent = clients.filter((client) => clientMatchesFilter(client, "low-sessions")).length;
     document.querySelector("#count-inactive").textContent = clients.filter((client) => client.status === "INACTIVO").length;
     clearSearchButton.hidden = !searchInput.value;
@@ -622,7 +629,7 @@ function renderPurchaseCardsGrid(selectedId = "") {
 
     const meta = document.createElement("div");
     meta.className = "bono-card-meta";
-    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">4 semanas</span>`;
+    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">${service.validityWeeks || 4} semanas</span>`;
 
     card.append(topRow, name, priceRow, meta);
 
@@ -821,6 +828,7 @@ function renderServiceHistory(data) {
 }
 
 async function openClientHistory(client) {
+  purchaseForm.hidden = currentUserRole === "TRAINER" || client.brand === "COBOSU";
   historyClientId = client.id;
   document.querySelector("#history-dialog-title").textContent = `${client.firstName} ${client.lastName}`;
   document.querySelector("#history-client-subtitle").textContent =
@@ -914,7 +922,7 @@ function updateIntakeStep(nextStep, focus = true) {
   document.querySelector("#cancel-create").hidden = intakeStep === 3;
   intakeNextButton.hidden = intakeStep === 3;
   intakeCreateOnlyButton.hidden = intakeStep !== 3;
-  submitButton.hidden = intakeStep !== 3;
+  submitButton.hidden = intakeStep !== 3 || createForm.elements.namedItem("brand").value === "COBOSU";
   if (focus) {
     requestAnimationFrame(() => {
       const firstField = intakeSteps[intakeStep].querySelector(
@@ -997,6 +1005,7 @@ function intakeDraft() {
     dni: form.elements.namedItem("dni").value.trim(),
     address: form.elements.namedItem("address").value.trim(),
     gymId: form.elements.namedItem("gymId").value,
+    brand: form.elements.namedItem("brand").value,
     preferredName: form.elements.namedItem("preferredName").value.trim(),
     birthDate: form.elements.namedItem("birthDate").value,
     objective: intakeObjective(),
@@ -1026,6 +1035,10 @@ function formatProposalDuration(durationMin) {
 
 function renderProposal() {
   proposalTable.replaceChildren();
+  if (intakeDraft().brand === "COBOSU") {
+    proposalReason.textContent = "Los clientes Cobosu adquieren sus bonos desde la app. Aquí solo se crea la ficha.";
+    proposalEmpty.hidden = true; intakeCreateOnlyButton.disabled = false; submitButton.disabled = true; return;
+  }
   const proposal = buildProposal(intakeDraft(), services);
   proposalSuggestion = proposal;
   proposalReason.textContent = proposal.service ? proposal.reason : "";
@@ -1186,6 +1199,7 @@ async function checkDuplicate(field) {
 
 async function createIntakeClient(mode) {
   const draft = intakeDraft();
+  if (draft.brand === "COBOSU") mode = "clientOnly";
   if (!draft.consentData) {
     formError.textContent = "Confirma el uso de datos personales.";
     formError.hidden = false;
@@ -1492,43 +1506,6 @@ packageList.addEventListener("submit", async (event) => {
   }
 });
 
-createForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  formError.hidden = true;
-
-  if (!createForm.reportValidity()) return;
-
-  const formData = new FormData(createForm);
-  const client = Object.fromEntries(formData.entries());
-  submitButton.disabled = true;
-  submitButton.textContent = "Guardando…";
-
-  try {
-    const response = await fetch("/api/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(client),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.");
-
-    setActiveFilter("all");
-    closeDialog();
-    showToast(`Ficha de ${data.client.firstName} ${data.client.lastName} añadida.`);
-    searchInput.value = "";
-    clearSearchButton.hidden = true;
-    gymFilter.value = "";
-    await loadGyms();
-    await loadClients();
-  } catch (error) {
-    formError.textContent = error.message || "No se pudo crear el cliente. Revisa los datos e inténtalo de nuevo.";
-    formError.hidden = false;
-  } finally {
-    submitButton.disabled = false;
-    submitButton.textContent = "Crear cliente";
-  }
-});
-
 purchaseForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (currentUserRole === "TRAINER") return;
@@ -1729,11 +1706,11 @@ function renderClient(client) {
   details.append(center);
   const actions = document.createElement("div");
   actions.className = "client-card-actions";
-  if (currentUserRole !== 'TRAINER') {
+  if (currentUserRole !== 'TRAINER' && client.brand !== 'COBOSU') {
     const bonoButton = document.createElement("button");
   bonoButton.type = "button";
   bonoButton.className = "client-card-bono-btn";
-  bonoButton.innerHTML = '<svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>+ Bono</span>';
+  bonoButton.innerHTML = '<svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Bono</span>';
   bonoButton.setAttribute("aria-label", `Añadir bono a ${clientName}`);
   bonoButton.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1947,6 +1924,8 @@ const purchaseCalcRate = document.querySelector("#purchase-calc-rate");
 const purchaseCalcDuration = document.querySelector("#purchase-calc-duration");
 
 function updatePurchaseCallout() {
+  const selected = services.find(service => service.id === purchaseServiceSelect?.value);
+  for (const id of ["purchase-validity-preview", "purchase-ticket-validity"]) { const el=document.getElementById(id); if(el)el.textContent=selected?`${selected.validityWeeks || 4} semanas de validez`:"Según servicio"; }
   if (!purchaseServiceSelect || !purchaseCalcCallout) return;
   const service = services.find((s) => s.id === purchaseServiceSelect.value);
   const sessions = Number(purchaseForm.elements.namedItem("sessionsBought")?.value || 0);

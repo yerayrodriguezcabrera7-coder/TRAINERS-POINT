@@ -65,7 +65,7 @@ export const serviceSchema = named.extend({
   modality: z.enum(["INDIVIDUAL", "DUAL"]).optional(),
   type: z.enum(["PACK", "SESION_INDIVIDUAL"]).optional(),
   trainingCount: z.number().int().min(1).max(500).optional(),
-  validityWeeks: z.number().int().min(1).max(104).nullable().optional(),
+  validityWeeks: z.number().int().min(1).max(5200).nullable().optional(),
   recommendedWeeklyFrequency: z.number().int().min(1).max(14).nullable().optional(),
   conditions: z.string().max(5000).nullable().optional(),
 });
@@ -116,8 +116,6 @@ export const configSchema = z
     })).optional(),
   })
   .superRefine((c, ctx) => {
-    const colors=c.services.map(s=>s.color?.toLowerCase()).filter(Boolean);
-    if(new Set(colors).size!==colors.length) ctx.addIssue({code:"custom",message:"Cada servicio debe tener un color diferente."});
     if(c.services.some(s=>s.employeeIds?.some(id=>!c.employees.some(e=>e.id===id)))) ctx.addIssue({code:"custom",message:"El servicio contiene entrenadores desconocidos."});
     for (const key of ["employees", "services", "rooms", "clients"] as const)
       if (new Set(c[key].map((x) => x.id)).size !== c[key].length)

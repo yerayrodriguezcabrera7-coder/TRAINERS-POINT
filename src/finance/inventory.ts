@@ -8,7 +8,14 @@ import { cashSessionFor } from './cash';
 import { clientDebts } from './debts';
 import { cents } from './money';
 import { financeTransaction } from './transaction';
-const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6), stock: z.number().int().min(0).max(1000000), revision: z.number().int().positive().optional() });
+import { productPricing } from './product-pricing';
+import { validProductImage } from '../validation/product-image';
+const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
+const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: productMoney,
+  costPrice: productMoney.optional(), taxRate: z.number().min(0).max(100).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6).optional(),
+  barcode: z.string().trim().max(80).regex(/^[\p{L}\p{N} ._/-]*$/u).transform(v => v || null).nullable().optional(),
+  imageData: z.string().refine(validProductImage,'Selecciona una imagen PNG, JPEG o WebP válida de hasta 550 KB.').nullable().optional(),
+  trackStock: z.boolean().optional(), stock: z.number().int().min(0).max(1000000), revision: z.number().int().positive().optional() });
 const paymentMethod = z.enum(['EFECTIVO', 'TARJETA', 'BIZUM']);
 const money = z.number().positive().max(1000000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const paymentInput = z.object({ requestKey: z.string().uuid(), amount: money, method: paymentMethod, paidAt: z.string().datetime().refine(v => new Date(v).getTime() <= Date.now(), 'La fecha del pago no puede ser futura.').optional(), note: z.string().trim().max(1000).default('') });
@@ -32,7 +39,9 @@ export function saleBalance(sale: any) {
 export class Inventory {
   constructor(private db: PrismaClient) { }
   private transaction<T>(gym: string, fn: (tx: Prisma.TransactionClient) => Promise<T>) { return financeTransaction(this.db, gym, fn); }
-  async products(gym: string) { return this.db.product.findMany({ where: { gymKey: gym }, orderBy: { name: 'asc' } }); }
+  async products(gym: string) {
+    return (await this.db.product.findMany({ where: { gymKey: gym }, orderBy: { name: 'asc' } })).map(p => ({ ...p, pricing: productPricing(p.unitPrice,p.costPrice,p.taxRate) }));
+  }
   async saveProduct(gym: string, raw: unknown, id?: string) {
     const v = productInput.parse(raw);
     return this.transaction(gym, async (tx) => {
@@ -41,7 +50,13 @@ export class Inventory {
         throw new ApiError(404, 'Producto desconocido.');
       if (old && v.revision !== old.revision)
         throw new ApiError(409, 'El stock ha cambiado. Actualiza antes de guardar.');
-      const product = old ? await tx.product.update({ where: { id: old.id }, data: { name: v.name, description: v.description, unitPrice: v.price, stock: v.stock, revision: { increment: 1 } } }) : await tx.product.create({ data: { gymKey: gym, name: v.name, description: v.description, unitPrice: v.price, stock: v.stock } });
+      const details = { name: v.name, description: v.description, unitPrice: v.price, stock: v.stock,
+        ...(v.costPrice !== undefined ? { costPrice: v.costPrice } : {}), ...(v.taxRate !== undefined ? { taxRate: v.taxRate } : {}),
+        ...(v.barcode !== undefined ? { barcode: v.barcode } : {}), ...(v.imageData !== undefined ? { imageData: v.imageData } : {}),
+        ...(v.trackStock !== undefined ? { trackStock: v.trackStock } : {}) };
+      if (v.barcode && await tx.product.findFirst({ where: { gymKey: gym, barcode: v.barcode, ...(id ? { id: { not: id } } : {}) } }))
+        throw new ApiError(409, 'Ya hay un producto con ese código de barras en este centro.');
+      const product = old ? await tx.product.update({ where: { id: old.id }, data: { ...details, revision: { increment: 1 } } }) : await tx.product.create({ data: { gymKey: gym, ...details } });
       const difference = v.stock - (old?.stock || 0);
       if (difference)
         await tx.stockMovement.create({ data: { productId: product.id, type: old ? 'AJUSTE' : 'ENTRADA', quantity: difference, reference: 'Inventario', notes: old ? 'Ajuste manual de existencias' : 'Stock inicial' } });
@@ -84,12 +99,14 @@ export class Inventory {
           throw new ApiError(409, 'El precio de ' + p.name + ' ha cambiado. Actualiza los productos y revisa el total antes de confirmar.');
         const cents = Math.round(Number(p.unitPrice) * 100), amount = cents * l.quantity;
         total += amount;
-        lines.push({ type: 'PRODUCTO' as const, productId: p.id, description: p.name, quantity: l.quantity, unitPrice: p.unitPrice, taxRate: 0, lineSubtotal: amount / 100, taxAmount: 0, lineTotal: amount / 100 });
+        const pricing = productPricing(amount / 100,0,p.taxRate);
+        lines.push({ type: 'PRODUCTO' as const, productId: p.id, description: p.name, quantity: l.quantity, unitPrice: p.unitPrice, taxRate: p.taxRate, lineSubtotal: pricing.baseAmount, taxAmount: pricing.taxAmount, lineTotal: amount / 100 });
       }
       if (total > 999999999999)
         throw new ApiError(400, 'El importe de la venta supera el máximo permitido.');
       const cashSessionId = await cashSessionFor(tx, gym);
-      const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actor, clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: total / 100, taxAmount: 0, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actor, method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
+      const taxCents = lines.reduce((sum,line) => sum + Math.round(line.taxAmount*100),0);
+      const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actor, clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: (total-taxCents) / 100, taxAmount: taxCents / 100, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actor, method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
       for (const l of v.lines)
         await tx.product.update({ where: { id: l.productId }, data: { stock: { decrement: l.quantity }, revision: { increment: 1 } } });
       await tx.stockMovement.createMany({ data: v.lines.map(l => ({ productId: l.productId, type: 'VENTA' as const, quantity: -l.quantity, reference: sale.id })) });

@@ -50,6 +50,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       select: {
         id: true,
         firstName: true,
+        brand: true,
         lastName: true,
         dni: true, assignedWorkerId: true,
         address: true,
@@ -359,6 +360,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           firstName: true,
           lastName: true,
           email: true,
+          brand: true,
           phone: true,
           notes: true,
           objective: true,
@@ -462,6 +464,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           ...(input.dni !== undefined ? { dni: input.dni } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           gym: { connect: { id: input.gymId } },
+          brand: input.brand,
           ...(input.birthDate ? { birthDate: new Date(`${input.birthDate}T00:00:00.000Z`) } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
           ...(input.objective ? { objective: input.objective } : {}),
@@ -507,6 +510,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           status: true,
           gymId: true,
           gym: { select: { id: true, name: true, city: true, province: true } },
+          brand: true,
           createdAt: true,
         },
       });

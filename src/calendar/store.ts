@@ -82,6 +82,8 @@ export class Store {
         validityWeeks: true,
         recommendedWeeklyFrequency: true,
         conditions: true,
+        category: true,
+        color: true,
       },
     });
     const [clients, services] = await Promise.all([clientsQuery, servicesQuery]);
@@ -114,6 +116,8 @@ export class Store {
         validityWeeks: service.validityWeeks,
         recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
         conditions: service.conditions,
+        category: service.category,
+        color: service.color,
       }));
       config.services.push(...saved.filter(s => !serviceIds.has(s.id)));
     }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ApiError } from '../calendar/model';
 import { cashSessionFor } from './cash';
 import { financeTransaction } from './transaction';
+import { assertManualPackageAllowed } from '../clients/brand';
 const input = z.object({ requestKey: z.string().uuid().optional(), serviceId: z.string().uuid(), sessionsBought: z.number().int().min(1).max(500), totalAmount: z.number().nonnegative().max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6), paymentMethod: z.enum(['EFECTIVO', 'TARJETA', 'BIZUM', 'TRANSFERENCIA', 'OTRO']), paymentStatus: z.enum(['PAGADO', 'PENDIENTE']), notes: z.string().max(2000).optional() });
 export class Packages {
   constructor(private db: PrismaClient) { }
@@ -28,8 +29,10 @@ export class Packages {
     const v = input.parse(raw);
     const fingerprint = createHash('sha256').update(JSON.stringify({ clientId, ...v })).digest('hex');
     return this.transaction(gym, async (tx) => {
-      if (!await tx.client.findFirst({ where: { id: clientId, gymId: gym } }))
+      const client = await tx.client.findFirst({ where: { id: clientId, gymId: gym } });
+      if (!client)
         throw new ApiError(404, 'Cliente desconocido en este centro.');
+      assertManualPackageAllowed(client);
       if (v.requestKey) {
         const old = await tx.clientServicePackage.findUnique({ where: { requestKey: v.requestKey } });
         if (old) {

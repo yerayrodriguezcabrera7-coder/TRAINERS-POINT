@@ -1597,3 +1597,7 @@ body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
   color: var(--tp-ink);
   font-weight: 700;
 }
+
+/* Brand sections keep both customer lists visible without mixing their cards. */
+#client-rows{display:flex;flex-direction:column;gap:28px}#client-rows[hidden]{display:none}.client-brand-group{min-width:0;width:100%}.client-brand-group>h3{margin:0 0 14px;padding:14px 16px;background:#f2e9dc;border-left:4px solid #ff7f0a;border-radius:8px;font-size:17px}.client-brand-group[data-brand=COBOSU]>h3{background:#edf1ee;border-left-color:#4c6b5a}.client-brand-list{display:grid;gap:12px}.stats-grid{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:650px){.stats-grid{grid-template-columns:1fr}}
+@media(min-width:900px){.client-brand-list .client-card-modern{grid-template-columns:minmax(200px,1fr) minmax(0,1.4fr) auto}.client-brand-list .client-card-actions{grid-column:3;grid-row:1;justify-self:end}}

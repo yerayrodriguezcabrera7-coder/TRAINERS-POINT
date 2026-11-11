@@ -318,7 +318,7 @@
   color: var(--tp-urgent, #945b54);
 }
 
-/* Validez fijada a 4 semanas solo */
+/* Validez editable en semanas */
 .validity-input-wrap {
   position: relative;
   display: flex;
@@ -387,3 +387,5 @@
     padding: 16px;
   }
 }
+
+.service-color-dot{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:9px;border:1px solid #0002}.service-category{font-size:13px;color:#66716b;margin:0 0 12px}.validity-input-wrap input{max-width:130px}#field-color{min-height:44px;width:100%;cursor:pointer}

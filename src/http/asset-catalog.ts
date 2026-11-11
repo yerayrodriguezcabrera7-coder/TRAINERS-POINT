@@ -34,6 +34,8 @@ export const staticFiles: Record<string, {
   "/mis-reservas.js": { file: "web/planning/mis-reservas.js", contentType: "text/javascript; charset=utf-8" },
   "/productos.html": { file: "web/inventory/productos.html", contentType: "text/html; charset=utf-8" },
   "/productos.js": { file: "web/inventory/productos.js", contentType: "text/javascript; charset=utf-8" },
+  "/ventas.html": { file: "web/inventory/ventas.html", contentType: "text/html; charset=utf-8" },
+  "/ventas.js": { file: "web/inventory/ventas.js", contentType: "text/javascript; charset=utf-8" },
   "/productos.css": { file: "web/inventory/productos.css", contentType: "text/css; charset=utf-8" },
   "/pendientes.html": { file: "web/planning/pendientes.html", contentType: "text/html; charset=utf-8" },
   "/pendientes.js": { file: "web/planning/pendientes.js", contentType: "text/javascript; charset=utf-8" },

@@ -93,6 +93,7 @@ async function loadBookingClients() {
       email: client.email || '',
       phone: client.phone || '',
       notes: client.notes || '',
+      brand: client.brand || 'TRAINERS_POINT',
       status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
     }));
   } catch (_) {
@@ -186,7 +187,7 @@ function debtBadge(b){const amount=upcomingDebt(b);if(b.paymentDue&&amount<=0&&[
 function updateDebtDetail(){
  const box=$('booking-debt');if(!box)return;
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
- box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
+ box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/ventas.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
 }
 function upcomingRenewal(b){return ['pending','confirmed'].includes(b.status)?(data.clientPackageAlerts?.[b.clientId]||null):null;}
 function renewalBadge(b){const alert=upcomingRenewal(b);if(!alert||!alert.needsRenewal)return '';return `<span class="booking-renewal-badge" title="${escapeHTML(alert.message)}">🔄 ${escapeHTML(alert.message)}</span>`;}
@@ -234,7 +235,7 @@ function renderTimeGrid(dates, bookings, employees) {
       const width = 100 / count;
       const left = lane * width;
       const currentEmployee = lookup('employees', b.employeeId);
-      const color = lookup('employees',b.employeeId).color || '#7b858d';
+      const color = lookup('services',b.serviceId).color || '#317b9b';
       const soft = `${color}18`;
       const clientName = lookup('clients', b.clientId).name;
       const serviceName = lookup('services', b.serviceId).name;
@@ -396,6 +397,7 @@ $('booking-room').addEventListener('change',loadAvailableSlots);$('booking-cente
 async function loadClientPackages(selected=null){
   if(!serverMode||!data.packagesEnabled){$('booking-package-panel').hidden=true;return;}
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
+  state.packagesBrand=null;$('create-pending-package').hidden=true;
   $('package-create-result').textContent='';
   if(!clientId||clientId==='new'){packageBusy=false;renderPackages();return;}
   packageBusy=true;$('booking-package-message').textContent='Consultando los bonos del cliente…';
@@ -403,6 +405,7 @@ async function loadClientPackages(selected=null){
     const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');
     if(request!==packageRequest)return;
     clientPackages=result.packages||[];
+    state.packagesBrand=result.client?.brand;
     if (result.renewalAlert) {
       if (!data.clientPackageAlerts) data.clientPackageAlerts = {};
       data.clientPackageAlerts[clientId] = result.renewalAlert;
@@ -424,7 +427,7 @@ function renderPackages(selected){
   select.disabled=currentUser?.role==='TRAINER';
   const chosen=clientPackages.find(p=>p.id===select.value),service=lookup('services',$('booking-service').value);
   $('booking-package-message').textContent=chosen?(chosen.paymentStatus==='PAGADO'?'La sesión se descontará de este bono al guardar la reserva.':'Este bono queda pendiente de pago y la reserva mostrará el aviso de cobro.'):list.length?'Selecciona un bono o continúa sin bono; en ese caso la sesión quedará pendiente de cobro.':'Este cliente no tiene bonos pagados disponibles. Puedes reservar sin bono y dejar la sesión pendiente de cobro.';
-  $('create-pending-package').hidden=currentUser?.role==='TRAINER'||!!chosen||!state.packagesClientId||state.packagesClientId==='new'||!/^[0-9a-f-]{36}$/i.test(service.id||'');
+  $('create-pending-package').hidden=currentUser?.role==='TRAINER'||state.packagesBrand==='COBOSU'||awsClients.find(c=>c.id===state.packagesClientId)?.brand==='COBOSU'||!!chosen||!state.packagesClientId||state.packagesClientId==='new'||!/^[0-9a-f-]{36}$/i.test(service.id||'');
 }
 $('booking-package').onchange=()=>{
  const p=clientPackages.find(p=>p.id===$('booking-package').value);
@@ -434,6 +437,7 @@ $('booking-package').onchange=()=>{
 $('create-pending-package').onclick=async()=>{
  const button=$('create-pending-package'),service=lookup('services',$('booking-service').value),clientId=$('booking-client').value;
  if(packageBusy||!clientId||clientId==='new')return;
+ if(state.packagesBrand==='COBOSU'||awsClients.find(c=>c.id===clientId)?.brand==='COBOSU')return;
  button.disabled=true;packageBusy=true;
  try{
   const result=await api('clients/'+encodeURIComponent(clientId)+'/service-packages','POST',{requestKey:pendingPackageKey,serviceId:service.id,sessionsBought:service.trainingCount||1,totalAmount:service.price||0,paymentMethod:'OTRO',paymentStatus:'PENDIENTE',notes:'Creado desde el calendario. Pendiente de cobro.'});
