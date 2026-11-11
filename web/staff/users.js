@@ -18,12 +18,6 @@
     CLIENT: { bg: '#f3e5f5', text: '#7b1fa2' },
   };
 
-  function getAvatarTone(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = (hash << 5) - hash + str.charCodeAt(i);
-    return Math.abs(hash) % 6;
-  }
-
   function getInitials(name) {
     if (!name) return 'TP';
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -147,7 +141,6 @@
     filtered.forEach(user => {
       const personName = resolvePersonName(user);
       const initials = getInitials(personName);
-      const tone = getAvatarTone(personName);
       const roleColor = roleStyles[user.role] || { bg: '#f1f1f1', text: '#444' };
       const roleLabel = roleNames[user.role] || user.role;
 
@@ -161,7 +154,7 @@
 
       card.innerHTML = `
         <div class="client-card-identity">
-          <span class="client-avatar client-avatar-tone-${tone}" aria-hidden="true">${esc(initials)}</span>
+          <span class="client-avatar" aria-hidden="true">${esc(initials)}</span>
           <span style="min-width: 0;">
             <strong class="client-card-name">${esc(personName)}</strong>
             <span class="client-card-center" style="display: block; margin-top: 2px;">${esc(user.username)}</span>

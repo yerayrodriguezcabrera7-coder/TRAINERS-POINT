@@ -5,6 +5,7 @@ import { ApiError } from '../calendar/model';
 import { cashSessionFor } from './cash';
 import { financeTransaction } from './transaction';
 import { assertManualPackageAllowed } from '../clients/brand';
+import { accessibleClient, clientScope, clientScopeSQL } from '../network/scope';
 const input = z.object({ requestKey: z.string().uuid().optional(), serviceId: z.string().uuid(), sessionsBought: z.number().int().min(1).max(500), totalAmount: z.number().nonnegative().max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6), paymentMethod: z.enum(['EFECTIVO', 'TARJETA', 'BIZUM', 'TRANSFERENCIA', 'OTRO']), paymentStatus: z.enum(['PAGADO', 'PENDIENTE']), notes: z.string().max(2000).optional() });
 export class Packages {
   constructor(private db: PrismaClient) { }
@@ -29,7 +30,8 @@ export class Packages {
     const v = input.parse(raw);
     const fingerprint = createHash('sha256').update(JSON.stringify({ clientId, ...v })).digest('hex');
     return this.transaction(gym, async (tx) => {
-      const client = await tx.client.findFirst({ where: { id: clientId, gymId: gym } });
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${clientId}::uuid FOR UPDATE`;
+      const client = await accessibleClient(tx,gym,clientId);
       if (!client)
         throw new ApiError(404, 'Cliente desconocido en este centro.');
       assertManualPackageAllowed(client);
@@ -54,7 +56,8 @@ export class Packages {
   }
   async billing(gym: string, id: string, actor: string) {
     return this.transaction(gym, async (tx) => {
-      const pkg = await tx.clientServicePackage.findFirst({ where: { id, client: { gymId: gym } } });
+      await tx.$queryRaw`SELECT id FROM "ClientServicePackage" WHERE id=${id}::uuid FOR UPDATE`;
+      const pkg = await tx.clientServicePackage.findFirst({ where: { id, client: await clientScope(tx,gym) } });
       if (!pkg)
         throw new ApiError(404, 'Bono desconocido en este centro.');
       if (!pkg.saleId && !['PENDIENTE', 'FALLIDO'].includes(pkg.paymentStatus))
@@ -102,7 +105,7 @@ export async function clientPackageAlerts(
     JOIN "Client" c ON c.id = p."clientId"
     JOIN "Service" s ON s.id = p."serviceId"
     LEFT JOIN "Booking" b ON b."packageId" = p.id
-    WHERE (${clientGymId}::uuid IS NULL OR c."gymId" = ${clientGymId}::uuid)
+    WHERE ${clientScopeSQL(clientGymId)}
       AND p."paymentStatus" IN ('PAGADO', 'PENDIENTE')
     GROUP BY p.id, p."clientId", s.name, p."sessionsBought", p."purchasedAt", s."validityWeeks"
     ORDER BY p."purchasedAt" DESC

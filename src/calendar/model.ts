@@ -36,7 +36,7 @@ export const clientSchema = named.extend({
 });
 const period = z.object({ open: time, close: time }).refine(p => p.open < p.close);
 export const employeeSchema = named.extend({
-  color: z.string().regex(/^#[0-9a-f]{6}$/i),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#7b858d").transform(()=>"#7b858d"),
   schedule: week,
   email: z.union([z.literal(""), z.email()]).optional(),
   jobTitle: z.string().trim().max(100).optional(),

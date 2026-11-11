@@ -54,7 +54,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       }
     }
     if (url.pathname.startsWith("/api/gyms")) {
-      if (identity.role !== "ADMIN" && !(identity.role === "RECEPTION" && request.method === "GET")) {
+      if (identity.role !== "ADMIN" && !(["RECEPTION","TRAINER"].includes(identity.role) && request.method === "GET")) {
         sendError(response, 403, "Solo administración puede gestionar sedes.");
         return true;
       }

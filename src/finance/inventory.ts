@@ -10,6 +10,7 @@ import { cents } from './money';
 import { financeTransaction } from './transaction';
 import { productPricing } from './product-pricing';
 import { validProductImage } from '../validation/product-image';
+import { accessibleClient, saleScope } from '../network/scope';
 const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: productMoney,
   costPrice: productMoney.optional(), taxRate: z.number().min(0).max(100).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6).optional(),
@@ -85,7 +86,7 @@ export class Inventory {
           throw new ApiError(409, 'Identificador de venta ya utilizado.');
         return saleBalance(existing);
       }
-      if (v.clientId && !(await tx.client.findFirst({ where: { id: v.clientId, gymId: gym } })))
+      if (v.clientId && !(await accessibleClient(tx,gym,v.clientId)))
         throw new ApiError(400, 'Selecciona un cliente de este gimnasio.');
       const available = await tx.product.findMany({ where: { id: { in: v.lines.map(line => line.productId) }, gymKey: gym, isActive: true } });
       const products = new Map(available.map(product => [product.id, product]));
@@ -116,6 +117,7 @@ export class Inventory {
   async reverse(gym: string, id: string, raw: unknown, cancel = false, actor = "system") {
     const requested = cancel ? null : returnInput.parse(raw);
     return this.transaction(gym, async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
       const sale = await tx.sale.findFirst({ where: { id, gymKey: gym }, include: { lines: true, payments: true } });
       if (!sale)
         throw new ApiError(404, 'Venta desconocida.');
@@ -156,17 +158,18 @@ export class Inventory {
   }
   async sales(gym: string, q: URLSearchParams) {
     const { where } = this.salesFilters(q);
-    return (await this.db.sale.findMany({ where: { ...where, gymKey: gym }, include: { client: { select: { firstName: true, lastName: true } }, lines: true, payments: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], take: 500 })).map(saleBalance);
+    return (await this.db.sale.findMany({ where: { ...where, AND: [q.get('client') && q.get('client') !== 'walkin' ? await saleScope(this.db,gym) : {gymKey:gym}] }, include: { client: { select: { firstName: true, lastName: true } }, lines: true, payments: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], take: 500 })).map(saleBalance);
   }
   async salesPage(gym: string, q: URLSearchParams) {
     const { where, page } = this.salesFilters(q), pageSize = 50;
-    const rows = await this.db.sale.findMany({ where: { ...where, gymKey: gym }, include: { client: { select: { firstName: true, lastName: true } }, lines: true, payments: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize + 1 });
+    const rows = await this.db.sale.findMany({ where: { ...where, AND: [q.get('client') && q.get('client') !== 'walkin' ? await saleScope(this.db,gym) : {gymKey:gym}] }, include: { client: { select: { firstName: true, lastName: true } }, lines: true, payments: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize + 1 });
     return { sales: rows.slice(0, pageSize).map(saleBalance), pagination: { page, pageSize, hasPrevious: page > 1, hasNext: rows.length > pageSize } };
   }
   async pay(gym: string, actor: string, id: string, raw: unknown) {
     const v = paymentInput.parse(raw);
     return this.transaction(gym, async (tx) => {
-      const sale = await tx.sale.findFirst({ where: { id, gymKey: gym }, include: { lines: true, payments: true } });
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
+      const sale = await tx.sale.findFirst({ where: { id, AND: [await saleScope(tx,gym)] }, include: { lines: true, payments: true } });
       if (!sale)
         throw new ApiError(404, 'Venta desconocida.');
       const existing = await tx.payment.findUnique({ where: { requestKey: v.requestKey } });
@@ -194,7 +197,8 @@ export class Inventory {
     if (!v.paidAt || !v.note)
       throw new ApiError(400, 'Indica la fecha del cobro y cómo se ha comprobado el pago antiguo.');
     return this.transaction(gym, async (tx) => {
-      const sale = await tx.sale.findFirst({ where: { id, gymKey: gym }, include: { lines: true, payments: true } });
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
+      const sale = await tx.sale.findFirst({ where: { id, AND: [await saleScope(tx,gym)] }, include: { lines: true, payments: true } });
       if (!sale)
         throw new ApiError(404, 'Venta desconocida.');
       const existing = await tx.payment.findUnique({ where: { requestKey: v.requestKey } });
@@ -221,7 +225,8 @@ export class Inventory {
     if (!v.note)
       throw new ApiError(400, 'Indica el motivo de la devolución del dinero.');
     return this.transaction(gym, async (tx) => {
-      const sale = await tx.sale.findFirst({ where: { id, gymKey: gym }, include: { lines: true, payments: true } });
+      await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
+      const sale = await tx.sale.findFirst({ where: { id, AND: [await saleScope(tx,gym)] }, include: { lines: true, payments: true } });
       if (!sale)
         throw new ApiError(404, 'Venta desconocida.');
       const existing = await tx.payment.findUnique({ where: { requestKey: v.requestKey } });

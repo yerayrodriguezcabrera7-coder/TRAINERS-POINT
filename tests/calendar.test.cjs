@@ -1,4 +1,4 @@
-const { test, before, after } = require("node:test");
+const { test, before, after, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const { mkdtemp } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
@@ -95,6 +95,13 @@ before(async () => {
   store = new Store(pool);
   other = new Store(pool2);
   await store.migrate();
+});
+beforeEach(async () => {
+  // Each test describes an independent company network. Sharing is exercised
+  // within each test, never through records left by the preceding scenario.
+  const tables=(await pool.query("SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('public','calendar') AND tablename<>'_prisma_migrations'")).rows;
+  const names=tables.map(t=>'"'+t.schemaname.replaceAll('"','""')+'"."'+t.tablename.replaceAll('"','""')+'"').join(',');
+  if(names)await pool.query('TRUNCATE '+names+' RESTART IDENTITY CASCADE');
 });
 after(async () => {
   await pool?.end();
@@ -217,7 +224,9 @@ test("Recursos distintos, citas consecutivas y gimnasios aislados", async () => 
     g,
     booking({ clientId: "c2", employeeId: "e2", roomId: "r2" }),
   );
-  await store.save(await gym(), booking());
+  const second = await gym();
+  await assert.rejects(store.save(second,booking()),/otro centro/);
+  await store.save(second,booking({employeeId:"e2",start:"12:00"}));
   await assert.rejects(
     store.save(g, booking({ clientId: "c3", employeeId: "e2" })),
     /ocupados/,

@@ -210,7 +210,7 @@ function renderTimeGrid(dates, bookings, employees) {
   dates.forEach((date, i) => {
     const today = date === todayKey();
     html += `<div class="day-heading ${today ? 'today' : ''}" style="grid-column:${2 + i * employees.length} / span ${employees.length};grid-row:1"><span class="day-name">${prettyDate(date, { weekday: 'short' })}</span><strong>${C.parseDate(date).getDate()}</strong><span>${prettyDate(date, { month: 'short' })}</span></div>`;
-    employees.forEach((employee, j) => { html += `<div class="employee-heading" style="grid-column:${2 + i * employees.length + j};grid-row:2;--employee-color:${employee.color}"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>`; });
+    employees.forEach((employee, j) => { html += `<div class="employee-heading" style="grid-column:${2 + i * employees.length + j};grid-row:2;--employee-color:#7b858d"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>`; });
   });
   html += '<div class="time-axis" style="grid-column:1;grid-row:3">' + Array.from({length:24}, (_, hour) => `<div class="hour-label">${C.timeLabel(hour * 60)}</div>`).join('') + '</div>';
   dates.forEach((date, i) => employees.forEach((employee, j) => {

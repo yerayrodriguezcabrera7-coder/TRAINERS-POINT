@@ -133,7 +133,7 @@
                 `<p class="hint full">${data.id === 'bootstrap' ? 'Crea primero tu cuenta de administración. La contraseña temporal será Trainerspoint y tendrás que cambiarla al entrar.' : 'Una cuenta por empleado o cliente. La contraseña inicial será Trainerspoint y deberá cambiarse en el primer acceso.'}</p>`;
         }
         else {
-            html = field('Nombre y apellidos', 'name', x.name, 'text', 'required maxlength="200"') + field('Puesto laboral', 'jobTitle', x.jobTitle, 'text', 'maxlength="100"') + field('Correo', 'email', x.email, 'email', 'maxlength="254"') + field('Color en calendario', 'color', x.color || '#317b9b', 'color') + activeSelect(x);
+            html = field('Nombre y apellidos', 'name', x.name, 'text', 'required maxlength="200"') + field('Puesto laboral', 'jobTitle', x.jobTitle, 'text', 'maxlength="100"') + field('Correo', 'email', x.email, 'email', 'maxlength="254"') + activeSelect(x);
         }
         $('fields').innerHTML = '<div class="form-grid">' + html + '</div>';
         if (section === 'users') {
@@ -219,7 +219,7 @@
             record = { username: value('username').trim(), role, enabled: value('enabled') === 'true', ...(role === 'CLIENT' ? { clientId: value('clientId') } : { employeeId: value('employeeId') }) };
         }
         else
-            record = { name: value('name').trim(), email: value('email').trim(), jobTitle: value('jobTitle').trim(), color: value('color'), active: value('active') === 'true', schedule: days.map((_, i) => ({ open: value('open' + i), close: value('close' + i), closed: form.has('closed' + i) })), shifts };
+            record = { name: value('name').trim(), email: value('email').trim(), jobTitle: value('jobTitle').trim(), active: value('active') === 'true', schedule: days.map((_, i) => ({ open: value('open' + i), close: value('close' + i), closed: form.has('closed' + i) })), shifts };
         if (['employees', 'shifts'].includes(section))
             record.weeklyPeriods = days.map((_, i) => form.has('closed' + i) ? [] : [{ open: value('open' + i), close: value('close' + i) }, ...Array.from(document.querySelectorAll(`[data-weekly="${i}"] .weekly-extra`), row => ({ open: row.querySelector('[data-open]').value, close: row.querySelector('[data-close]').value }))]);
         const kind = section === 'shifts' ? 'employees' : section;

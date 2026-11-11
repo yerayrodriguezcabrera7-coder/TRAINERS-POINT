@@ -235,6 +235,7 @@ model ClientMeasurement {
 model Gym {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique
+  brand     ClientBrand @default(TRAINERS_POINT)
   city      String?
   province  String?
   address   String?

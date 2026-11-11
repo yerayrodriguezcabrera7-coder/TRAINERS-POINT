@@ -133,6 +133,7 @@ function openEditDialog(gym) {
   form.reset();
   form.elements.id.value = gym.id;
   form.elements.name.value = gym.name || "";
+  form.elements.brand.value = gym.brand || "TRAINERS_POINT";
   form.elements.address.value = gym.address || "";
   form.elements.city.value = gym.city || "";
   form.elements.province.value = gym.province || "";

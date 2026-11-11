@@ -1,4 +1,5 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
+import { clientScopeSQL } from '../network/scope';
 /** Calculate per-client balances in PostgreSQL, without loading every sale and receipt. */
 export async function clientDebts(db: PrismaClient, gym: string): Promise<Record<string, number>> {
   // Historical calendar keys can be slugs; only CRM UUIDs can own legacy packages.
@@ -6,11 +7,11 @@ export async function clientDebts(db: PrismaClient, gym: string): Promise<Record
   const rows = await db.$queryRaw<Array<{
     clientId: string;
     cents: unknown;
-  }>> `
+  }>>(Prisma.sql`
     WITH sales AS (
-      SELECT id, "clientId", "paymentTracking", ROUND("totalAmount" * 100) AS total
-      FROM "Sale"
-      WHERE "gymKey" = ${gym} AND "clientId" IS NOT NULL AND status = 'COMPLETADA'
+      SELECT s.id, s."clientId", s."paymentTracking", ROUND(s."totalAmount" * 100) AS total
+      FROM "Sale" s JOIN "Client" c ON c.id=s."clientId"
+      WHERE (s."gymKey"=${gym} OR ${clientScopeSQL(clientGymId)}) AND s.status='COMPLETADA'
     ), returns AS (
       SELECT l."saleId", SUM(ROUND(l."unitPrice" * 100) * l."returnedQuantity") AS amount
       FROM "SaleLine" l JOIN sales s ON s.id = l."saleId" GROUP BY l."saleId"
@@ -29,11 +30,11 @@ export async function clientDebts(db: PrismaClient, gym: string): Promise<Record
       UNION ALL
       SELECT p."clientId", ROUND(p."totalAmount" * 100)
       FROM "ClientServicePackage" p JOIN "Client" c ON c.id = p."clientId"
-      WHERE c."gymId" = ${clientGymId}::uuid AND p."saleId" IS NULL
+      WHERE ${clientScopeSQL(clientGymId)} AND p."saleId" IS NULL
         AND p."paymentStatus" IN ('PENDIENTE', 'FALLIDO')
     )
     SELECT "clientId", SUM(cents) AS cents FROM balances
     GROUP BY "clientId" HAVING SUM(cents) > 0
-  `;
+  `);
   return Object.fromEntries(rows.map(row => [row.clientId, Number(row.cents) / 100]));
 }

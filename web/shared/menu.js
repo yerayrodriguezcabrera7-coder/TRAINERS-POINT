@@ -100,7 +100,7 @@
         location.replace('/change-password.html');
         return;
       }
-      if (me.role === 'ADMIN') {
+      if (['ADMIN','RECEPTION','TRAINER'].includes(me.role)) {
         loadGyms(true);
       }
       const normalize = href => (href || '').replace(/^\//, '');

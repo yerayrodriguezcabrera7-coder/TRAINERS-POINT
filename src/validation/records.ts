@@ -56,6 +56,7 @@ type MeasurementInput = {
 
 type GymInput = {
   name: string;
+  brand?: "TRAINERS_POINT" | "COBOSU";
   city?: string;
   province?: string;
   address?: string;
@@ -299,6 +300,8 @@ export function parseGymInput(value: unknown): GymInput | string {
   }
 
   const name = typeof value.name === "string" ? value.name.trim() : "";
+  const brand = value.brand;
+  if (brand !== undefined && brand !== "TRAINERS_POINT" && brand !== "COBOSU") return "Selecciona la marca del centro.";
   const city = typeof value.city === "string" ? value.city.trim() : "";
   const province = typeof value.province === "string" ? value.province.trim() : "";
   const address = typeof value.address === "string" ? value.address.trim() : "";
@@ -342,6 +345,7 @@ export function parseGymInput(value: unknown): GymInput | string {
 
   return {
     name,
+    ...(brand !== undefined ? {brand} : {}),
     ...(city ? { city } : {}),
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),

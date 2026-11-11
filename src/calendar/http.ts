@@ -57,7 +57,11 @@ export function server(
         return;
       }
       if (path.startsWith("/api/")) {
-        if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
+        if (!(await store.gymExists(gym))) {
+          if (!req.headers.authorization && !path.startsWith("/api/public/") && !["/api/login","/api/cognito/login"].includes(path))
+            throw new ApiError(401,"Inicia sesión para continuar.");
+          throw new ApiError(404, "Gimnasio desconocido.");
+        }
         if (req.method === "POST" && (path === "/api/login" || path === "/api/cognito/login")) {
           const key = req.socket.remoteAddress || "unknown";
           const now = Date.now();
@@ -161,7 +165,7 @@ export function server(
               employees = s.employees.filter((e: any) => e.id === identity.employeeId);
               staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
             }
-            send(res,200,{ ...identity, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
+            send(res,200,{ ...identity, gymId:gym, centers:s.centers, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
               clients,
               services: s.services,
               bookings,

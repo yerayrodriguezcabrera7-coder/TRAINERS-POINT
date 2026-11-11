@@ -3,7 +3,7 @@ before(async()=>{const {default:Embedded}=await import('embedded-postgres');cons
 after(async()=>{await db?.$disconnect();await pool?.end();await pg?.stop();});
 const actor={id:'trainer-account',name:'Entrenador',role:'TRAINER',employeeId:'e1'};
 function input(extra={}){return {id:randomUUID(),name:'Fase de fuerza',goals:'Ganar fuerza',startsAt:'2030-01-01',endsAt:'2030-03-01',status:'ACTIVO',days:[{name:'Tren superior',weekday:1,exercises:[{name:'Remo',sets:3,repetitions:'12 repeticiones',rest:'60 s',load:'10 kg',notes:'Controlar el movimiento'}]}],...extra};}
-async function fixture(){const gym=await db.gym.create({data:{name:randomUUID()}});const client=await db.client.create({data:{firstName:'Cliente',lastName:'Rutina',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});return {gym:gym.id,client:client.id};}
+async function fixture(brand="TRAINERS_POINT"){const gym=await db.gym.create({data:{name:randomUUID(),brand}});const client=await db.client.create({data:{firstName:'Cliente',lastName:'Rutina',email:randomUUID()+'@example.com',phone:'',gymId:gym.id}});return {gym:gym.id,client:client.id};}
 test('Rutina semanal: fecha de cita, domingo, límites y plan no vigente',()=>{
  const p=input();p.details={days:p.days};assert.equal(routineOnDate(p,'2030-01-07').length,1);assert.equal(routineOnDate(p,'2030-01-08').length,0);
  assert.equal(routineOnDate(p,'2029-12-31').length,0);assert.equal(routineOnDate(p,'2030-03-04').length,0);
@@ -18,7 +18,7 @@ test('Persistencia, planes previos y conflicto al editar una versión antigua',a
  assert.equal(edited.name,'Fase revisada');await assert.rejects(savePlan(db,f.gym,f.client,actor,raw),/ha cambiado/);
  const b=await savePlan(db,f.gym,f.client,actor,input());assert.equal((await db.trainingPlan.findUnique({where:{id:a.id}})).status,'ARCHIVADO');
  assert.equal(await db.trainingPlan.count({where:{clientId:f.client,status:'ACTIVO'}}),1);
- const other=await fixture();await assert.rejects(savePlan(db,other.gym,other.client,actor,input({id:b.id,updatedAt:b.updatedAt.toISOString()})),/desconocido/);
+ const other=await fixture("COBOSU");await assert.rejects(savePlan(db,other.gym,other.client,actor,input({id:b.id,updatedAt:b.updatedAt.toISOString()})),/desconocido/);
  await assert.rejects(savePlan(db,other.gym,f.client,actor,input()),/desconocido/);
 });
 test('Activaciones concurrentes dejan un solo plan activo y preservan ambos',async()=>{
