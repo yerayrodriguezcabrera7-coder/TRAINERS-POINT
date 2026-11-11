@@ -52,6 +52,33 @@ CREATE TABLE IF NOT EXISTS calendar.attendance_omissions (
 );
 CREATE INDEX IF NOT EXISTS attendance_omissions_gym_day ON calendar.attendance_omissions(gym_id,day);
 `;
+function appendBookingHistory(old: Booking, b: Booking, actorId: string) {
+  const { history: _history, incidents: _incidents, ...previous } = old;
+  const scheduleChanged = old.date !== b.date || old.start !== b.start || old.end !== b.end;
+  const empChanged = old.employeeId !== b.employeeId;
+  const action = b.needsReschedule
+    ? "RESCHEDULE_REQUESTED"
+    : !old.employeeId && b.employeeId && !scheduleChanged
+    ? "ASSIGNED"
+    : scheduleChanged || empChanged
+    ? "MOVED"
+    : "UPDATED";
+  return [
+    ...(old.history || []),
+    {
+      at: new Date().toISOString(),
+      actorId,
+      action,
+      previous,
+      next: {
+        date: b.date,
+        start: b.start,
+        end: b.end,
+        employeeId: b.employeeId,
+      },
+    },
+  ];
+}
 export class Store {
   constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
 
@@ -341,7 +368,7 @@ export class Store {
       }
     }
   }
-  async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string) {
+  async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string, syncSession=false) {
     const input = bookingSchema.parse(raw);
     return this.transaction(gym, async (db, c, bookings) => {
       const old = id ? bookings.find((b) => b.id === id) : undefined;
@@ -373,31 +400,7 @@ export class Store {
       b.history=old?.history || [];
       b.incidents=old?.incidents || [];
       if (old) {
-        const { history, incidents, ...previous } = old;
-        const scheduleChanged = old.date !== b.date || old.start !== b.start || old.end !== b.end;
-        const empChanged = old.employeeId !== b.employeeId;
-        const action = b.needsReschedule
-          ? "RESCHEDULE_REQUESTED"
-          : !old.employeeId && b.employeeId && !scheduleChanged
-          ? "ASSIGNED"
-          : scheduleChanged || empChanged
-          ? "MOVED"
-          : "UPDATED";
-        b.history = [
-          ...b.history,
-          {
-            at: new Date().toISOString(),
-            actorId,
-            action,
-            previous,
-            next: {
-              date: b.date,
-              start: b.start,
-              end: b.end,
-              employeeId: b.employeeId,
-            },
-          },
-        ];
+        b.history = appendBookingHistory(old, b, actorId);
       }
       if (!old || (b.status !== "CANCELLED" && ["clientId","employeeId","serviceId","date","start","status"].some(k => (b as any)[k] !== (old as any)[k])))
         this.assertActive(b, c);
@@ -408,7 +411,41 @@ export class Store {
           400,
           "Una nueva cita debe estar pendiente o confirmada.",
         );
-      assertAvailable(b, bookings.map(o=>({...o,centerId:o.centerId||gym})), c);
+      const syncedSiblings: Booking[] = [];
+      if (syncSession && old?.sessionId && b.status !== "CANCELLED") {
+        for (const sib of bookings) {
+          if (sib.id === b.id || sib.sessionId !== old.sessionId || sib.status === "CANCELLED") continue;
+          const nextStatus = !b.employeeId
+            ? (sib.status === "CONFIRMED" ? "PENDING" : sib.status)
+            : sib.status === "PENDING"
+            ? "CONFIRMED"
+            : sib.status;
+          const nextSib: Booking = {
+            ...sib,
+            date: b.date,
+            start: b.start,
+            end: b.end,
+            employeeId: b.employeeId,
+            centerId: b.centerId,
+            centerName: b.centerName,
+            centerAddress: b.centerAddress,
+            serviceId: b.serviceId,
+            status: nextStatus,
+            needsReschedule: false,
+            version: sib.version + 1,
+          };
+          nextSib.history = appendBookingHistory(sib, nextSib, actorId);
+          this.assertActive(nextSib, c);
+          assertTransition(sib, nextSib, c);
+          syncedSiblings.push(nextSib);
+        }
+      }
+      const syncedById = new Map(syncedSiblings.map(s => [s.id, s]));
+      const effectiveBookings = bookings.map(o => ({ ...(syncedById.get(o.id) || o), centerId: (syncedById.get(o.id) || o).centerId || gym }));
+      assertAvailable(b, effectiveBookings, c);
+      for (const sib of syncedSiblings) {
+        assertAvailable(sib, effectiveBookings.map(o => (o.id === b.id ? b : o)), c);
+      }
       if (old && (old.recoveryId || null) !== (b.recoveryId || null)) throw new ApiError(409, "No se puede cambiar la recuperación de una reserva.");
       if (b.recoveryId) {
         const row = (await db.query("SELECT data FROM calendar.recoveries WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId])).rows[0];
@@ -432,6 +469,13 @@ export class Store {
         "INSERT INTO calendar.bookings(id,gym_id,data) VALUES($1,$2,$3) ON CONFLICT(gym_id,id) DO UPDATE SET data=EXCLUDED.data",
         [b.id, gym, b],
       );
+      for (const sib of syncedSiblings) {
+        await this.syncPackageBooking(db, gym, sib, c);
+        await db.query(
+          "INSERT INTO calendar.bookings(id,gym_id,data) VALUES($1,$2,$3) ON CONFLICT(gym_id,id) DO UPDATE SET data=EXCLUDED.data",
+          [sib.id, gym, sib],
+        );
+      }
       if (newClient)
         await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [
           gym,

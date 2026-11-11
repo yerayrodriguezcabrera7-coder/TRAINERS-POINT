@@ -73,6 +73,13 @@
               </select>
             </div>
 
+            <div id="no-package-service-wrap" class="no-package-service-wrap" hidden>
+              <label style="font-size:12px; font-weight:600; display:flex; flex-direction:column; gap:5px; margin-top:10px;">
+                Tipo de sesión / servicio
+                <select id="no-package-service"></select>
+              </label>
+            </div>
+
             <div id="buy-package-card" class="buy-package-card" hidden>
               <div class="buy-package-header">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -129,6 +136,61 @@
                 <button type="button" class="button secondary" id="buy-package-later-btn">⏱️ Registrar deuda y vincular</button>
               </div>
               <p id="buy-package-result" class="buy-package-result" role="status" hidden></p>
+            </div>
+          </section>
+
+          <section id="dual-client-panel" class="full package-step dual-client-panel" aria-labelledby="dual-heading" hidden>
+            <div class="dual-panel-head">
+              <h3 id="dual-heading" style="margin:0;">3. Segunda persona (sesión dual)</h3>
+              <span class="dual-pill">DUAL · 2 PERSONAS</span>
+            </div>
+            <p id="dual-partner-status" class="dual-partner-status">Asigna una segunda persona para compartir esta sesión dual.</p>
+            <div class="client-picker-field">
+              <div class="client-picker dual-client-picker">
+                <input id="dual-client-search" type="search" placeholder="Buscar 2ª persona por nombre…" autocomplete="off" aria-controls="dual-client-results" aria-autocomplete="list">
+                <button type="button" id="clear-dual-client-search" class="client-search-clear" aria-label="Limpiar 2ª persona">×</button>
+              </div>
+              <div id="dual-client-results" class="client-results" role="listbox" aria-label="Segunda persona" hidden></div>
+              <select id="dual-booking-client" hidden aria-hidden="true"></select>
+            </div>
+            <div id="dual-package-panel" hidden>
+              <div id="dual-package-message" style="font-size:12px; margin-top:10px;"></div>
+              <div id="dual-existing-package-wrap" style="margin-top:8px;" hidden>
+                <label style="font-size:12px; font-weight:600; display:flex; flex-direction:column; gap:5px;">
+                  Bono de la 2ª persona
+                  <select id="dual-booking-package">
+                    <option value="">Sin bono · pago pendiente</option>
+                  </select>
+                </label>
+              </div>
+              <div id="dual-buy-package-wrap" class="dual-buy-box" hidden>
+                <div style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px;">Bono para la 2ª persona (<span id="dual-buy-service-label">Sesión dual</span>):</div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
+                    <input type="radio" name="dual-pkg-mode" value="none" checked>
+                    <span>Sin bono propio (compartido o cobro en sala)</span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
+                    <input type="radio" name="dual-pkg-mode" value="now">
+                    <span>💳 Comprar bono ahora para esta persona</span>
+                  </label>
+                  <div id="dual-buy-method-row" style="margin-left:24px;" hidden>
+                    <label style="font-size:11px; color:#475569; display:flex; align-items:center; gap:6px;">
+                      Método:
+                      <select id="dual-buy-method" style="padding:4px 8px; border-radius:4px; font-size:12px; border:1px solid #cbd5e1;">
+                        <option value="TARJETA">💳 Tarjeta</option>
+                        <option value="EFECTIVO">💵 Efectivo</option>
+                        <option value="BIZUM">📱 Bizum</option>
+                        <option value="TRANSFERENCIA">🏦 Transferencia</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
+                    <input type="radio" name="dual-pkg-mode" value="later">
+                    <span>⏱️ Comprar bono y dejar pago pendiente</span>
+                  </label>
+                </div>
+              </div>
             </div>
           </section>
 

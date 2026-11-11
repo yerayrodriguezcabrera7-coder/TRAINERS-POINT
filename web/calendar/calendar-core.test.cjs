@@ -16,6 +16,14 @@ test('Canceladas liberan el horario y pueden cancelarse fuera de apertura',()=>{
 test('Reactivar una cita cancelada vuelve a validar disponibilidad',()=>assert.match(C.validateBooking({...base,id:'two',status:'pending'},[base],schedule),/entrenador/));
 test('Fechas estables en cambio de año, febrero y horario de invierno',()=>{assert.equal(C.addDays('2026-12-31',1),'2027-01-01');assert.equal(C.addDays('2028-02-28',1),'2028-02-29');assert.equal(C.addDays('2026-10-24',2),'2026-10-26');assert.equal(C.monday('2026-10-25'),'2026-10-19');});
 test('Distribuye citas superpuestas y recupera ancho en el siguiente grupo',()=>{const out=C.layoutEvents([base,{...base,id:'two',start:'10:30',end:'11:30'},{...base,id:'three',start:'12:00',end:'13:00'}]);assert.deepEqual(out.map(({lane,count})=>[lane,count]),[[0,2],[1,2],[0,1]]);});
+test('Permite asignar 2 clientes en una sesión dual con el mismo sessionId',()=>{
+  const dualService = [{ id: 'dual-1', modality: 'DUAL', capacity: 2 }];
+  const b1 = { ...base, id: 'd1', clientId: 'c1', serviceId: 'dual-1', sessionId: 'sess-1' };
+  const b2 = { ...base, id: 'd2', clientId: 'c2', serviceId: 'dual-1', sessionId: 'sess-1' };
+  const b3 = { ...base, id: 'd3', clientId: 'c3', serviceId: 'dual-1', sessionId: 'sess-1' };
+  assert.equal(C.validateBooking(b2, [b1], schedule, null, dualService), '');
+  assert.match(C.validateBooking(b3, [b1, b2], schedule, null, dualService), /2 personas/);
+});
 test('Límite de reservas por hora en el centro: rechaza si se supera el aforo y permite si hay hueco',()=>{
   const centers = [{ id: 'center-1', name: 'Centro 1', maxBookingsPerHour: 2 }, { id: 'center-2', name: 'Centro 2', maxBookingsPerHour: null }];
   const b1 = { ...base, id: 'b1', centerId: 'center-1', employeeId: 'e1', roomId: 'r1', start: '10:00', end: '11:00' };

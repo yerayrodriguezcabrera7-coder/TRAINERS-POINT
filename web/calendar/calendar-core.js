@@ -31,14 +31,31 @@
     return isOpen(date, start, end, schedule) && employeePeriods(employee, date, schedule)
       .some(p => start >= minutes(p.open) && end <= minutes(p.close));
   }
-  function validateBooking(booking, bookings, schedule, centers) {
+  function validateBooking(booking, bookings, schedule, centers, services) {
     if (!validDate(booking.date) || !validTime(booking.start) || !validTime(booking.end)) return 'Introduce una fecha y unas horas válidas.';
     if (minutes(booking.start) >= minutes(booking.end)) return 'La hora de fin debe ser posterior al inicio.';
     if (booking.status === 'cancelled') return '';
     if (parseDate(booking.date).getDay() === 0 && !booking.employeeId) return '';
     if (!isOpen(booking.date, minutes(booking.start), minutes(booking.end), schedule)) return 'La reserva debe quedar dentro del horario de apertura.';
     const isCobosu = booking.employeeId === '__cobosu';
-    const clash = (isCobosu || !booking.employeeId) ? null : bookings.find(other => other.id !== booking.id && other.date === booking.date && other.status !== 'cancelled' && overlap(booking, other) && other.employeeId === booking.employeeId);
+    const active = bookings.filter(other => other.id !== booking.id && other.status !== 'cancelled');
+    const isSameSession = other => Boolean(booking.sessionId && other.sessionId === booking.sessionId);
+    if (booking.sessionId) {
+      const sameSession = active.filter(isSameSession);
+      const mismatch = sameSession.find(other =>
+        other.date !== booking.date ||
+        other.start !== booking.start ||
+        other.end !== booking.end ||
+        (other.employeeId || null) !== (booking.employeeId || null)
+      );
+      if (mismatch) return 'La sesión dual debe compartir fecha, horario y entrenador.';
+      const service = Array.isArray(services) ? services.find(s => s.id === booking.serviceId) : null;
+      const capacity = service ? (service.capacity || (service.modality === 'DUAL' ? 2 : 1)) : 2;
+      if (sameSession.length >= capacity) return `Esta sesión solo admite hasta ${capacity} personas.`;
+    }
+    const clientClash = booking.clientId ? active.find(other => other.date === booking.date && overlap(booking, other) && other.clientId && other.clientId === booking.clientId) : null;
+    if (clientClash) return 'El cliente ya tiene una reserva en ese horario.';
+    const clash = (isCobosu || !booking.employeeId) ? null : active.find(other => other.date === booking.date && overlap(booking, other) && other.employeeId === booking.employeeId && !isSameSession(other));
     if (clash) return 'Este entrenador ya tiene una reserva en ese horario.';
     if (centers && booking.centerId) {
       const center = centers.find(c => c.id === booking.centerId);
