@@ -33,7 +33,7 @@
         <div class="view-switch" role="group" aria-label="Vista del calendario"><button data-view="day">Día</button><button data-view="week" class="selected">Semana</button><button data-view="month">Mes</button></div>
       </div>
       <div class="filter-row">
-        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label>Sala<select id="room-filter"><option value="all">Todos los espacios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button><button type="button" class="button secondary repeat-week-btn" id="repeat-week-btn" hidden="" title="Clonar planificación de turnos de la semana anterior">🔄 Repetir semana anterior</button></div>
+        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button><button type="button" class="button secondary repeat-week-btn" id="repeat-week-btn" hidden="" title="Clonar planificación de turnos de la semana anterior">🔄 Repetir semana anterior</button></div>
         <div class="legend" aria-label="Estados"><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
       </div>
       <div id="calendar" class="calendar-scroll" aria-label="Cuadrante de reservas"></div>
@@ -135,7 +135,6 @@
           <div style="display:none;" aria-hidden="true">
             <select id="booking-employee"></select>
             <select id="booking-service" required=""></select>
-            <select id="booking-room" required=""></select>
             <input type="date" id="booking-date" required="">
             <input type="time" id="booking-start" step="900" required="">
             <input type="time" id="booking-end" step="900" required="">

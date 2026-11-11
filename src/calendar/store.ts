@@ -602,10 +602,10 @@ export class Store {
       c = (await this.state(gym)) as Config & { bookings: Booking[] };
     const service = c.services.find((s) => s.id === query.serviceId);
     const isCobosu = query.employeeId === COBOSU_ID;
+    const roomId = query.roomId || c.rooms[0]?.id || "r1";
     if (
       !service ||
-      (!isCobosu && !c.employees.some((e) => e.id === query.employeeId)) ||
-      !c.rooms.some((r) => r.id === query.roomId)
+      (!isCobosu && !c.employees.some((e) => e.id === query.employeeId))
     )
       throw new ApiError(400, "Recursos desconocidos.");
     if (service.active === false || (!isCobosu && c.employees.find(e => e.id === query.employeeId)?.active === false)) return [];
@@ -618,7 +618,7 @@ export class Store {
             clientId: c.clients[0]?.id || "slot-preview",
             employeeId: query.employeeId,
             serviceId: query.serviceId,
-            roomId: query.roomId,
+            roomId,
             date: day,
             start: label(start),
             status: "PENDING",

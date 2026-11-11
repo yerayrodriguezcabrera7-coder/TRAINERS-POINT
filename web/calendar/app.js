@@ -11,7 +11,8 @@ const dateFormats = new Map();
 const prettyDate = (key, options) => { const id=JSON.stringify(options); if(!dateFormats.has(id))dateFormats.set(id,new Intl.DateTimeFormat('es-ES',options)); return dateFormats.get(id).format(C.parseDate(key)); };
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', room: 'all', editing: null };
+const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', editing: null };
+const isSunday = date => C.parseDate(date).getDay() === 0;
 const currentGymId = () => localStorage.getItem('calendar-selected-gym') || data?.gymId || (data?.centers || [])[0]?.id || 'local';
 let storageWritable = true;
 let toastTimer;
@@ -41,13 +42,13 @@ function seedData() {
 
 function validData(value) {
   if (!value || value.version !== 1) return false;
-  const collections = ['employees', 'services', 'rooms', 'clients', 'bookings', 'schedule'];
+  const collections = ['employees', 'services', 'clients', 'bookings', 'schedule'];
   if (!collections.every(key => Array.isArray(value[key])) || value.schedule.length !== 7) return false;
-  const named = ['employees', 'services', 'rooms', 'clients'];
+  const named = ['employees', 'services', 'clients'];
   if (!named.every(key => value[key].length > 0 && value[key].every(x => x && typeof x.id === 'string' && typeof x.name === 'string'))) return false;
   if (!value.employees.every(x => /^#[0-9a-f]{6}$/i.test(x.color))) return false;
   if (!value.schedule.every(x => x && typeof x.closed === 'boolean' && /^\d{2}:\d{2}$/.test(x.open) && /^\d{2}:\d{2}$/.test(x.close) && C.minutes(x.open) >= 0 && C.minutes(x.close) < 1440 && C.minutes(x.open) < C.minutes(x.close))) return false;
-  return value.bookings.every(x => x && typeof x.id === 'string' && C.validDate(x.date) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.start) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.end) && C.minutes(x.start) < C.minutes(x.end) && Object.hasOwn(STATUS, x.status) && [['clients','clientId'],['employees','employeeId'],['services','serviceId'],['rooms','roomId']].every(([list,key]) => value[list].some(item => item.id === x[key])));
+  return value.bookings.every(x => x && typeof x.id === 'string' && C.validDate(x.date) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.start) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(x.end) && C.minutes(x.start) < C.minutes(x.end) && Object.hasOwn(STATUS, x.status) && value.clients.some(item => item.id === x.clientId) && value.services.some(item => item.id === x.serviceId) && (!x.employeeId || x.employeeId === COBOSU_ID || value.employees.some(item => item.id === x.employeeId)));
 }
 function warn(message) { $('storage-warning').textContent = message; $('storage-warning').hidden = false; }
 function loadData() {
@@ -171,17 +172,15 @@ function visibleDates() {
 function visibleBookings() {
   const dates = new Set(visibleDates());
   const activeGym = currentGymId();
-  return data.bookings.filter(b => dates.has(b.date) && (!b.centerId || b.centerId === activeGym || activeGym === 'local') && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service) && (state.room === 'all' || b.roomId === state.room));
+  return data.bookings.filter(b => dates.has(b.date) && (!b.centerId || b.centerId === activeGym || activeGym === 'local') && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service));
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
-  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option><option value="__cobosu">Cobosu</option>'+(serverMode&&currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
+  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option><option value="__cobosu">Cobosu</option>'+(currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
   fillSelect('service-filter', data.services.filter(s => s.active !== false), '<option value="all">Todos los servicios</option>');
-  fillSelect('room-filter', data.rooms, '<option value="all">Todos los espacios</option>');
-  fillSelect('booking-employee', data.employees.filter(e => e.active !== false), '<option value="__cobosu">Cobosu</option>' + (serverMode?'<option value="">Sin asignar</option>':''));
+  fillSelect('booking-employee', data.employees.filter(e => e.active !== false), '<option value="__cobosu">Cobosu</option><option value="">Sin asignar</option>');
   fillSelect('booking-service', data.services.filter(s => s.active !== false));
-  fillSelect('booking-room', data.rooms);
-  for(const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
+  for(const [id,key] of [['employee-filter','employee'],['service-filter','service']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
   if (currentUser?.role === 'TRAINER') {
     state.employee = currentUser.employeeId;
     const empFilter = $('employee-filter');
@@ -214,16 +213,35 @@ function updateRenewalDetail(){
  box.hidden=false;
  box.innerHTML=`<strong>⚠️ Aviso de bono · ${escapeHTML(alert.serviceName)}</strong><p>${escapeHTML(alert.message)}. Ofrece la renovación del bono al cliente.</p><a href="/clientes/ficha.html?id=${encodeURIComponent(id)}">Ver bono en la ficha del cliente ↗</a>`;
 }
-function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${lookup('rooms', b.roomId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
+function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
+
+function sundayParkingColumn() {
+  return { id: '__unassigned', name: 'Sin sitio asignado', color: '#b86b00', schedule: data.schedule, isSundayParking: true };
+}
 
 function employeesForDate(date, dayBookings, allEmployees) {
+  const sunday = isSunday(date);
   if (state.employee !== 'all') {
     if (state.employee === COBOSU_ID) return [cobosuColumn()];
     if (state.employee === '__unassigned') {
-      return [{ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
+      return [sunday ? sundayParkingColumn() : { id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
     }
     const emp = allEmployees.find(e => e.id === state.employee);
     return emp ? [emp] : [];
+  }
+
+  if (sunday) {
+    const cols = currentUser?.role !== 'TRAINER' ? [sundayParkingColumn()] : [];
+    if (dayBookings.some(b => b.employeeId === COBOSU_ID)) {
+      cols.push(cobosuColumn());
+    }
+    const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
+    for (const emp of allEmployees) {
+      if (emp.id !== COBOSU_ID && emp.id !== '__unassigned' && bookingEmpIds.has(emp.id)) {
+        cols.push(emp);
+      }
+    }
+    return cols;
   }
 
   const scheduled = [cobosuColumn()];
@@ -243,7 +261,7 @@ function employeesForDate(date, dayBookings, allEmployees) {
     }
   }
 
-  if (serverMode && currentUser?.role !== 'TRAINER' && dayBookings.some(b => !b.employeeId)) {
+  if (currentUser?.role !== 'TRAINER' && dayBookings.some(b => !b.employeeId)) {
     scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule });
   }
 
@@ -261,7 +279,7 @@ function gridHourBounds(dates, bookings) {
   }
   const visibleDates = new Set(dates);
   for (const b of bookings) {
-    if (!visibleDates.has(b.date)) continue;
+    if (!visibleDates.has(b.date) || (isSunday(b.date) && !b.employeeId)) continue;
     minMin = Math.min(minMin, C.minutes(b.start));
     maxMin = Math.max(maxMin, C.minutes(b.end));
   }
@@ -302,11 +320,12 @@ function renderTimeGrid(dates, bookings, employees) {
 
   dateLayouts.forEach(d => {
     const today = d.date === todayKey();
-    html += `<div class="day-heading ${today ? 'today' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+    const sunday = isSunday(d.date);
+    html += `<div class="day-heading ${today ? 'today' : ''} ${sunday ? 'is-sunday-parking' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
       <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
       <strong>${C.parseDate(d.date).getDate()}</strong>
       <span>${prettyDate(d.date, { month: 'short' })}</span>
-      ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">＋</button>` : ''}
+      ${!sunday && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">＋</button>` : ''}
     </div>`;
   });
 
@@ -318,11 +337,12 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        const periods = isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre'));
-        const isOff = !periods.length && employee.id !== '__unassigned';
+        const isParking = Boolean(employee.isSundayParking);
+        const periods = isParking ? [{ open: '00:00', close: '23:59' }] : isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
+        const shiftText = isParking ? 'Arrastrar a L–S' : isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre'));
+        const isOff = !isParking && !periods.length && employee.id !== '__unassigned';
         const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
-        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
           <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
@@ -343,34 +363,50 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
-        const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
-        const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
+        const isParking = Boolean(employee.isSundayParking);
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        const absent = !isCobosu && !isParking && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
+        const serviceWorker = isCobosu || isParking || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
         for (let slot = startHour * 2; slot < endHour * 2; slot++) {
           const start = slot * 30;
-          const serviceOpen = !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
-          const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule);
+          const serviceOpen = isParking || !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
+          const open = isParking || (!absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule));
           const label = `${dayLabel}, ${C.timeLabel(start)}, ${employee.name}`;
-          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
+          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${isParking ? 'Crear reserva sin asignar en domingo' : open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
         }
         const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
-        const placed = C.layoutEvents(dayColBookings);
-        placed.forEach(({ event: b, lane, count }) => {
-          const startMin = C.minutes(b.start);
-          const endMin = C.minutes(b.end);
-          const top = (startMin - offsetMin) * 1.4;
-          const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
-          const width = 100 / count;
-          const left = lane * width;
-          const color = lookup('employees', b.employeeId).color || '#7b858d';
-          const soft = `${color}18`;
-          const clientName = lookup('clients', b.clientId).name;
-          const serviceName = lookup('services', b.serviceId).name;
-          const roomName = lookup('rooms', b.roomId).name;
-          const isDraggable = canDragBooking(b);
-          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
-        });
+        if (isParking) {
+          html += '<div class="sunday-parking-list">';
+          if (!dayColBookings.length) {
+            html += '<div class="sunday-parking-empty">Arrastra aquí clientes sin sitio asignado y llévalos luego a su día</div>';
+          } else {
+            dayColBookings.forEach(b => {
+              const clientName = lookup('clients', b.clientId).name;
+              const serviceObj = lookup('services', b.serviceId);
+              const dur = Math.max(15, C.minutes(b.end) - C.minutes(b.start));
+              const isDraggable = canDragBooking(b);
+              html += `<button class="event sunday-parking-card ${b.status} unassigned" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:#b86b00;--event-soft:#b86b0018" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceObj.name)}<br>Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+            });
+          }
+          html += '</div>';
+        } else {
+          const placed = C.layoutEvents(dayColBookings);
+          placed.forEach(({ event: b, lane, count }) => {
+            const startMin = C.minutes(b.start);
+            const endMin = C.minutes(b.end);
+            const top = (startMin - offsetMin) * 1.4;
+            const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
+            const width = 100 / count;
+            const left = lane * width;
+            const color = lookup('employees', b.employeeId).color || '#7b858d';
+            const soft = `${color}18`;
+            const clientName = lookup('clients', b.clientId).name;
+            const serviceName = lookup('services', b.serviceId).name;
+            const isDraggable = canDragBooking(b);
+            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+          });
+        }
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
         html += '</div>';
       });
@@ -416,7 +452,7 @@ function render(updatePeriodTitle = false) {
   $('stat-pending').textContent=bookings.filter(b=>b.status==='pending').length;
   $('stat-team').textContent=employees.filter(e=>e.id!=='__unassigned').length;
   $('result-count').textContent=bookings.length+' reservas';
-  $('clear-filters').hidden=['employee','service','room'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
+  $('clear-filters').hidden=['employee','service'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
   checkRepeatWeekButton();
@@ -493,12 +529,14 @@ function showBooking(id, date = state.date, minute, employeeId) {
   fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId), '<option value="__cobosu">Cobosu</option>' + (serverMode?'<option value="">Sin asignar</option>':''));
   $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
-  const start = minute ?? C.minutes(hours.open);
+  const sunday = isSunday(date);
+  const start = minute ?? (sunday ? 540 : C.minutes(hours.open));
   const selectedService = data.services.find(s => s.id === state.service && s.active !== false);
   const service = selectedService || data.services.find(s => s.active !== false) || data.services[0];
   const duration = service.duration || 60;
-  const values = b || {clientId:'',employeeId:employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee),serviceId:service.id,roomId:state.room === 'all' ? data.rooms[0].id : state.room,date,start:C.timeLabel(start),end:C.timeLabel(Math.min(start+duration,C.minutes(hours.close))),status:'confirmed',notes:''};
-  for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',room:'roomId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  const defaultEmp = (sunday || employeeId === '__unassigned') ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee));
+  const values = b || {clientId:'',employeeId:defaultEmp,serviceId:service.id,date,start:C.timeLabel(start),end:C.timeLabel(sunday ? Math.min(start+duration, 1410) : Math.min(start+duration,C.minutes(hours.close))),status:defaultEmp ? 'confirmed' : 'pending',notes:''};
+  for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
   if(employeeId==='__unassigned')$('booking-employee').value='';
   const formatHistoryAt = iso => {
     const d = new Date(iso);
@@ -557,14 +595,13 @@ function showBooking(id, date = state.date, minute, employeeId) {
 let slotsRequest=0;
 async function loadAvailableSlots(){
  if(!serverMode)return;
- const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,roomId:$('booking-room').value,centerId:currentGymId()};
+ const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,centerId:currentGymId()};
  const select=$('booking-available-slot'),request=++slotsRequest;
  if(!query.employeeId||!C.validDate(query.date)){select.innerHTML='<option value="">Selecciona trabajador, servicio y fecha</option>';return;}
  if(state.editing)query.excludeId=state.editing;
  try{const slots=await api('slots?'+new URLSearchParams(query));if(request!==slotsRequest)return;const list=Array.isArray(slots)?slots:[];select.innerHTML='<option value="">'+(list.length?'Elige un horario libre ('+list.length+' opciones)':'No hay horarios libres con estos filtros')+'</option>'+list.map(s=>`<option value="${escapeHTML(s.start)}">${escapeHTML(s.start)} – ${escapeHTML(s.end)}</option>`).join('');}catch(e){if(request===slotsRequest)select.innerHTML='<option value="">No se pudo consultar la disponibilidad. Se comprobará al guardar.</option>';}
 }
 $('booking-available-slot').onchange=()=>{if(!$('booking-available-slot').value)return;$('booking-start').value=$('booking-available-slot').value;$('booking-start').dispatchEvent(new Event('change'));};
-$('booking-room').addEventListener('change',loadAvailableSlots);
 async function loadClientPackages(selected=null){
   if(!serverMode||!data.packagesEnabled){$('booking-package-panel').hidden=true;return;}
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
@@ -837,7 +874,7 @@ $('booking-form').addEventListener('submit', async event => {
   if (!clientId) { formError('booking-error','Selecciona un cliente para la cita.'); return; }
   if(packageBusy){formError('booking-error','Espera a que termine la consulta de bonos del cliente.');return;}
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
-  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:$('booking-room').value,date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
+  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:state.editingSnapshot?.roomId || data.rooms?.[0]?.id || 'r1',date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
   if(serverMode) {
     if(state.saving)return;
     state.saving=true;
@@ -1231,8 +1268,8 @@ if ($('shift-delete-btn')) {
 
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',() => $(button.dataset.close).close()));
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => {state.view = button.dataset.view;render(true);}));
-for (const [id,key] of [['employee-filter','employee'],['service-filter','service'],['room-filter','room']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
-$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service','room']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
+for (const [id,key] of [['employee-filter','employee'],['service-filter','service']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
+$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
 $('new-booking').addEventListener('click',() => showBooking(null));
 $('today').addEventListener('click',() => {state.date=todayKey();render(true);});
 $('jump-date').addEventListener('change',event => {if(C.validDate(event.target.value)){state.date=event.target.value;render(true);}});
@@ -1264,7 +1301,7 @@ $('calendar').addEventListener('click',event => {
   const slot=event.target.closest('[data-slot]');
   if(slot&&!slot.disabled){if(currentUser?.role==='TRAINER')return;showBooking(null,slot.dataset.slot,Number(slot.dataset.minute),slot.dataset.employee);return;}
   const cell=event.target.closest('[data-month-cell]');
-  if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
+  if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;if(isSunday(date)){showBooking(null,date,540,'__unassigned');return;}const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
 });
 
 function clearDropUI() {
@@ -1273,6 +1310,9 @@ function clearDropUI() {
 }
 
 function validateMovedBooking(moved) {
+  if (isSunday(moved.date) && !moved.employeeId) {
+    return '';
+  }
   if (moved.status !== 'cancelled' && moved.employeeId) {
     const isCobosu = moved.employeeId === COBOSU_ID;
     if (!isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === moved.employeeId && leave.status === 'APPROVED' && moved.date >= leave.startDate && moved.date <= leave.endDate)) {
@@ -1290,6 +1330,9 @@ function validateMovedBooking(moved) {
 }
 
 function buildMovedCandidate(orig, nextDate, nextStart, nextEnd, nextEmployeeId) {
+  const nextStatus = !nextEmployeeId
+    ? (orig.status === 'confirmed' ? 'pending' : orig.status)
+    : (!orig.employeeId && orig.status === 'pending' ? 'confirmed' : orig.status);
   return {
     ...orig,
     centerId: orig.centerId || currentGymId(),
@@ -1297,7 +1340,7 @@ function buildMovedCandidate(orig, nextDate, nextStart, nextEnd, nextEmployeeId)
     start: nextStart,
     end: nextEnd,
     employeeId: nextEmployeeId,
-    status: !nextEmployeeId && orig.status === 'confirmed' ? 'pending' : orig.status,
+    status: nextStatus,
     needsReschedule: false,
   };
 }
@@ -1333,7 +1376,9 @@ async function commitMovedBooking(orig, moved) {
     toast(err, true);
     return;
   }
-  const whenLabel = `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end}`;
+  const whenLabel = (isSunday(moved.date) && !moved.employeeId)
+    ? `Sin sitio asignado (${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })})`
+    : `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end}`;
   if (serverMode) {
     if (state.saving) return;
     state.saving = true;
@@ -1396,6 +1441,12 @@ $('calendar').addEventListener('dragover', event => {
   if (col) {
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (col.classList.contains('is-sunday-parking')) {
+      document.querySelectorAll('#calendar .drop-preview').forEach(el => el.remove());
+      document.querySelectorAll('#calendar .is-drop-target').forEach(el => { if (el !== col) el.classList.remove('is-drop-target'); });
+      col.classList.add('is-drop-target');
+      return;
+    }
     const target = computeColumnDrop(col, event.clientY, orig);
     const moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
     const err = validateMovedBooking(moved);
@@ -1444,12 +1495,15 @@ $('calendar').addEventListener('drop', event => {
   event.preventDefault();
   suppressClickUntil = Date.now() + 250;
   let moved;
-  if (col) {
+  if (col && col.classList.contains('is-sunday-parking')) {
+    moved = buildMovedCandidate(orig, col.dataset.dropDate, orig.start, orig.end, null);
+  } else if (col) {
     const target = computeColumnDrop(col, event.clientY, orig);
     moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
   } else {
     const dropDate = dayBox.dataset.dropDay || dayBox.dataset.monthCell;
-    moved = buildMovedCandidate(orig, dropDate, orig.start, orig.end, orig.employeeId || null);
+    const dropEmp = isSunday(dropDate) ? null : (orig.employeeId || null);
+    moved = buildMovedCandidate(orig, dropDate, orig.start, orig.end, dropEmp);
   }
   dragState = null;
   document.querySelectorAll('#calendar .is-dragging').forEach(el => el.classList.remove('is-dragging'));

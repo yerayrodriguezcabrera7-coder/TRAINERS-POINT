@@ -144,7 +144,7 @@ export const bookingSchema = z.object({
   serviceId: id,
   packageId: z.string().uuid().nullable().optional(),
   paymentDue: z.boolean().optional(),
-  roomId: id,
+  roomId: id.optional().default("r1"),
   date,
   start: time,
   end: time.optional(),
@@ -195,15 +195,15 @@ export const COBOSU_ID = "__cobosu";
 export function normalize(input: Input, c: Config): Booking {
   const service = c.services.find((x) => x.id === input.serviceId);
   const isCobosu = input.employeeId === COBOSU_ID;
+  const roomId = input.roomId || c.rooms?.[0]?.id || "r1";
   if (
     !service ||
     (input.employeeId !== null && !isCobosu && !c.employees.some((x) => x.id === input.employeeId)) ||
-    !c.rooms.some((x) => x.id === input.roomId) ||
     !c.clients.some((x) => x.id === input.clientId)
   )
     throw new ApiError(
       400,
-      "Cliente, entrenador, sala o servicio desconocido.",
+      "Cliente, entrenador o servicio desconocido.",
     );
   if(!input.employeeId && !["PENDING","CANCELLED"].includes(input.status)) throw new ApiError(409,"Asigna un trabajador antes de confirmar o cerrar la reserva.");
   if(input.needsReschedule && input.status !== "CANCELLED") throw new ApiError(400,"La reserva pendiente de reprogramación debe liberar el horario anterior.");
@@ -222,11 +222,12 @@ export function normalize(input: Input, c: Config): Booking {
     )
       throw new ApiError(400, "Hora inexistente o ambigua por cambio horario.");
   }
-  return { ...input, id: input.id || "", end, version: input.version || 1 };
+  return { ...input, roomId, id: input.id || "", end, version: input.version || 1 };
 }
 export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
+  if (day === 6 && !b.employeeId) return;
   const service = c.services.find(s => s.id === b.serviceId)!;
   const isCobosu = b.employeeId === COBOSU_ID;
   if (b.employeeId && !isCobosu && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
@@ -258,7 +259,6 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
       o.sessionId === b.sessionId &&
       o.employeeId === b.employeeId &&
       o.centerId === b.centerId &&
-      o.roomId === b.roomId &&
       o.serviceId === b.serviceId &&
       o.date === b.date &&
       o.start === b.start &&
@@ -275,13 +275,13 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
     )
       throw new ApiError(
         409,
-        "La sesión grupal no coincide con el horario o los recursos.",
+        "La sesión grupal no coincide con el horario o el entrenador.",
       );
     const resources = clashes.filter(
-      (o) => (b.employeeId && o.employeeId === b.employeeId) || (o.roomId === b.roomId && o.centerId === b.centerId && o.employeeId !== COBOSU_ID),
+      (o) => Boolean(b.employeeId) && o.employeeId === b.employeeId,
     );
     if (resources.some((o) => !same(o)))
-      throw new ApiError(409, "Entrenador o sala ya ocupados.");
+      throw new ApiError(409, "Entrenador ya ocupado.");
     if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
   }
 
@@ -322,7 +322,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
 export function assertTransition(old: Booking, next: Booking, c: Config) {
   const allowed: Record<string, string[]> = {
     PENDING: ["PENDING", "CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"],
+    CONFIRMED: ["CONFIRMED", "PENDING", "CANCELLED", "COMPLETED", "NO_SHOW"],
     CANCELLED: ["CANCELLED", "PENDING", "CONFIRMED"],
     COMPLETED: ["COMPLETED"],
     NO_SHOW: ["NO_SHOW"],

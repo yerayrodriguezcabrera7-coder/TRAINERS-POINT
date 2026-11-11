@@ -341,3 +341,63 @@
 .toast.is-error {
   background: #9f2d22;
 }
+.day-heading.is-sunday-parking {
+  background: #fffbeb;
+}
+.employee-heading.is-sunday-parking {
+  background: #fef3c7;
+  border-bottom: 2px solid #d97706;
+  flex-direction: column;
+  gap: 2px;
+  height: 44px;
+}
+.employee-heading.is-sunday-parking .employee-heading-name {
+  color: #92400e;
+  font-weight: 700;
+}
+.employee-heading.is-sunday-parking .employee-shift-tag {
+  background: #fde68a;
+  color: #92400e;
+}
+.time-column.is-sunday-parking {
+  background: #fffdf5;
+}
+.time-column.is-sunday-parking .time-slot {
+  background: transparent;
+}
+.time-column.is-sunday-parking.is-drop-target {
+  background: #fef3c7;
+  outline: 2px dashed #d97706;
+  outline-offset: -2px;
+}
+.sunday-parking-list {
+  position: absolute;
+  inset: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  overflow-y: auto;
+  z-index: 4;
+}
+.sunday-parking-card {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 54px;
+  pointer-events: auto;
+  text-align: left;
+  padding: 7px 9px;
+}
+.sunday-parking-empty {
+  font-size: 11px;
+  color: #92400e;
+  opacity: .75;
+  text-align: center;
+  padding: 14px 8px;
+  border: 1px dashed #fcd34d;
+  border-radius: 8px;
+  background: rgba(254, 243, 199, .35);
+}
