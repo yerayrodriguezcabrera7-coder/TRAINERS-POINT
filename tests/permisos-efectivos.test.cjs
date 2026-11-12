@@ -119,3 +119,19 @@ test('cashPermission e inventoryPermission respetan pagePermissions sobre el rol
   assert.throws(() => cashPermission(receptionWithoutCash), /permiso/);
   assert.throws(() => inventoryPermission(receptionWithoutCash, 'read'), /permiso/);
 });
+
+test('Pantalla antigua de Gestión del centro: eliminada sin referencias rotas', () => {
+  assert.equal(fs.existsSync('web/staff/gestion.html'), false, 'gestion.html no debe existir');
+  assert.equal(fs.existsSync('web/staff/gestion.js'), false, 'gestion.js no debe existir');
+  for (const file of [
+    'src/http/asset-catalog.ts',
+    'web/dashboard/inicio.html',
+    'web/settings/configuracion.js',
+    'web/shared/menu.js',
+    'web/shared/ayuda.js',
+    'web/admin/permisos-pagina.js',
+  ]) {
+    const content = fs.readFileSync(file, 'utf8');
+    assert.ok(!content.includes('gestion.html') && !content.includes('gestion.js'), `${file} no debe referenciar gestion.html ni gestion.js`);
+  }
+});

@@ -633,7 +633,6 @@ test('Control de acceso y navegación para perfil Entrenador: Restricción de ve
   const servicesJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'services', 'services.js'), 'utf8');
   const usersJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'users.js'), 'utf8');
   const profJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'professionals.js'), 'utf8');
-  const gestionJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'staff', 'gestion.js'), 'utf8');
   const clientsJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'clients.js'), 'utf8');
   const clientProfileJs = fs.readFileSync(path.join(__dirname, '..', 'web', 'clients', 'client-profile.js'), 'utf8');
 
@@ -646,9 +645,6 @@ test('Control de acceso y navegación para perfil Entrenador: Restricción de ve
   assert.ok(servicesJs.includes("location.replace('/index.html')"), 'services.js debe expulsar perfiles TRAINER');
   assert.ok(usersJs.includes("location.replace('/index.html')"), 'users.js debe expulsar perfiles no ADMIN');
   assert.ok(profJs.includes("location.replace('/index.html')"), 'professionals.js debe expulsar perfiles no autorizados');
-
-  // Gestión de turnos sin redirección accidental
-  assert.ok(gestionJs.includes("section = 'shifts'"), 'gestion.js debe fijar la sección de turnos para entrenadores');
 
   // Ficha de clientes
   assert.ok(clientsJs.includes("currentUserRole !== 'TRAINER'"), 'clients.js no debe renderizar acción de añadir bono a entrenadores');

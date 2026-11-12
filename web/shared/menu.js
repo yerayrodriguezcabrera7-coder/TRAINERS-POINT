@@ -39,7 +39,6 @@
     if (['/professionals.html', '/profesionales.html'].includes(path)) return '/profesionales';
     if (['/fichajes', '/fichaje'].includes(path)) return '/fichajes.html';
     if (['/tienda.html', '/tienda'].includes(path)) return '/tienda.html';
-    if (path === '/gestion.html') return path + '?section=' + (url.searchParams.get('section') || 'services');
     return path;
   }
   const current = menuKey(location.href);
