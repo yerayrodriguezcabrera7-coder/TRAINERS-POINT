@@ -131,7 +131,7 @@ export function server(
             send(res,200,workerBooking(await store.workerAction(gym,decodeURIComponent(workerAction[1]),identity,await body(req))));return;
           }
           if (path === "/api/recoveries" && req.method === "GET") {
-            if (!hasPage("recuperaciones.html")) throw new ApiError(403, "No tienes acceso a las recuperaciones.");
+            if (!hasPage("pendientes.html") && !hasPage("index.html")) throw new ApiError(403, "No tienes acceso a las recuperaciones.");
             const items = await store.recoveries(gym);
             send(res,200,trainer ? items.filter(r=>r.employeeId===identity.employeeId) : client ? items.filter(r=>r.clientId===identity.clientId) : items); return;
           }

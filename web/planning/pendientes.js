@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const type = new URLSearchParams(location.search).get('tipo') === 'reprogramacion' ? 'reprogramacion' : 'asignacion';
-  let data, packages = [], editing, loading, saving = false;
+  let data, packages = [], recoveries = [], editing, loading, saving = false;
   async function api(path, method = 'GET', body) {
     const response = await fetch('/api/' + path, {method, headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
     const result = await response.json();
@@ -18,12 +18,13 @@
   const quantity = (n,one,many) => `${n} ${n===1 ? one : many}`;
   const assignmentBookings = () => data.bookings.filter(b => !b.employeeId && ['PENDING','CONFIRMED'].includes(b.status));
   const rescheduleBookings = () => data.bookings.filter(b => b.needsReschedule);
+  const pendingRecoveries = () => recoveries.filter(r => r.status === 'PENDING' || (r.status === 'RESCHEDULE_PENDING' && !data.bookings.some(b => b.recoveryId === r.id && b.needsReschedule)));
   const clientLink = (id, label) => `<a href="/clientes/${encodeURIComponent(id)}/ficha">${esc(label)}</a>`;
 
   function groups() {
     const clients = new Map();
     const group = (id, label) => {
-      if (!clients.has(id)) clients.set(id,{id,name:label,packages:[],bookings:[],deadline:'9999-12-31',pressure:0});
+      if (!clients.has(id)) clients.set(id,{id,name:label,packages:[],bookings:[],recoveries:[],deadline:'9999-12-31',pressure:0});
       return clients.get(id);
     };
     if (type === 'asignacion') {
@@ -39,22 +40,29 @@
       item.bookings.push(booking);
       if(booking.date<item.deadline)item.deadline=booking.date;
     }
+    if (type === 'reprogramacion') {
+      for (const rec of pendingRecoveries()) {
+        const item=group(rec.clientId,name('clients',rec.clientId));
+        item.recoveries.push(rec);
+      }
+    }
     const query=$('search').value.trim().toLocaleLowerCase('es');
-    return [...clients.values()].filter(item => (item.name+' '+item.packages.map(p=>p.serviceName).join(' ')+' '+item.bookings.map(b=>name('services',b.serviceId)).join(' ')).toLocaleLowerCase('es').includes(query))
+    return [...clients.values()].filter(item => (item.name+' '+item.packages.map(p=>p.serviceName).join(' ')+' '+item.bookings.map(b=>name('services',b.serviceId)).join(' ')+' '+item.recoveries.map(r=>name('services',r.serviceId)).join(' ')).toLocaleLowerCase('es').includes(query))
       .sort((a,b)=>a.deadline.localeCompare(b.deadline) || b.pressure-a.pressure || a.name.localeCompare(b.name,'es') || a.id.localeCompare(b.id));
   }
   function render() {
-    const assignments=assignmentBookings(), reschedules=rescheduleBookings();
+    const assignments=assignmentBookings(), reschedules=rescheduleBookings(), pendingRecs=pendingRecoveries();
     const allClients=new Set([...assignments.map(b=>b.clientId),...packages.map(p=>p.clientId)]);
     $('assignment-tab').textContent=`Por organizar (${quantity(allClients.size,'cliente','clientes')})`;
-    $('reschedule-tab').textContent=`Por reprogramar (${reschedules.length})`;
+    $('reschedule-tab').textContent=`Reprogramar / Recuperar (${reschedules.length + pendingRecs.length})`;
     $(type === 'asignacion' ? 'assignment-tab' : 'reschedule-tab').setAttribute('aria-current','page');
-    document.querySelector('h1').textContent=type === 'asignacion' ? 'Pendientes de asignación' : 'Pendientes de reprogramación';
-    $('page-description').textContent=type === 'asignacion' ? 'Sesiones disponibles de bonos y citas sin trabajador, organizadas desde el centro activo.' : 'Busca una nueva fecha sin perder el historial ni volver a cobrar la sesión.';
+    document.querySelector('h1').textContent=type === 'asignacion' ? 'Pendientes de asignación' : 'Pendientes de reprogramación y recuperación';
+    $('page-description').textContent=type === 'asignacion' ? 'Sesiones disponibles de bonos y citas sin trabajador, organizadas desde el centro activo.' : 'Reprograma citas aplazadas o agenda sesiones pendientes de recuperar sin volver a cobrar.';
     const items=groups();
     const free=items.reduce((sum,item)=>sum+item.packages.reduce((n,p)=>n+p.sessionsToSchedule,0),0);
     const bookings=items.reduce((sum,item)=>sum+item.bookings.length,0);
-    $('list-summary').textContent=type === 'asignacion' ? `${items.length} clientes · ${free} sesiones de bono sin agendar · ${bookings} citas sin trabajador` : `${items.length} clientes · ${bookings} citas por reprogramar`;
+    const recsCount=items.reduce((sum,item)=>sum+item.recoveries.length,0);
+    $('list-summary').textContent=type === 'asignacion' ? `${items.length} clientes · ${free} sesiones de bono sin agendar · ${bookings} citas sin trabajador` : `${items.length} clientes · ${bookings} citas por reprogramar · ${recsCount} sesiones por recuperar`;
     $('urgent-panel').hidden=type !== 'asignacion' || !items.length;
     $('urgent-count').textContent=`${Math.min(4,items.length)} de ${items.length} clientes`;
     $('urgent-list').innerHTML=type !== 'asignacion' ? '' : items.slice(0,4).map((item,index)=>{
@@ -66,25 +74,35 @@
     }).join('');
     $('rows').innerHTML=items.flatMap(item=>[
       ...item.bookings.map(booking=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',booking.serviceId))}<small>${type === 'asignacion' ? 'Cita sin trabajador' : 'Pendiente de reprogramar'}</small></td><td>${esc(booking.date)} · ${esc(booking.start)}–${esc(booking.end)}</td><td>${esc(name('employees',booking.employeeId))}</td><td class="pending-actions"><button type="button" data-edit="${esc(booking.id)}">${type === 'asignacion' ? 'Asignar trabajador' : 'Reprogramar'}</button><a href="/index.html?fecha=${encodeURIComponent(booking.date)}&reserva=${encodeURIComponent(booking.id)}">Ver historial</a></td></tr>`),
+      ...item.recoveries.map(rec=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',rec.serviceId))}<small>${rec.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar'}</small></td><td>Sin fecha límite<small>Crédito de recuperación</small></td><td>${esc(name('employees',rec.employeeId))}</td><td class="pending-actions"><button type="button" data-recovery="${esc(rec.id)}">Agendar recuperación</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver ficha</a></td></tr>`),
       ...item.packages.map(pkg=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(pkg.serviceName)}<small>${quantity(pkg.sessionsToSchedule,'sesión sin agendar','sesiones sin agendar')} · ${quantity(pkg.sessionsScheduled,'ya reservada','ya reservadas')}</small>${pkg.paymentPending ? '<small>Bono con pago pendiente</small>' : ''}</td><td>Caduca el ${esc(dateLabel(pkg.expiresAt))}<small>${pkg.daysRemaining} días restantes</small></td><td>Por elegir</td><td class="pending-actions"><button type="button" data-package="${esc(pkg.packageId)}">Agendar una sesión</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver bono y ficha</a></td></tr>`)
     ]).join('') || '<tr><td colspan="5">No hay sesiones ni citas pendientes para esta búsqueda.</td></tr>';
+    const historyPanel=$('recoveries-history-panel'), historyList=$('recoveries-history-list');
+    if (historyPanel && historyList) {
+      const states={RESCHEDULE_PENDING:'Pendiente de reprogramación',PENDING:'Pendiente de recuperar',SCHEDULED:'Recuperación programada',COMPLETED:'Recuperada',FORFEITED:'Resuelta sin recuperación'};
+      historyPanel.hidden=type !== 'reprogramacion' || !recoveries.length;
+      historyList.innerHTML=type === 'reprogramacion' && recoveries.length
+        ? `<div class="history-scroll"><table class="pending-table"><thead><tr><th>Cliente</th><th>Servicio</th><th>Estado del crédito</th></tr></thead><tbody>${recoveries.map(r=>`<tr><td><strong>${clientLink(r.clientId,name('clients',r.clientId))}</strong></td><td>${esc(name('services',r.serviceId))}</td><td>${esc(states[r.status] || r.status)}</td></tr>`).join('')}</tbody></table></div>`
+        : '';
+    }
   }
   async function load() {
     if (loading) return loading;
     loading=(async()=>{
-      const [state,result]=await Promise.all([api('state'),api('pending-packages')]);
-      data=state;packages=result.packages;render();
+      const [state,result,recoveryList]=await Promise.all([api('state'),api('pending-packages'),api('recoveries').catch(()=>[])]);
+      data=state;packages=result.packages;recoveries=Array.isArray(recoveryList)?recoveryList:[];render();
     })();
     try {await loading;} finally {loading=null;}
   }
   function openEditor(event) {
     if(saving)return;
-    const target=event.target.closest('[data-edit],[data-package]');
+    const target=event.target.closest('[data-edit],[data-package],[data-recovery]');
     if (!target) return;
     const pkg=target.dataset.package ? packages.find(p=>p.packageId===target.dataset.package) : null;
+    const rec=target.dataset.recovery ? recoveries.find(r=>r.id===target.dataset.recovery) : null;
     const booking=target.dataset.edit ? data.bookings.find(b=>b.id===target.dataset.edit) : null;
-    if (!pkg && !booking) return;
-    editing=pkg ? {clientId:pkg.clientId,serviceId:pkg.serviceId,packageId:pkg.packageId,centerId:data.gymId} : structuredClone(booking);
+    if (!pkg && !rec && !booking) return;
+    editing=pkg ? {clientId:pkg.clientId,serviceId:pkg.serviceId,packageId:pkg.packageId,centerId:data.gymId} : rec ? {clientId:rec.clientId,serviceId:rec.serviceId,recoveryId:rec.id,employeeId:rec.employeeId||'',centerId:data.gymId} : structuredClone(booking);
     const service=data.services.find(s=>s.id===editing.serviceId);
     if(!service){$('notice').textContent='El servicio ya no está disponible. Actualiza la lista.';return;}
     $('employee').innerHTML=options(data.employees.filter(e=>e.active !== false && (!service.employeeIds?.length || service.employeeIds.includes(e.id))));
@@ -93,9 +111,9 @@
     $('date').min=dayKey(Date.now());$('date').max=pkg ? dayKey(pkg.expiresAt) : '';
     $('date').value=editing.date || dayKey(Date.now());$('start').value=editing.start || '';
     $('error').textContent='';$('availability').replaceChildren();
-    $('title').textContent=pkg ? 'Agendar una sesión del bono' : 'Organizar reserva';
-    $('save').textContent=pkg ? 'Confirmar sesión del bono' : 'Confirmar nueva organización';
-    $('original').textContent=pkg ? `${pkg.clientName} · ${pkg.serviceName} · ${quantity(pkg.sessionsToSchedule,'sesión disponible','sesiones disponibles')}. Se utilizará este bono sin crear otra compra.` : `${name('clients',editing.clientId)} · ${name('services',editing.serviceId)} · Anterior: ${editing.date} ${editing.start}`;
+    $('title').textContent=pkg ? 'Agendar una sesión del bono' : rec ? 'Agendar sesión de recuperación' : 'Organizar reserva';
+    $('save').textContent=pkg ? 'Confirmar sesión del bono' : rec ? 'Confirmar recuperación' : 'Confirmar nueva organización';
+    $('original').textContent=pkg ? `${pkg.clientName} · ${pkg.serviceName} · ${quantity(pkg.sessionsToSchedule,'sesión disponible','sesiones disponibles')}. Se utilizará este bono sin crear otra compra.` : rec ? `${name('clients',rec.clientId)} · ${name('services',rec.serviceId)} · Sesión pendiente de recuperar. Se utilizará este crédito sin generar otro cobro.` : `${name('clients',editing.clientId)} · ${name('services',editing.serviceId)} · Anterior: ${editing.date} ${editing.start}`;
     $('editor').showModal();
   }
   $('rows').onclick=$('urgent-list').onclick=openEditor;

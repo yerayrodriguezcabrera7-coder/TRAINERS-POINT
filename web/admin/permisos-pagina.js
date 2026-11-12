@@ -6,7 +6,6 @@
   const PAGES = [
     { key: 'index.html', label: 'Calendario' },
     { key: 'pendientes.html', label: 'Pendientes de asignación' },
-    { key: 'recuperaciones.html', label: 'Recuperaciones' },
     { key: 'clientes', label: 'Clientes' },
     { key: 'servicios', label: 'Servicios' },
     { key: 'profesionales', label: 'Profesionales' },
@@ -31,8 +30,8 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-    TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+    RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+    TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     CLIENT: ['mis-reservas.html'],
   };
 
@@ -40,17 +39,17 @@
     {
       id: 'trainer_std',
       label: 'Entrenador estándar',
-      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     },
     {
       id: 'trainer_sales',
       label: 'Entrenador + Ventas/Caja',
-      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'tienda.html', 'productos.html', 'caja.html'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'tienda.html', 'productos.html', 'caja.html'],
     },
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+      pages: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     },
     {
       id: 'clock_only',

@@ -698,6 +698,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   });
 
   $('reschedule-booking').hidden=isTrainer||!b||!['pending','confirmed'].includes(b.status);
+  if ($('defer-booking')) $('defer-booking').hidden = !serverMode || !b || b.status !== 'confirmed' || Boolean(b.recoveryId) || !['ADMIN', 'TRAINER'].includes(currentUser?.role);
   $('worker-complete').hidden=!isTrainer||b?.status!=='confirmed';
   $('worker-incident').hidden=!isTrainer||!b;
   updateClientFields(); syncDualPanel();
@@ -1310,6 +1311,30 @@ $('reschedule-booking').onclick=async()=>{
   if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
   try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
 };
+if ($('defer-booking')) {
+  $('defer-booking').onclick = async () => {
+    if (!state.editingSnapshot || !confirm('¿Dejar esta sesión pendiente de recuperar? Se liberará el hueco y se generará un crédito de recuperación.')) return;
+    try {
+      await api('bookings/' + encodeURIComponent(state.editing) + '/defer', 'POST', {});
+      $('booking-dialog').close();
+      await refreshServer(true);
+      toast('Sesión dejada pendiente de recuperación.');
+    } catch (err) {
+      if (currentUser?.role === 'ADMIN' && err.message.includes('dos horas') && confirm('El aviso llega con menos de dos horas. ¿Autorizar una excepción?')) {
+        try {
+          await api('bookings/' + encodeURIComponent(state.editing) + '/defer', 'POST', { exception: true });
+          $('booking-dialog').close();
+          await refreshServer(true);
+          toast('Sesión dejada pendiente de recuperación.');
+        } catch (x) {
+          formError('booking-error', x.message);
+        }
+      } else {
+        formError('booking-error', err.message);
+      }
+    }
+  };
+}
 async function offerBookingPayment(id) {
   try { await window.TrainersPoint.collectBookingPayment(id, async () => { await refreshServer(true); toast('Cobro registrado. El saldo y Caja se han actualizado.'); }); }
   catch (error) { warn('La asistencia está guardada. No se pudo abrir el cobro: ' + error.message); }

@@ -4,7 +4,6 @@ export const staticFiles: Record<string, {
 }> = {
   "/training-plans.js": { file: "web/shared/training-plans.js", contentType: "text/javascript; charset=utf-8" },
   "/training-plans.css": { file: "web/shared/training-plans.css", contentType: "text/css; charset=utf-8" },
-  "/recuperaciones.css": { file: "web/planning/recuperaciones.css", contentType: "text/css; charset=utf-8" },
   "/polling.js": { file: "web/shared/polling.js", contentType: "text/javascript; charset=utf-8" },
   "/ayuda.js": { file: "web/shared/ayuda.js", contentType: "text/javascript; charset=utf-8" },
   "/orden.css": { file: "web/shared/orden.css", contentType: "text/css; charset=utf-8" },
@@ -22,8 +21,6 @@ export const staticFiles: Record<string, {
   "/ausencias.html": { file: "web/staff/ausencias.html", contentType: "text/html; charset=utf-8" },
   "/ausencias.js": { file: "web/staff/ausencias.js", contentType: "text/javascript; charset=utf-8" },
   "/ausencias.css": { file: "web/staff/ausencias.css", contentType: "text/css; charset=utf-8" },
-  "/recuperaciones.html": { file: "web/planning/recuperaciones.html", contentType: "text/html; charset=utf-8" },
-  "/recuperaciones.js": { file: "web/planning/recuperaciones.js", contentType: "text/javascript; charset=utf-8" },
   "/mis-reservas.html": { file: "web/planning/mis-reservas.html", contentType: "text/html; charset=utf-8" },
   "/mis-reservas.js": { file: "web/planning/mis-reservas.js", contentType: "text/javascript; charset=utf-8" },
   "/productos.html": { file: "web/inventory/productos.html", contentType: "text/html; charset=utf-8" },

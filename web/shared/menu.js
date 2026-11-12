@@ -24,7 +24,7 @@
   const items = [
     ['Mis reservas','calendar','/mis-reservas.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/servicios'],
-    ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias del equipo','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
+    ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias del equipo','history','/ausencias.html'],
     ['Usuarios','people','/usuarios'], ['Permisos de página','settings','/permisos-pagina.html'], ['Tienda TPV','bag','/tienda.html'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Caja','cash','/caja.html']
   ];
@@ -49,7 +49,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
+  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -103,8 +103,8 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+        RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
       };
       // If user has custom page permissions, use them; otherwise use role defaults
