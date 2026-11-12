@@ -1,6 +1,6 @@
 (async () => {
   'use strict';
-  if (new URLSearchParams(location.search).has('client')) { location.replace('/ventas.html'+location.search); return; }
+  if (new URLSearchParams(location.search).has('client')) { location.replace('/caja.html'+location.search+'#sales-panel'); return; }
   const $=id=>document.getElementById(id), form=$('product-form');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const eur=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));

@@ -64,7 +64,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "No tienes permiso para acceder a la gestión de caja.");
         return true;
       }
-      if (url.pathname.startsWith("/api/inventory/") && !["productos.html","tienda.html","ventas.html"].some(page=>perms.includes(page))) {
+      if (url.pathname.startsWith("/api/inventory/") && !["productos.html","tienda.html","caja.html","ventas.html"].some(page=>perms.includes(page))) {
         sendError(response, 403, "No tienes permiso para acceder al catálogo o inventario.");
         return true;
       }

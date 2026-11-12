@@ -152,11 +152,11 @@ export class Inventory {
   }
   private salesFilters(q: URLSearchParams) {
     const validDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => DateTime.fromISO(v).isValid);
-    const filters = z.object({ from: validDate.optional(), to: validDate.optional(), client: z.union([z.literal('walkin'), z.string().uuid()]).optional(), product: z.string().uuid().optional(), method: paymentMethod.optional(), status: z.enum(['COMPLETADA', 'CANCELADA', 'REEMBOLSADA']).optional(), page: z.coerce.number().int().min(1).max(100000).default(1) }).parse(Object.fromEntries(q));
+    const filters = z.object({ from: validDate.optional(), to: validDate.optional(), client: z.union([z.literal('walkin'), z.string().uuid()]).optional(), product: z.string().uuid().optional(), method: paymentMethod.optional(), status: z.enum(['COMPLETADA', 'CANCELADA', 'REEMBOLSADA']).optional(), search: z.string().trim().max(120).optional(), page: z.coerce.number().int().min(1).max(100000).default(1) }).parse(Object.fromEntries(q));
     if (filters.from && filters.to && filters.from > filters.to)
       throw new ApiError(400, 'La fecha inicial no puede ser posterior a la final.');
-    const { from, to, client, product, status, method } = filters;
-    const where: Prisma.SaleWhereInput = { ...(method ? { payments: { some: { method, status: 'PAGADO', kind: 'COLLECTION' } } } : {}), ...(client ? { clientId: client === 'walkin' ? null : client } : {}), ...(product ? { lines: { some: { productId: product } } } : {}), ...(status ? { status } : {}), ...(from || to ? { soldAt: { ...(from ? { gte: DateTime.fromISO(from, { zone: 'Europe/Madrid' }).startOf('day').toJSDate() } : {}), ...(to ? { lt: DateTime.fromISO(to, { zone: 'Europe/Madrid' }).plus({ days: 1 }).startOf('day').toJSDate() } : {}) } } : {}) };
+    const { from, to, client, product, status, method, search } = filters;
+    const where: Prisma.SaleWhereInput = { ...(method ? { payments: { some: { method, status: 'PAGADO', kind: 'COLLECTION' } } } : {}), ...(client ? { clientId: client === 'walkin' ? null : client } : {}), ...(product ? { lines: { some: { productId: product } } } : {}), ...(status ? { status } : {}), ...(search ? { OR: [{ lines: { some: { description: { contains: search, mode: 'insensitive' } } } }, { client: { firstName: { contains: search, mode: 'insensitive' } } }, { client: { lastName: { contains: search, mode: 'insensitive' } } }, ...(z.string().uuid().safeParse(search).success ? [{ id: search }] : [])] } : {}), ...(from || to ? { soldAt: { ...(from ? { gte: DateTime.fromISO(from, { zone: 'Europe/Madrid' }).startOf('day').toJSDate() } : {}), ...(to ? { lt: DateTime.fromISO(to, { zone: 'Europe/Madrid' }).plus({ days: 1 }).startOf('day').toJSDate() } : {}) } } : {}) };
     return { where, page: filters.page };
   }
   async sales(gym: string, q: URLSearchParams) {

@@ -18,7 +18,6 @@
     { key: 'permisos-pagina.html', label: 'Permisos de página' },
     { key: 'tienda.html', label: 'Tienda TPV' },
     { key: 'productos.html', label: 'Productos' },
-    { key: 'ventas.html', label: 'Ventas y cobros' },
     { key: 'caja.html', label: 'Caja' },
     { key: 'gimnasios', label: 'Gimnasios / Sedes' },
     { key: 'configuracion.html', label: 'Configuración' },
@@ -35,7 +34,7 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'ventas.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
     TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
     CLIENT: ['mis-reservas.html', 'configuracion.html'],
   };
@@ -54,7 +53,7 @@
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'ventas.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html'],
+      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
     },
     {
       id: 'clock_only',

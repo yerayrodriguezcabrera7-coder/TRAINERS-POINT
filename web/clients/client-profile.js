@@ -312,7 +312,7 @@ function renderPurchaseHistory(data) {
     if(pkg.sale){const balance=document.createElement('p');balance.textContent=`Cobrado: ${currencyText(pkg.sale.paidAmount)} · Pendiente: ${currencyText(pkg.sale.outstandingAmount)}`;footer.append(balance);}
     if(currentUserRole!=='TRAINER'&&pkg.paymentStatus!=='PAGADO'){
       const pay=document.createElement('button');pay.type='button';pay.className='profile-secondary-button';pay.textContent='Registrar pago del bono';
-      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/ventas.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
+      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/caja.html?client='+encodeURIComponent(clientId)+'#sales-panel';}catch(error){showProfileToast(error.message);pay.disabled=false;}};
       footer.append(pay);
     }
     card.append(header, progressWrap, footer);
@@ -376,7 +376,7 @@ async function loadPurchaseHistory() {
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
     if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
-      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/ventas.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/caja.html?client='+encodeURIComponent(clientId)+'#sales-panel';link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }
     renderBookingHistory(data.bookings);
