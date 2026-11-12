@@ -169,8 +169,6 @@ function renderHeader(client) {
   document.querySelector("#profile-status").textContent = { LEAD: "Nuevo interesado", ACTIVO: "Activo", INACTIVO: "Inactivo", BAJA: "Baja" }[client.status] || "Cliente";
   document.querySelector("#profile-email").textContent = client.email || "Sin email";
   document.querySelector("#profile-phone").textContent = client.phone || "Sin teléfono";
-  document.querySelector("#profile-gym").textContent = client.gym?.name || "Sin centro";
-  document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
 }
