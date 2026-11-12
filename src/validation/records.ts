@@ -54,6 +54,12 @@ type MeasurementInput = {
   notes?: string;
 };
 
+export type GymScheduleDay = {
+  open: string;
+  close: string;
+  closed: boolean;
+};
+
 type GymInput = {
   name: string;
   brand?: "TRAINERS_POINT" | "COBOSU";
@@ -65,6 +71,7 @@ type GymInput = {
   longitude?: number | null;
   radiusMeters?: number | null;
   maxBookingsPerHour?: number | null;
+  schedule?: GymScheduleDay[] | null;
 };
 
 type ServiceInput = {
@@ -322,6 +329,11 @@ export function parseGymInput(value: unknown): GymInput | string {
       : typeof rawMax === "string" && rawMax.trim() && !isNaN(Number(rawMax))
       ? Math.round(Number(rawMax))
       : null;
+  const hasSchedule = Object.prototype.hasOwnProperty.call(value, "schedule");
+  const scheduleResult = hasSchedule ? parseScheduleInput(value.schedule) : undefined;
+  if (typeof scheduleResult === "string") {
+    return scheduleResult;
+  }
 
   if (!name || name.length > 120) {
     return "El nombre es obligatorio y debe tener como máximo 120 caracteres.";
@@ -354,7 +366,38 @@ export function parseGymInput(value: unknown): GymInput | string {
     longitude: longitude ?? null,
     radiusMeters: radiusMeters ?? 200,
     maxBookingsPerHour: maxBookingsPerHour ?? null,
+    ...(scheduleResult !== undefined ? { schedule: scheduleResult } : {}),
   };
+}
+
+function parseScheduleInput(raw: unknown): GymScheduleDay[] | null | string {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (!Array.isArray(raw) || raw.length !== 7) {
+    return "El horario de apertura debe incluir los 7 días de la semana.";
+  }
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const parsed: GymScheduleDay[] = [];
+  for (const item of raw) {
+    if (!isRecord(item) || typeof item.closed !== "boolean") {
+      return "Cada día del horario debe indicar si está abierto o cerrado.";
+    }
+    const rawOpen = typeof item.open === "string" ? item.open.trim() : "";
+    const rawClose = typeof item.close === "string" ? item.close.trim() : "";
+    if (!timePattern.test(rawOpen) || !timePattern.test(rawClose)) {
+      return "Las horas de apertura y cierre deben tener formato HH:MM.";
+    }
+    if (!item.closed && rawOpen >= rawClose) {
+      return "La hora de cierre debe ser posterior a la de apertura en los días abiertos.";
+    }
+    parsed.push({
+      open: item.closed && rawOpen >= rawClose ? "09:00" : rawOpen,
+      close: item.closed && rawOpen >= rawClose ? "21:00" : rawClose,
+      closed: item.closed,
+    });
+  }
+  return parsed;
 }
 
 export function isUuid(value: string): boolean {

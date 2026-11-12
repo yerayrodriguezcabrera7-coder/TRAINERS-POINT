@@ -7,6 +7,102 @@ const photoInput = document.querySelector("#gym-photo");
 const photoPreview = document.querySelector("#gym-photo-preview");
 const dialogTitle = document.querySelector("#gym-dialog-title");
 const dialogEyebrow = document.querySelector("#gym-dialog-eyebrow");
+const scheduleFields = document.querySelector("#gym-schedule-fields");
+const copyWeekdaysBtn = document.querySelector("#gym-copy-weekdays");
+
+const WEEK_DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+const WEEK_DAYS_SHORT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function defaultSchedule() {
+  return WEEK_DAYS.map((_, i) => ({
+    closed: i === 6,
+    open: "09:00",
+    close: i === 5 ? "14:00" : "21:00",
+  }));
+}
+
+function normalizeSchedule(raw) {
+  const fallback = defaultSchedule();
+  if (!Array.isArray(raw) || raw.length !== 7) return fallback;
+  return raw.map((day, i) => ({
+    closed: Boolean(day?.closed),
+    open: typeof day?.open === "string" && /^\d{2}:\d{2}$/.test(day.open) ? day.open : fallback[i].open,
+    close: typeof day?.close === "string" && /^\d{2}:\d{2}$/.test(day.close) ? day.close : fallback[i].close,
+  }));
+}
+
+function renderScheduleInputs(rawSchedule) {
+  if (!scheduleFields) return;
+  const schedule = normalizeSchedule(rawSchedule);
+  scheduleFields.innerHTML = schedule
+    .map(
+      (hours, i) => `<div class="gym-schedule-row">
+        <strong>${WEEK_DAYS[i]}</strong>
+        <input type="time" step="1800" data-gym-open="${i}" value="${hours.open}" aria-label="Apertura ${WEEK_DAYS[i]}" ${hours.closed ? "disabled" : ""} required>
+        <input type="time" step="1800" data-gym-close="${i}" value="${hours.close}" aria-label="Cierre ${WEEK_DAYS[i]}" ${hours.closed ? "disabled" : ""} required>
+        <label class="gym-schedule-closed"><input type="checkbox" data-gym-closed="${i}" ${hours.closed ? "checked" : ""}> Cerrado</label>
+      </div>`,
+    )
+    .join("");
+}
+
+function readScheduleInputs() {
+  return WEEK_DAYS.map((_, i) => {
+    const closed = Boolean(scheduleFields?.querySelector(`[data-gym-closed="${i}"]`)?.checked);
+    const open = scheduleFields?.querySelector(`[data-gym-open="${i}"]`)?.value || "09:00";
+    const close = scheduleFields?.querySelector(`[data-gym-close="${i}"]`)?.value || "21:00";
+    return { closed, open, close };
+  });
+}
+
+function formatScheduleSummary(rawSchedule) {
+  const schedule = normalizeSchedule(rawSchedule);
+  const groups = [];
+  for (let i = 0; i < schedule.length; i++) {
+    const d = schedule[i];
+    const label = d.closed ? "Cerrado" : `${d.open}–${d.close}`;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) {
+      last.end = i;
+    } else {
+      groups.push({ start: i, end: i, label });
+    }
+  }
+  return groups
+    .map((g) => {
+      const days = g.start === g.end ? WEEK_DAYS_SHORT[g.start] : `${WEEK_DAYS_SHORT[g.start]}–${WEEK_DAYS_SHORT[g.end]}`;
+      return `${days} ${g.label}`;
+    })
+    .join(" · ");
+}
+
+if (scheduleFields) {
+  scheduleFields.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!target.matches("[data-gym-closed]")) return;
+    const i = target.dataset.gymClosed;
+    const openEl = scheduleFields.querySelector(`[data-gym-open="${i}"]`);
+    const closeEl = scheduleFields.querySelector(`[data-gym-close="${i}"]`);
+    if (openEl) openEl.disabled = target.checked;
+    if (closeEl) closeEl.disabled = target.checked;
+  });
+}
+
+if (copyWeekdaysBtn && scheduleFields) {
+  copyWeekdaysBtn.addEventListener("click", () => {
+    const monClosed = Boolean(scheduleFields.querySelector('[data-gym-closed="0"]')?.checked);
+    const monOpen = scheduleFields.querySelector('[data-gym-open="0"]')?.value || "09:00";
+    const monClose = scheduleFields.querySelector('[data-gym-close="0"]')?.value || "21:00";
+    for (let i = 1; i <= 4; i++) {
+      const closedEl = scheduleFields.querySelector(`[data-gym-closed="${i}"]`);
+      const openEl = scheduleFields.querySelector(`[data-gym-open="${i}"]`);
+      const closeEl = scheduleFields.querySelector(`[data-gym-close="${i}"]`);
+      if (closedEl) closedEl.checked = monClosed;
+      if (openEl) { openEl.value = monOpen; openEl.disabled = monClosed; }
+      if (closeEl) { closeEl.value = monClose; closeEl.disabled = monClosed; }
+    }
+  });
+}
 const saveBtn = document.querySelector("#save-gym");
 const btnGeocode = document.querySelector("#btn-geocode-address");
 const btnMyLocation = document.querySelector("#btn-use-my-location");
@@ -125,6 +221,7 @@ function openCreateDialog() {
   error.hidden = true;
   if (geoStatusMsg) geoStatusMsg.hidden = true;
   if (form.elements.maxBookingsPerHour) form.elements.maxBookingsPerHour.value = "";
+  renderScheduleInputs(null);
   dialog.showModal();
   form.elements.name.focus();
 }
@@ -141,6 +238,7 @@ function openEditDialog(gym) {
   form.elements.longitude.value = gym.longitude ?? "";
   form.elements.radiusMeters.value = gym.radiusMeters ?? 200;
   if (form.elements.maxBookingsPerHour) form.elements.maxBookingsPerHour.value = gym.maxBookingsPerHour ?? "";
+  renderScheduleInputs(gym.schedule);
 
   dialogTitle.textContent = "Editar gimnasio";
   dialogEyebrow.textContent = "MODIFICAR SEDE";
@@ -231,6 +329,17 @@ function render() {
       limitTag.innerHTML = `<span>⏱️</span> <span>Sin límite de reservas por hora</span>`;
     }
     location.append(limitTag);
+
+    const scheduleTag = document.createElement("div");
+    scheduleTag.className = "gym-schedule-tag";
+    const scheduleIcon = document.createElement("span");
+    scheduleIcon.textContent = "🕒";
+    const scheduleText = document.createElement("span");
+    scheduleText.textContent = gym.schedule
+      ? formatScheduleSummary(gym.schedule)
+      : "Horario por defecto (sin personalizar)";
+    scheduleTag.append(scheduleIcon, scheduleText);
+    location.append(scheduleTag);
 
     const footer = document.createElement("div");
     footer.className = "gym-card-footer";
@@ -362,6 +471,12 @@ form.addEventListener("submit", async (event) => {
     } else {
       delete body.maxBookingsPerHour;
     }
+
+    const schedule = readScheduleInputs();
+    if (schedule.some((day) => !day.closed && day.open >= day.close)) {
+      throw new Error("La hora de cierre debe ser posterior a la de apertura en los días abiertos.");
+    }
+    body.schedule = schedule;
 
     const file = photoInput.files[0];
     if (file) {

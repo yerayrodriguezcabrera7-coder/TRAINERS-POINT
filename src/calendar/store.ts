@@ -8,6 +8,7 @@ import { clientScope } from "../network/scope";
 import {
 ApiError,
 Booking,
+COBOSU_ID,
 Config,
 LeaveRequest,
 assertAvailable,
@@ -23,6 +24,7 @@ label,
 leaveRequestInputSchema,
 normalize,
 serviceSchema,
+week,
 workerActionSchema
 } from "./model";
 export const migration = `CREATE SCHEMA IF NOT EXISTS calendar;
@@ -51,7 +53,34 @@ CREATE TABLE IF NOT EXISTS calendar.attendance_omissions (
  note text NOT NULL, actor jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS attendance_omissions_gym_day ON calendar.attendance_omissions(gym_id,day);
-${sharedStaffMigration}`;
+`;
+function appendBookingHistory(old: Booking, b: Booking, actorId: string) {
+  const { history: _history, incidents: _incidents, ...previous } = old;
+  const scheduleChanged = old.date !== b.date || old.start !== b.start || old.end !== b.end;
+  const empChanged = old.employeeId !== b.employeeId;
+  const action = b.needsReschedule
+    ? "RESCHEDULE_REQUESTED"
+    : !old.employeeId && b.employeeId && !scheduleChanged
+    ? "ASSIGNED"
+    : scheduleChanged || empChanged
+    ? "MOVED"
+    : "UPDATED";
+  return [
+    ...(old.history || []),
+    {
+      at: new Date().toISOString(),
+      actorId,
+      action,
+      previous,
+      next: {
+        date: b.date,
+        start: b.start,
+        end: b.end,
+        employeeId: b.employeeId,
+      },
+    },
+  ];
+}
 export class Store {
   constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
 
@@ -129,11 +158,18 @@ export class Store {
     if (currentCenter?.maxBookingsPerHour != null) {
       config.maxBookingsPerHour = currentCenter.maxBookingsPerHour;
     }
+    const parsedSchedule = currentCenter?.schedule ? week.safeParse(currentCenter.schedule) : null;
+    if (parsedSchedule?.success) {
+      config.schedule = parsedSchedule.data;
+    }
     return config;
   }
   async migrate() {
     await this.pool.query(migration);
     await this.pool.query(accessMigration);
+    if (this.clientsDb) {
+      await this.clientsDb.$executeRawUnsafe('ALTER TABLE "Gym" ADD COLUMN IF NOT EXISTS "schedule" JSONB;').catch(() => {});
+    }
   }
   async seed(gym: string, config: Config) {
     await this.pool.query(
@@ -229,20 +265,41 @@ export class Store {
           city: string | null;
           province: string | null;
           maxBookingsPerHour: number | null;
-        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
-        return rows.map((r) => ({
-          ...r,
-          maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
-        }));
+          schedule: unknown;
+        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour", "schedule" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+        return rows.map((r) => {
+          const parsedSchedule = Array.isArray(r.schedule) ? week.safeParse(r.schedule) : null;
+          return {
+            ...r,
+            maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
+            schedule: parsedSchedule?.success ? parsedSchedule.data : null,
+          };
+        });
       } catch {
-        return this.clientsDb.gym.findMany({
-          where: { isActive: true },
-          select: { id: true, name: true, address: true, city: true, province: true },
-          orderBy: { name: "asc" },
-        }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null })));
+        try {
+          const rows = await this.clientsDb.$queryRaw<Array<{
+            id: string;
+            name: string;
+            address: string | null;
+            city: string | null;
+            province: string | null;
+            maxBookingsPerHour: number | null;
+          }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+          return rows.map((r) => ({
+            ...r,
+            maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
+            schedule: null,
+          }));
+        } catch {
+          return this.clientsDb.gym.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, address: true, city: true, province: true },
+            orderBy: { name: "asc" },
+          }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null, schedule: null })));
+        }
       }
     }
-    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:''}));
+    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null}));
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
@@ -323,7 +380,7 @@ export class Store {
       }
     }
   }
-  async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string) {
+  async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string, syncSession=false) {
     const input = bookingSchema.parse(raw);
     return this.transaction(gym, async (db, c, bookings) => {
       const old = id ? bookings.find((b) => b.id === id) : undefined;
@@ -354,7 +411,9 @@ export class Store {
       if(old?.needsReschedule && !b.needsReschedule && b.status !== 'CANCELLED' && DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toMillis()<=Date.now())throw new ApiError(409,"Elige una fecha y hora futuras para reprogramar.");
       b.history=old?.history || [];
       b.incidents=old?.incidents || [];
-      if(old){const {history,incidents,...previous}=old;b.history=[...b.history,{at:new Date().toISOString(),actorId,action:b.needsReschedule?'RESCHEDULE_REQUESTED':!old.employeeId&&b.employeeId?'ASSIGNED':'UPDATED',previous}];}
+      if (old) {
+        b.history = appendBookingHistory(old, b, actorId);
+      }
       if (!old || (b.status !== "CANCELLED" && ["clientId","employeeId","serviceId","date","start","status"].some(k => (b as any)[k] !== (old as any)[k])))
         this.assertActive(b, c);
       if (old && b.status !== "CANCELLED" && (await db.query("SELECT 1 FROM calendar.recoveries WHERE gym_id=$1 AND original_id=$2",[gym,old.id])).rowCount) throw new ApiError(409,"La sesión original tiene una recuperación. Programa la recuperación en lugar de reactivar la original.");
@@ -364,8 +423,41 @@ export class Store {
           400,
           "Una nueva cita debe estar pendiente o confirmada.",
         );
-      assertAvailable(b, bookings.map(o=>({...o,centerId:o.centerId||gym})), c);
-      if (b.status !== "CANCELLED") await this.assertNetworkAvailable(db,gym,b);
+      const syncedSiblings: Booking[] = [];
+      if (syncSession && old?.sessionId && b.status !== "CANCELLED") {
+        for (const sib of bookings) {
+          if (sib.id === b.id || sib.sessionId !== old.sessionId || sib.status === "CANCELLED") continue;
+          const nextStatus = !b.employeeId
+            ? (sib.status === "CONFIRMED" ? "PENDING" : sib.status)
+            : sib.status === "PENDING"
+            ? "CONFIRMED"
+            : sib.status;
+          const nextSib: Booking = {
+            ...sib,
+            date: b.date,
+            start: b.start,
+            end: b.end,
+            employeeId: b.employeeId,
+            centerId: b.centerId,
+            centerName: b.centerName,
+            centerAddress: b.centerAddress,
+            serviceId: b.serviceId,
+            status: nextStatus,
+            needsReschedule: false,
+            version: sib.version + 1,
+          };
+          nextSib.history = appendBookingHistory(sib, nextSib, actorId);
+          this.assertActive(nextSib, c);
+          assertTransition(sib, nextSib, c);
+          syncedSiblings.push(nextSib);
+        }
+      }
+      const syncedById = new Map(syncedSiblings.map(s => [s.id, s]));
+      const effectiveBookings = bookings.map(o => ({ ...(syncedById.get(o.id) || o), centerId: (syncedById.get(o.id) || o).centerId || gym }));
+      assertAvailable(b, effectiveBookings, c);
+      for (const sib of syncedSiblings) {
+        assertAvailable(sib, effectiveBookings.map(o => (o.id === b.id ? b : o)), c);
+      }
       if (old && (old.recoveryId || null) !== (b.recoveryId || null)) throw new ApiError(409, "No se puede cambiar la recuperación de una reserva.");
       if (b.recoveryId) {
         const row = (await db.query("SELECT data,gym_id FROM calendar.recoveries WHERE id=$2 AND (gym_id=$1 OR data->>'clientId'=ANY($3::text[])) FOR UPDATE",[gym,b.recoveryId,await this.sharedRecoveryClients(gym)])).rows[0];
@@ -390,6 +482,13 @@ export class Store {
         "INSERT INTO calendar.bookings(id,gym_id,data) VALUES($1,$2,$3) ON CONFLICT(gym_id,id) DO UPDATE SET data=EXCLUDED.data",
         [b.id, gym, b],
       );
+      for (const sib of syncedSiblings) {
+        await this.syncPackageBooking(db, gym, sib, c);
+        await db.query(
+          "INSERT INTO calendar.bookings(id,gym_id,data) VALUES($1,$2,$3) ON CONFLICT(gym_id,id) DO UPDATE SET data=EXCLUDED.data",
+          [sib.id, gym, sib],
+        );
+      }
       if (newClient)
         await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [
           gym,
@@ -455,6 +554,18 @@ export class Store {
         gym,
         config,
       ]);
+      if (this.clientsDb) {
+        const slug = (value: string) =>
+          value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        const gymRow = (await db.query("SELECT id, name FROM calendar.gyms WHERE id=$1", [gym])).rows[0];
+        const gyms = await this.clientsDb.gym.findMany({ where: { isActive: true }, select: { id: true, name: true } });
+        const match = gymRow && gyms.find((item) => item.id === gymRow.name || item.id === gymRow.id || slug(item.name) === slug(String(gymRow.name || gymRow.id)));
+        if (match) {
+          await this.clientsDb.$executeRaw(
+            Prisma.sql`UPDATE "Gym" SET "schedule" = ${JSON.stringify(config.schedule)}::jsonb WHERE "id" = ${match.id}::uuid`,
+          ).catch(() => {});
+        }
+      }
       return config;
     });
   }
@@ -580,13 +691,14 @@ export class Store {
     const day = date.parse(query.date),
       c = (await this.state(gym)) as Config & { bookings: Booking[] };
     const service = c.services.find((s) => s.id === query.serviceId);
+    const isCobosu = query.employeeId === COBOSU_ID;
+    const roomId = query.roomId || c.rooms[0]?.id || "r1";
     if (
       !service ||
-      !c.employees.some((e) => e.id === query.employeeId) ||
-      !c.rooms.some((r) => r.id === query.roomId)
+      (!isCobosu && !c.employees.some((e) => e.id === query.employeeId))
     )
       throw new ApiError(400, "Recursos desconocidos.");
-    if (service.active === false || c.employees.find(e => e.id === query.employeeId)?.active === false) return [];
+    if (service.active === false || (!isCobosu && c.employees.find(e => e.id === query.employeeId)?.active === false)) return [];
     c.centers = await this.centers();
     const busy = (await this.pool.query("SELECT data FROM calendar.bookings WHERE gym_id<>$1 AND data->>'date'=$2 AND data->>'employeeId'=$3 AND data->>'status' IN ('PENDING','CONFIRMED','COMPLETED')",[gym,day,query.employeeId])).rows.map(row=>row.data as Booking);
     const slots = [];
@@ -597,7 +709,7 @@ export class Store {
             clientId: c.clients[0]?.id || "slot-preview",
             employeeId: query.employeeId,
             serviceId: query.serviceId,
-            roomId: query.roomId,
+            roomId,
             date: day,
             start: label(start),
             status: "PENDING",

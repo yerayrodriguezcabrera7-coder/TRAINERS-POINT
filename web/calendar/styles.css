@@ -279,3 +279,219 @@
   border: 1px solid #a7f3d0;
   color: #15803d;
 }
+.employee-heading.is-cobosu {
+  background: #fef2f2;
+  border-bottom: 2px solid #dc2626;
+  flex-direction: column;
+  gap: 2px;
+  height: 44px;
+}
+.employee-heading.is-cobosu .employee-heading-name {
+  color: #991b1b;
+  font-weight: 700;
+}
+.employee-heading.is-cobosu .employee-shift-tag {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.time-column.is-cobosu-column {
+  background: #fff5f5;
+}
+.month-event.is-cobosu {
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+.event[draggable="true"],
+.month-event[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+.event.is-dragging,
+.month-event.is-dragging {
+  opacity: .42;
+  cursor: grabbing;
+}
+.time-column.is-drop-target {
+  background: rgba(56, 152, 236, .06);
+}
+.day-heading.is-drop-target,
+.month-cell.is-drop-target {
+  background: #eff6ff;
+  outline: 2px dashed #2563eb;
+  outline-offset: -2px;
+}
+.drop-preview {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  border-radius: 6px;
+  border: 2px dashed #2563eb;
+  background: rgba(37, 99, 235, .14);
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 6px;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.drop-preview.is-invalid {
+  border-color: #c84e42;
+  background: rgba(200, 78, 66, .14);
+  color: #9f2d22;
+}
+.toast.is-error {
+  background: #9f2d22;
+}
+.day-heading.is-sunday-parking {
+  background: #fffbeb;
+}
+.employee-heading.is-sunday-parking {
+  background: #fef3c7;
+  border-bottom: 2px solid #d97706;
+  flex-direction: column;
+  gap: 2px;
+  height: 44px;
+}
+.employee-heading.is-sunday-parking .employee-heading-name {
+  color: #92400e;
+  font-weight: 700;
+}
+.employee-heading.is-sunday-parking .employee-shift-tag {
+  background: #fde68a;
+  color: #92400e;
+}
+.time-column.is-sunday-parking {
+  background: #fffdf5;
+}
+.time-column.is-sunday-parking .time-slot {
+  background: transparent;
+}
+.time-column.is-sunday-parking.is-drop-target {
+  background: #fef3c7;
+  outline: 2px dashed #d97706;
+  outline-offset: -2px;
+}
+.sunday-parking-list {
+  position: absolute;
+  inset: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  overflow-y: auto;
+  z-index: 4;
+}
+.sunday-parking-card {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 54px;
+  pointer-events: auto;
+  text-align: left;
+  padding: 7px 9px;
+}
+.sunday-parking-empty {
+  font-size: 11px;
+  color: #92400e;
+  opacity: .75;
+  text-align: center;
+  padding: 14px 8px;
+  border: 1px dashed #fcd34d;
+  border-radius: 8px;
+  background: rgba(254, 243, 199, .35);
+}
+.dual-client-panel {
+  border-color: #c7d2fe;
+  background: #f5f7ff;
+}
+.dual-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dual-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.dual-partner-status {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #4338ca;
+}
+.dual-partner-status.is-missing {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #c2410c;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+.booking-dual-missing-badge {
+  display: block;
+  background: #ffedd5;
+  color: #9a3412;
+  font-weight: 750;
+  font-size: 10px;
+  line-height: 1.25;
+  padding: 3px 5px;
+  border-radius: 3px;
+  border: 1px solid #fb923c;
+  margin-bottom: 2px;
+}
+.month-event .booking-dual-missing-badge {
+  white-space: normal;
+  margin-top: 2px;
+}
+.day-heading {
+  border-top: 3px solid #cbd5e1;
+  background: #ffffff;
+}
+.day-heading.is-day-alt:not(.today):not(.is-sunday-parking) {
+  border-top-color: #94a3b8;
+  background: #f4f7fa;
+}
+.day-heading.today {
+  border-top-color: var(--red);
+  background: #fff9f7;
+}
+.day-heading.is-sunday-parking {
+  border-top-color: #d97706;
+}
+.employee-heading:not(.is-day-end),
+.time-column:not(.is-day-end) {
+  border-right: 1px solid #eef2f5;
+}
+.employee-heading.is-day-alt:not(.is-cobosu):not(.is-sunday-parking) {
+  background: #f8fafc;
+}
+.time-column.is-day-alt:not(.is-today):not(.is-cobosu-column):not(.is-sunday-parking),
+.empty-day-column.is-day-alt:not(.is-today) {
+  background: #fafcfe;
+}
+.day-heading.is-day-end,
+.employee-heading.is-day-end,
+.empty-day-heading.is-day-end,
+.time-column.is-day-end,
+.empty-day-column.is-day-end {
+  border-right: 5px solid #e9eef2;
+  box-shadow: inset -1px 0 0 #d0dae1;
+}
+.dual-buy-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #dbe4f0;
+}

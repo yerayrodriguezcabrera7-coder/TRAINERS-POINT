@@ -453,6 +453,8 @@ export function server(
               decodeURIComponent(path.slice("/api/bookings/".length)),
               raw.client,
               identity.id,
+              undefined,
+              Boolean(raw.syncSession),
             ),
           );
           return;

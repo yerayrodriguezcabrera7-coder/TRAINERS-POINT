@@ -110,6 +110,7 @@ export const configSchema = z
       id: z.string(),
       name: z.string(),
       maxBookingsPerHour: z.number().int().positive().nullable().optional(),
+      schedule: week.nullable().optional(),
       address: z.string().optional().nullable(),
       city: z.string().optional().nullable(),
       province: z.string().optional().nullable(),
@@ -141,7 +142,7 @@ export const bookingSchema = z.object({
   serviceId: id,
   packageId: z.string().uuid().nullable().optional(),
   paymentDue: z.boolean().optional(),
-  roomId: id,
+  roomId: id.optional().default("r1"),
   date,
   start: time,
   end: time.optional(),
@@ -153,7 +154,7 @@ export const bookingSchema = z.object({
   version: z.number().int().positive().optional(),
 });
 export type Input = z.infer<typeof bookingSchema>;
-export type Booking = Input & { id: string; end: string; version: number; centerName?:string; centerAddress?:string; history?: Array<{at:string;actorId:string;action:string;previous:Record<string,unknown>}>; incidents?:Array<{at:string;actorId:string;message:string}> };
+export type Booking = Input & { id: string; end: string; version: number; centerName?:string; centerAddress?:string; history?: Array<{at:string;actorId:string;action:string;previous:Record<string,unknown>;next?:Record<string,unknown>}>; incidents?:Array<{at:string;actorId:string;message:string}> };
 export const attendanceGeoInputSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
@@ -188,17 +189,19 @@ export const label = (n: number) =>
   `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 export const overlaps = (a: Booking, b: Booking) =>
   a.date === b.date && a.start < b.end && b.start < a.end;
+export const COBOSU_ID = "__cobosu";
 export function normalize(input: Input, c: Config): Booking {
   const service = c.services.find((x) => x.id === input.serviceId);
+  const isCobosu = input.employeeId === COBOSU_ID;
+  const roomId = input.roomId || c.rooms?.[0]?.id || "r1";
   if (
     !service ||
-    (input.employeeId !== null && !c.employees.some((x) => x.id === input.employeeId)) ||
-    !c.rooms.some((x) => x.id === input.roomId) ||
+    (input.employeeId !== null && !isCobosu && !c.employees.some((x) => x.id === input.employeeId)) ||
     !c.clients.some((x) => x.id === input.clientId)
   )
     throw new ApiError(
       400,
-      "Cliente, entrenador, sala o servicio desconocido.",
+      "Cliente, entrenador o servicio desconocido.",
     );
   if(!input.employeeId && !["PENDING","CANCELLED"].includes(input.status)) throw new ApiError(409,"Asigna un trabajador antes de confirmar o cerrar la reserva.");
   if(input.needsReschedule && input.status !== "CANCELLED") throw new ApiError(400,"La reserva pendiente de reprogramación debe liberar el horario anterior.");
@@ -217,17 +220,19 @@ export function normalize(input: Input, c: Config): Booking {
     )
       throw new ApiError(400, "Hora inexistente o ambigua por cambio horario.");
   }
-  return { ...input, id: input.id || "", end, version: input.version || 1 };
+  return { ...input, roomId, id: input.id || "", end, version: input.version || 1 };
 }
 export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
+  if (day === 6 && !b.employeeId) return;
   const service = c.services.find(s => s.id === b.serviceId)!;
-  if (b.employeeId && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
+  const isCobosu = b.employeeId === COBOSU_ID;
+  if (b.employeeId && !isCobosu && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");
   const serviceHours = service.schedule?.[day];
   if (serviceHours && (serviceHours.closed || b.start < serviceHours.open || b.end > serviceHours.close)) throw new ApiError(409, "Fuera del horario del servicio.");
-  const worker = c.employees.find((x) => x.id === b.employeeId)!;
-  if (c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
+  const worker = isCobosu ? undefined : c.employees.find((x) => x.id === b.employeeId)!;
+  if (!isCobosu && c.leaveRequests.some((leave) => leave.employeeId === b.employeeId && leave.status === "APPROVED" && b.date >= leave.startDate && b.date <= leave.endDate))
     throw new ApiError(409, "El empleado tiene una ausencia aprobada en esa fecha.");
   for (const h of [c.schedule[day]])
     if (h.closed || b.start < h.open || b.end > h.close)
@@ -244,38 +249,39 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   );
   if (clashes.some((o) => o.clientId === b.clientId))
     throw new ApiError(409, "El cliente ya tiene una reserva en ese horario.");
-  const capacity = c.services.find((s) => s.id === b.serviceId)!.capacity;
-  const same = (o: Booking) =>
-    capacity > 1 &&
-    b.sessionId &&
-    o.sessionId === b.sessionId &&
-    o.employeeId === b.employeeId &&
-    o.centerId === b.centerId &&
-    o.roomId === b.roomId &&
-    o.serviceId === b.serviceId &&
-    o.date === b.date &&
-    o.start === b.start &&
-    o.end === b.end;
-  if (
-    b.sessionId &&
-    all.some(
-      (o) =>
-        o.id !== b.id &&
-        o.status !== "CANCELLED" &&
-        o.sessionId === b.sessionId &&
-        !same(o),
+  if (!isCobosu) {
+    const capacity = c.services.find((s) => s.id === b.serviceId)!.capacity;
+    const same = (o: Booking) =>
+      capacity > 1 &&
+      b.sessionId &&
+      o.sessionId === b.sessionId &&
+      o.employeeId === b.employeeId &&
+      o.centerId === b.centerId &&
+      o.serviceId === b.serviceId &&
+      o.date === b.date &&
+      o.start === b.start &&
+      o.end === b.end;
+    if (
+      b.sessionId &&
+      all.some(
+        (o) =>
+          o.id !== b.id &&
+          o.status !== "CANCELLED" &&
+          o.sessionId === b.sessionId &&
+          !same(o),
+      )
     )
-  )
-    throw new ApiError(
-      409,
-      "La sesión grupal no coincide con el horario o los recursos.",
+      throw new ApiError(
+        409,
+        "La sesión grupal no coincide con el horario o el entrenador.",
+      );
+    const resources = clashes.filter(
+      (o) => Boolean(b.employeeId) && o.employeeId === b.employeeId,
     );
-  const resources = clashes.filter(
-    (o) => (b.employeeId && o.employeeId === b.employeeId) || (o.roomId === b.roomId && o.centerId === b.centerId),
-  );
-  if (resources.some((o) => !same(o)))
-    throw new ApiError(409, "Entrenador o sala ya ocupados.");
-  if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
+    if (resources.some((o) => !same(o)))
+      throw new ApiError(409, "Entrenador ya ocupado.");
+    if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
+  }
 
   const targetCenterId = b.centerId || (c as any).gymId;
   const centerConfig = c.centers?.find((x) => x.id === targetCenterId || x.id === b.centerId);
@@ -314,7 +320,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
 export function assertTransition(old: Booking, next: Booking, c: Config) {
   const allowed: Record<string, string[]> = {
     PENDING: ["PENDING", "CONFIRMED", "CANCELLED"],
-    CONFIRMED: ["CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"],
+    CONFIRMED: ["CONFIRMED", "PENDING", "CANCELLED", "COMPLETED", "NO_SHOW"],
     CANCELLED: ["CANCELLED", "PENDING", "CONFIRMED"],
     COMPLETED: ["COMPLETED"],
     NO_SHOW: ["NO_SHOW"],

@@ -18,3 +18,14 @@
 .gym-photo-field small { color: #8d978e; font-size: 11px; font-weight: 400; }
 .gym-photo-field input[type="file"] { padding: 8px; color: #746d64; background: #f7f4ee; border: 1px dashed #dcd5ca; border-radius: 8px; }
 .gym-photo-field img { width: 100%; max-height: 150px; border-radius: 10px; object-fit: cover; }
+.gym-schedule-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.gym-schedule-copy { border: 1px solid #dcd5ca; background: #f7f4ee; color: #24211e; font-size: 11px; font-weight: 700; border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+.gym-schedule-copy:hover { border-color: #ff8a1f; color: #c75a00; }
+.gym-schedule-grid { display: grid; gap: 8px; padding: 10px 12px; background: #f7f4ee; border: 1px solid #dcd5ca; border-radius: 10px; }
+.gym-schedule-row { display: grid; grid-template-columns: 92px 1fr 1fr auto; align-items: center; gap: 8px; }
+.gym-schedule-row strong { font-size: 12px; color: #24211e; }
+.gym-schedule-row input[type="time"] { min-width: 0; padding: 6px 8px; border: 1px solid #dcd5ca; border-radius: 7px; background: #fffdf9; color: #24211e; font-size: 12px; }
+.gym-schedule-row input[type="time"]:disabled { opacity: .45; background: #ede8df; }
+.gym-schedule-closed { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #5c564e; cursor: pointer; white-space: nowrap; }
+.gym-schedule-tag { font-size: 11px; color: #5c564e; display: flex; align-items: flex-start; gap: 4px; margin-top: 4px; line-height: 1.4; }
+@media (max-width: 560px) { .gym-schedule-row { grid-template-columns: 1fr 1fr; } .gym-schedule-row strong { grid-column: 1 / -1; } .gym-schedule-closed { grid-column: 1 / -1; } }
