@@ -351,11 +351,6 @@ function renderTimeGrid(dates, bookings, employees) {
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
-        const periods = C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre');
-        const isOff = !periods.length && employee.id !== '__unassigned';
-        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned';
-        html += `<div class="employee-heading" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:#7b858d" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
         const isCobosu = employee.id === COBOSU_ID;
         const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
@@ -1078,20 +1073,11 @@ async function handleBuyPackage(isNow) {
   }
 
   try {
-    const result = await api('clients/' + encodeURIComponent(clientId) + '/service-packages', 'POST', {
-      requestKey: pendingPackageKey || (pendingPackageKey=uid()),
-      serviceId,
-      sessionsBought,
-      totalAmount,
-      paymentStatus,
-      paymentMethod,
-      notes: `Contratado desde el calendario (${isNow ? 'Pagado por ' + paymentMethod : 'Pendiente de cobro'}).`
-    });
     const result = await createClientServicePackage(clientId, serviceId, isNow, paymentMethod);
     const history = await api('clients/' + encodeURIComponent(clientId) + '/service-history');
     if ($('booking-client').value === clientId) {
       clientPackages = history.packages || [];
-      const newPkgId = result.servicePackage?.id;
+      const newPkgId = result?.servicePackage?.id;
       newPendingPackageId=newPkgId;
       $('booking-service').value = serviceId;
       if (service.duration && $('booking-start').value) {
@@ -1099,7 +1085,6 @@ async function handleBuyPackage(isNow) {
         const summaryDt = $('summary-datetime');
         if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
       }
-      const newPkgId = result?.servicePackage?.id;
       syncSelectedService(serviceId);
       renderPackages(newPkgId);
       if (resEl) {
