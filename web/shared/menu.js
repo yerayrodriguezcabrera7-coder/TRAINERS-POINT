@@ -26,7 +26,7 @@
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/servicios'],
     ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias del equipo','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
     ['Usuarios','people','/usuarios'], ['Permisos de página','settings','/permisos-pagina.html'], ['Tienda TPV','bag','/tienda.html'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
-    ['Caja','cash','/caja.html'], ['Configuración','settings','/configuracion.html']
+    ['Caja','cash','/caja.html']
   ];
   function menuKey(href) {
     const url = new URL(href, location.origin + "/");
@@ -49,7 +49,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página','Configuración']]];
+  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -103,9 +103,9 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-        TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-        CLIENT: ['mis-reservas.html', 'configuracion.html'],
+        RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+        TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+        CLIENT: ['mis-reservas.html'],
       };
       // If user has custom page permissions, use them; otherwise use role defaults
       const allowed = me.role === 'ADMIN' ? null : (Array.isArray(me.pagePermissions) ? me.pagePermissions : allowedByRole[me.role]);
@@ -167,11 +167,10 @@
         const title=document.createElement('h2');title.textContent=me.name;
         const username=document.createElement('p');username.textContent='Usuario: '+(me.username || 'Cuenta del centro');
         const role=document.createElement('p');role.textContent='Perfil: '+roleName;
-        const settings=document.createElement('a');settings.href='/configuracion.html';settings.textContent='Mi configuración';
         const password=document.createElement('a');password.href='/change-password.html';password.textContent='Cambiar mi contraseña';
         const logout=document.createElement('button');logout.type='button';logout.textContent='Cerrar sesión';logout.onclick=async()=>{try{await fetch('/api/logout',{method:'POST'});}finally{sessionStorage.removeItem('calendar-user-token');sessionStorage.removeItem('calendar-admin-token');location.href=loginUrl;}};
         const close=document.createElement('button');close.type='button';close.textContent='Volver';close.onclick=()=>dialog.close();
-        dialog.append(title,username,role,settings,password,logout,close);document.body.append(dialog);button.onclick=()=>dialog.showModal();
+        dialog.append(title,username,role,password,logout,close);document.body.append(dialog);button.onclick=()=>dialog.showModal();
       }
       const footer=document.createElement('div');footer.className='app-menu-account';
       const label=document.createElement('small');label.textContent=me.name;

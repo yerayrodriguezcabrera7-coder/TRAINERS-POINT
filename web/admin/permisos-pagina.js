@@ -18,7 +18,6 @@
     { key: 'productos.html', label: 'Productos' },
     { key: 'caja.html', label: 'Caja y ventas' },
     { key: 'gimnasios', label: 'Gimnasios / Sedes' },
-    { key: 'configuracion.html', label: 'Configuración' },
     { key: 'mis-reservas.html', label: 'Mis reservas (clientes)' },
   ];
 
@@ -32,31 +31,31 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-    TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
-    CLIENT: ['mis-reservas.html', 'configuracion.html'],
+    RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+    TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+    CLIENT: ['mis-reservas.html'],
   };
 
   const PRESETS = [
     {
       id: 'trainer_std',
       label: 'Entrenador estándar',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     },
     {
       id: 'trainer_sales',
       label: 'Entrenador + Ventas/Caja',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'tienda.html', 'productos.html', 'caja.html'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'tienda.html', 'productos.html', 'caja.html'],
     },
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+      pages: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     },
     {
       id: 'clock_only',
       label: 'Solo fichaje y ausencias',
-      pages: ['fichajes.html', 'ausencias.html', 'configuracion.html'],
+      pages: ['fichajes.html', 'ausencias.html'],
     },
   ];
 
