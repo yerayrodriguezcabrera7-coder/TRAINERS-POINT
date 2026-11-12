@@ -4,7 +4,6 @@
   const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const PAGES = [
-    { key: 'inicio.html', label: 'Inicio' },
     { key: 'index.html', label: 'Calendario' },
     { key: 'pendientes.html', label: 'Pendientes de asignación' },
     { key: 'recuperaciones.html', label: 'Recuperaciones' },
@@ -33,7 +32,7 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     CLIENT: ['mis-reservas.html', 'configuracion.html'],
   };
@@ -52,7 +51,7 @@
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     },
     {
       id: 'clock_only',

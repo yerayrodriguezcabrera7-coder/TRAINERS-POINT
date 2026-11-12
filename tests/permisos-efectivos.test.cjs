@@ -120,18 +120,27 @@ test('cashPermission e inventoryPermission respetan pagePermissions sobre el rol
   assert.throws(() => inventoryPermission(receptionWithoutCash, 'read'), /permiso/);
 });
 
-test('Pantalla antigua de Gestión del centro: eliminada sin referencias rotas', () => {
+test('Pantalla antigua de Gestión del centro e Inicio: eliminadas sin referencias rotas', () => {
   assert.equal(fs.existsSync('web/staff/gestion.html'), false, 'gestion.html no debe existir');
   assert.equal(fs.existsSync('web/staff/gestion.js'), false, 'gestion.js no debe existir');
+  assert.equal(fs.existsSync('web/dashboard/inicio.html'), false, 'inicio.html no debe existir');
+  assert.equal(fs.existsSync('web/dashboard/inicio.js'), false, 'inicio.js no debe existir');
+  assert.equal(fs.existsSync('web/dashboard/inicio.css'), false, 'inicio.css no debe existir');
   for (const file of [
     'src/http/asset-catalog.ts',
-    'web/dashboard/inicio.html',
     'web/settings/configuracion.js',
     'web/shared/menu.js',
     'web/shared/ayuda.js',
     'web/admin/permisos-pagina.js',
+    'web/auth/login.js',
+    'web/auth/change-password.js',
   ]) {
     const content = fs.readFileSync(file, 'utf8');
     assert.ok(!content.includes('gestion.html') && !content.includes('gestion.js'), `${file} no debe referenciar gestion.html ni gestion.js`);
+    assert.ok(!content.includes('inicio.html') && !content.includes('inicio.js') && !content.includes('inicio.css'), `${file} no debe referenciar inicio.html, inicio.js ni inicio.css`);
   }
+  const loginJs = fs.readFileSync('web/auth/login.js', 'utf8');
+  const menuJs = fs.readFileSync('web/shared/menu.js', 'utf8');
+  assert.ok(loginJs.includes("'index.html'"), 'login.js debe dirigir a index.html tras iniciar sesión');
+  assert.ok(menuJs.includes('href="/index.html"'), 'El logotipo del menú debe apuntar a /index.html');
 });
