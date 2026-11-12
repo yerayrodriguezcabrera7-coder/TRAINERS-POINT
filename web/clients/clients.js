@@ -1471,10 +1471,9 @@ function renderClient(client) {
   const signal = getClientSignal(client, new Date());
   if (signal) card.classList.add(`client-card-signal-${signal.type}`);
   const clientName = `${client.firstName} ${client.lastName}`.trim();
-  const centerName = client.gym?.name || "Sin centro";
   card.setAttribute(
     "aria-label",
-    `Ver ficha de ${clientName}${signal ? `. ${signal.text}` : ""}. Centro: ${centerName}.`,
+    `Ver ficha de ${clientName}${signal ? `. ${signal.text}` : ""}.`,
   );
   const identity = document.createElement("div");
   identity.className = "client-card-identity";
@@ -1509,10 +1508,6 @@ function renderClient(client) {
     details.append(signalLine);
   }
 
-  const center = document.createElement("span");
-  center.className = "client-card-center";
-  center.textContent = centerName;
-  details.append(center);
   const actions = document.createElement("div");
   actions.className = "client-card-actions";
   if (currentUserRole !== 'TRAINER' && client.brand !== 'COBOSU') {
@@ -1610,7 +1605,6 @@ function openClientDetail(client) {
   document.querySelector("#client-detail-status").textContent = statusLabels[client.status] ?? "Cliente";
   document.querySelector("#detail-email").textContent = client.email || "Sin email";
   document.querySelector("#detail-phone").textContent = client.phone || "Sin teléfono";
-  document.querySelector("#detail-gym").textContent = client.gym?.name || "Sin centro";
   document.querySelector("#detail-session").textContent = client.nextSession ? `${sessionBadge(client.nextSession.startTime)} · ${client.nextSession.service?.name || "Sesión"}` : "Sin próxima sesión";
   document.querySelector("#detail-notes").textContent = client.clientNotes?.[0]?.content || client.notes || "No hay notas.";
   document.querySelector("#detail-routine").textContent = client.trainingPlans?.[0]?.name || (client.servicePackageCount ? `${client.remainingSessions} sesiones disponibles.` : "No tiene sesiones asignadas. Añade un servicio desde «Sesiones y pagos».");
