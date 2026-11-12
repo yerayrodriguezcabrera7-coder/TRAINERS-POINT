@@ -34,7 +34,7 @@
     return Math.max(0, end - start);
   };
 
-  const openRecord = employeeId => data.records.find(record => record.employeeId === employeeId && !record.clockOut);
+  const openRecord = employeeId => (data.openRecords || data.records).find(record => record.employeeId === employeeId && !record.clockOut);
   const employeeName = id => data.employees.find(e => e.id === id)?.name || 'Empleado';
 
   // Obtención legal y puntual de la geolocalización (solo en el momento del fichaje)
@@ -280,7 +280,7 @@
 
     $('employee-list').innerHTML = list.map(employee => {
       const open = openRecord(employee.id);
-      const color = /^#[0-9a-f]{6}$/i.test(employee.color) ? employee.color : '#ff7f0a';
+      const color = '#7b858d';
       const soft = `${color}18`;
       const canClock = !me || ['ADMIN','RECEPTION'].includes(me.role) || me.employeeId === employee.id;
 
@@ -304,7 +304,7 @@
             <span class="employee-avatar" style="--emp-color:${color};--emp-soft:${soft}">${escapeHTML(initials(employee.name))}</span>
             <div class="employee-names">
               <strong>${escapeHTML(employee.name)}</strong>
-              <small>${open ? '● Jornada en curso' : 'Fuera de turno'}</small>
+              <small>${open ? `● Jornada en curso${open.centerName ? ' · '+escapeHTML(open.centerName) : ''}` : 'Fuera de turno'}</small>
             </div>
           </div>
 
@@ -573,7 +573,7 @@
       document.querySelectorAll('[data-timer]').forEach(el => {
         const timerId = el.dataset.timer;
         if (!timerId) return;
-        const record = data.records.find(r => r.id === timerId);
+        const record = (data.openRecords || data.records).find(r => r.id === timerId);
         if (record && !record.clockOut) {
           el.textContent = formatDuration(duration(record, now));
         }

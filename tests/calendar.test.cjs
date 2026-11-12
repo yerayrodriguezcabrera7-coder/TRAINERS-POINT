@@ -1,4 +1,4 @@
-const { test, before, after } = require("node:test");
+const { test, before, after, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const { mkdtemp } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
@@ -95,6 +95,13 @@ before(async () => {
   store = new Store(pool);
   other = new Store(pool2);
   await store.migrate();
+});
+beforeEach(async () => {
+  // Each test describes an independent company network. Sharing is exercised
+  // within each test, never through records left by the preceding scenario.
+  const tables=(await pool.query("SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('public','calendar') AND tablename<>'_prisma_migrations'")).rows;
+  const names=tables.map(t=>'"'+t.schemaname.replaceAll('"','""')+'"."'+t.tablename.replaceAll('"','""')+'"').join(',');
+  if(names)await pool.query('TRUNCATE '+names+' RESTART IDENTITY CASCADE');
 });
 after(async () => {
   await pool?.end();
@@ -217,7 +224,9 @@ test("Recursos distintos, citas consecutivas y gimnasios aislados", async () => 
     g,
     booking({ clientId: "c2", employeeId: "e2", roomId: "r2" }),
   );
-  await store.save(await gym(), booking());
+  const second = await gym();
+  await assert.rejects(store.save(second,booking()),/otro centro/);
+  await store.save(second,booking({employeeId:"e2",start:"12:00"}));
   await assert.rejects(
     store.save(g, booking({ clientId: "c3", employeeId: "e2" })),
     /ocupados/,
@@ -389,6 +398,7 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
     assert.equal(d.getElementById('mode-title').textContent,'Servidor conectado');
     const jump=d.getElementById('jump-date');jump.value='2030-10-22';jump.dispatchEvent(new w.Event('change'));
     d.getElementById('new-booking').click();
+    d.getElementById('booking-client').value='c0';d.getElementById('booking-client').dispatchEvent(new w.Event('change'));
     d.getElementById('booking-start').value='10:00';d.getElementById('booking-start').dispatchEvent(new w.Event('change'));
     assert.equal(d.getElementById('booking-end').value,'11:00');
     d.getElementById('booking-form').dispatchEvent(new w.Event('submit',{cancelable:true}));
@@ -545,6 +555,7 @@ test('Pantallas de gestión: crear cliente y servicio, turnos y ficha con histor
     await until(()=>!d.getElementById('editor').open);
     assert.deepEqual((await store.state(g)).employees[0].shifts,[{date:'2030-10-23',periods:[]}]);
     assert.deepEqual((await other.state(g)).employees[0].weeklyPeriods[1],[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
+    await store.updateEmployeeShift(g,'e1','2030-10-22',[{open:'09:00',close:'12:00'},{open:'16:00',close:'18:00'}]);
     dom.window.close();dom=await JSDOM.fromURL(base+'/index.html?fecha=2030-10-22',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.AbortSignal=AbortSignal;w.structuredClone=structuredClone;}});d=dom.window.document;
     await until(()=>d.querySelector('[data-slot="2030-10-22"]'));
     d.getElementById('service-filter').value='s2';d.getElementById('service-filter').dispatchEvent(new dom.window.Event('change'));
@@ -679,7 +690,7 @@ test('Pendientes: interfaz asigna una reserva y la elimina de la cola compartida
  const {JSDOM}=require('jsdom'),g=await gym(),center=await gym();const b=await store.save(g,booking({employeeId:null,status:'PENDING',centerId:center}));
  const app=server(store,g,'planning-ui-token-long-enough',{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;let dom;
  const until=async fn=>{const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,30));}throw Error('No se actualizó la cola de pendientes');};
- try{dom=await JSDOM.fromURL(base+'/pendientes.html',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0)'));const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
+ try{dom=await JSDOM.fromURL(base+'/pendientes.html',{pretendToBeVisual:true,resources:'usable',runScripts:'dangerously',beforeParse(w){w.fetch=(p,o)=>fetch(new URL(p,base),o);w.structuredClone=structuredClone;w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};}});const d=dom.window.document;await until(()=>d.querySelector('[data-edit]'));assert.match(d.getElementById('assignment-tab').textContent,/1/);d.querySelector('[data-edit]').click();d.getElementById('employee').value='e2';d.getElementById('form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await until(()=>d.getElementById('assignment-tab').textContent.includes('(0 clientes)'));assert.equal(d.getElementById('center'),null);assert.equal(d.getElementById('booking-center'),null);const saved=(await store.state(g)).bookings.find(x=>x.id===b.id);assert.equal(saved.employeeId,'e2');assert.equal(saved.centerId,center);assert.equal(saved.status,'CONFIRMED');assert.equal(saved.history.length,1);}finally{dom?.window.close();await new Promise(r=>app.close(r));}
 });
 test('Centros: un trabajador no puede estar en dos centros a la misma hora',async()=>{
  const g=await gym(),center=await gym();await store.save(g,booking());await assert.rejects(store.save(g,booking({centerId:center,clientId:'c1'})),/ocupados/);

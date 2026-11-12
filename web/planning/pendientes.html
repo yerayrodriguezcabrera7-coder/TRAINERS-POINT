@@ -1,2 +1,36 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pendientes de asignación · COBOSU</title><script src="/polling.js" defer></script><link rel="stylesheet" href="fichajes.css"><link rel="stylesheet" href="gestion.css"><link rel="stylesheet" href="menu.css"><link rel="stylesheet" href="design.css"><script src="runtime.js" defer=""></script><script src="menu.js" defer=""></script><script src="pendientes.js" defer=""></script><link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script></head><body><div class="app-shell"><aside data-app-menu=""></aside><main class="attendance-shell main-content"><header class="topbar"><div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Pendientes de asignación</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header><section class="page-content"><header class="attendance-header"><div><p class="eyebrow">RECEPCIÓN · ORGANIZACIÓN</p><h1>Pendientes de asignación</h1><p>Las mismas reservas del calendario, organizadas para que ninguna quede olvidada.</p></div><a href="index.html" class="outline-button">Volver al calendario</a></header><p id="notice" role="status"></p><nav class="section-links"><a href="?tipo=asignacion" id="assignment-tab">Sin trabajador</a><a href="?tipo=reprogramacion" id="reschedule-tab">Por reprogramar</a></nav><section class="attendance-card management-card"><div class="panel-toolbar"><label>Centro<select id="center"><option value="all">Todos los centros</option></select></label><label>Buscar cliente o servicio<input type="search" id="search"></label><button id="refresh" class="outline-button">Actualizar</button></div><div class="history-scroll"><table><thead><tr><th>Cliente y servicio</th><th>Fecha y hora anteriores</th><th>Trabajador</th><th>Centro</th><th>Acción</th></tr></thead><tbody id="rows"></tbody></table></div></section></section></main></div><dialog id="editor"><form id="form"><header class="dialog-heading"><h2 id="title">Organizar reserva</h2><button type="button" id="close" aria-label="Cerrar">×</button></header><p id="original"></p><div class="form-grid"><label>Trabajador<select id="employee" required=""></select></label><label>Centro<select id="booking-center" required=""></select></label><label>Fecha<input id="date" type="date" required=""></label><label>Inicio<input id="start" type="time" required="" step="900"></label><label>Sala<select id="room" required=""></select></label></div><p id="availability"></p><button type="button" id="check" class="outline-button">Consultar huecos del trabajador</button><p id="error" role="alert"></p><footer class="dialog-actions"><button type="button" id="cancel">Cerrar</button><button id="save" class="primary">Confirmar nueva organización</button></footer></form></dialog>
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pendientes de asignación · Trainers Point</title>
+<script src="/polling.js" defer></script>
+<link rel="stylesheet" href="/fichajes.css"><link rel="stylesheet" href="/gestion.css"><link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/design.css">
+<link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><link rel="stylesheet" href="/pendientes.css">
+<script src="/runtime.js" defer></script><script src="/menu.js" defer></script><script src="/pendientes.js" defer></script><script src="/ayuda.js" defer></script>
+</head><body class="planning-page"><div class="app-shell">
+<aside data-app-menu="" aria-label="Navegación principal"></aside>
+<main class="attendance-shell main-content">
+<header class="topbar"><div class="breadcrumb"><span>Organización</span><span class="crumb-separator">/</span><strong>Pendientes</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header>
+<section class="page-content">
+<header class="attendance-header"><div><p class="eyebrow">RECEPCIÓN · ORGANIZACIÓN</p><h1>Pendientes de asignación</h1><p id="page-description">Organiza las sesiones de bonos y las citas sin trabajador desde el centro activo.</p></div><a href="/index.html" class="outline-button">Volver al calendario</a></header>
+<p id="notice" role="status" tabindex="-1"></p>
+<nav class="section-links" aria-label="Tipo de pendiente"><a href="?tipo=asignacion" id="assignment-tab">Por organizar</a><a href="?tipo=reprogramacion" id="reschedule-tab">Por reprogramar</a></nav>
+<div class="pending-toolbar"><label for="search">Buscar cliente o servicio<input type="search" id="search" placeholder="Nombre del cliente o servicio" autocomplete="off"></label><button id="refresh" class="outline-button" type="button">Actualizar</button></div>
+<section id="urgent-panel" class="pending-priority" aria-labelledby="urgent-title" hidden>
+<div class="pending-heading"><div><p class="eyebrow">PRIORIDAD DE ORGANIZACIÓN</p><h2 id="urgent-title">Urgentes</h2><p>Primero, la cita o el bono con la fecha más próxima. Si coinciden, las sesiones que necesitan más huecos.</p></div><span id="urgent-count" class="pending-count"></span></div>
+<div id="urgent-list" class="pending-urgent-grid"></div>
+</section>
+<section class="attendance-card management-card" aria-labelledby="pending-list-title">
+<div class="pending-heading"><div><h2 id="pending-list-title">Todos los pendientes</h2><p id="list-summary" role="status">Cargando pendientes…</p></div></div>
+<div class="history-scroll"><table class="pending-table"><thead><tr><th>Cliente</th><th>Servicio y pendientes</th><th>Fecha o caducidad</th><th>Trabajador</th><th>Acciones</th></tr></thead><tbody id="rows"><tr><td colspan="5">Cargando pendientes…</td></tr></tbody></table></div>
+</section>
+</section></main></div>
+<dialog id="editor" aria-labelledby="title"><form id="form">
+<header class="dialog-heading"><h2 id="title">Organizar reserva</h2><button type="button" id="close" aria-label="Cerrar">×</button></header>
+<p id="original"></p>
+<div class="form-grid"><label>Trabajador<select id="employee" required></select></label><label>Fecha<input id="date" type="date" required></label><label>Hora de inicio<input id="start" type="time" required step="900"></label><label>Sala<select id="room" required></select></label></div>
+<button type="button" id="check" class="outline-button">Consultar huecos del trabajador</button>
+<div id="availability" role="status" class="pending-slots"></div>
+<p id="error" role="alert"></p>
+<footer class="dialog-actions"><button type="button" id="cancel">Cerrar</button><button id="save" class="primary">Confirmar nueva organización</button></footer>
+</form></dialog>
 </body></html>

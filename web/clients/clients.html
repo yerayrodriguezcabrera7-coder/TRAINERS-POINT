@@ -41,11 +41,6 @@
               <strong class="stat-value" id="count-attention">—</strong>
               <span class="stat-foot">Pagos o sesiones</span>
             </button>
-            <button class="stat-card" type="button" data-filter="today" aria-pressed="false">
-              <span class="stat-label">Hoy</span>
-              <strong class="stat-value" id="count-today">—</strong>
-              <span class="stat-foot">Reservas de hoy</span>
-            </button>
             <button class="stat-card" type="button" data-filter="low-sessions" aria-pressed="false">
               <span class="stat-label">Sesiones por acabarse</span>
               <strong class="stat-value" id="count-low-sessions">—</strong>
@@ -62,17 +57,15 @@
             <div class="panel-heading">
               <div>
                 <h2 id="client-list-title">Clientes</h2>
-                <p>Consulta las sesiones de hoy o busca una ficha.</p>
+                <p>Consulta las fichas de cada marca y utiliza los filtros para encontrarlas.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
 
             <div class="client-filter-chips" role="group" aria-label="Filtrar clientes">
               <button class="filter-chip" type="button" data-filter="all" aria-pressed="true">Todos</button>
-              <button class="filter-chip" type="button" data-filter="today" aria-pressed="false">Hoy</button>
               <button class="filter-chip" type="button" data-filter="pending-payment" aria-pressed="false">Pago pendiente</button>
               <button class="filter-chip" type="button" data-filter="no-sessions" aria-pressed="false">Sin sesiones</button>
-              <button class="filter-chip" type="button" data-filter="leads" aria-pressed="false">Nuevos interesados</button>
             </div>
 
             <div class="toolbar">
@@ -82,12 +75,6 @@
                 <input id="search-input" type="search" placeholder="Nombre, teléfono o correo" autocomplete="off">
                 <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
               </div>
-                <label class="filter-select gym-filter-select" id="gym-filter-wrapper" hidden="">
-                  <span class="sr-only">Filtrar por centro</span>
-                  <select id="gym-filter">
-                      <option value="">Todos los centros</option>
-                  </select>
-                </label>
                 <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar lista" title="Actualizar lista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"></path></svg></button>
             </div>
 
@@ -101,21 +88,6 @@
             <div class="table-footer">
               <span id="table-summary">—</span>
               <span id="limit-note" class="limit-note" hidden="">Máximo 100 clientes</span>
-            </div>
-          </section>
-          <section class="gym-panel" id="gyms" aria-labelledby="gym-list-title">
-            <div class="panel-heading">
-              <div>
-                <h2 id="gym-list-title">Centros</h2>
-                <p>Consulta quién entrena en cada centro.</p>
-              </div>
-              <button class="button button-outline" id="manage-gyms" type="button">
-                <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-                Añadir centro
-              </button>
-            </div>
-            <div class="gym-cards" id="gym-cards">
-              <p class="gym-loading">Cargando centros…</p>
             </div>
           </section>
         </section>
@@ -167,13 +139,13 @@
             <section class="intake-step" data-intake-step="0" aria-labelledby="intake-title-1">
               <p class="eyebrow">PASO 1</p><h3 id="intake-title-1">Quién es</h3><p class="intake-help">Los datos para encontrar su ficha y contactar.</p>
               <div class="form-grid intake-fields">
+                <label><span>Marca del cliente</span><select name="brand" id="create-brand" required><option value="TRAINERS_POINT">Trainers Point</option><option value="COBOSU">Cobosu</option></select></label>
                 <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required="" maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden=""></span></label>
                 <label class="form-field"><span>Apellidos <b>*</b></span><input name="lastName" required="" maxlength="100" autocomplete="family-name" placeholder="Ej. García López" aria-describedby="intake-error-lastName"><span class="intake-field-error" id="intake-error-lastName" data-field-error="lastName" aria-live="polite" hidden=""></span></label>
                 <label class="form-field form-field-wide"><span>Teléfono <b>*</b></span><input name="phone" type="tel" required="" maxlength="40" autocomplete="tel" placeholder="+34 600 000 000" aria-describedby="intake-error-phone"><span class="intake-field-error" id="intake-error-phone" data-field-error="phone" aria-live="polite" hidden=""></span><span class="duplicate-message" data-duplicate-for="phone" aria-live="polite"></span></label>
                 <label class="form-field"><span>DNI / documento</span><input name="dni" maxlength="40" autocomplete="off" placeholder="Opcional"></label>
                 <label class="form-field form-field-wide"><span>Correo electrónico <b>*</b></span><input name="email" type="email" required="" maxlength="254" autocomplete="email" placeholder="laura@email.com" aria-describedby="intake-error-email"><span class="intake-field-error" id="intake-error-email" data-field-error="email" aria-live="polite" hidden=""></span><span class="duplicate-message" data-duplicate-for="email" aria-live="polite"></span></label>
                 <label class="form-field form-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address" placeholder="Opcional"></label>
-                <label class="form-field form-field-wide"><span>Centro <b>*</b></span><select name="gymId" id="create-gym-select" required="" aria-describedby="intake-error-gymId"><option value="">Selecciona un centro</option></select><span class="intake-field-error" id="intake-error-gymId" data-field-error="gymId" aria-live="polite" hidden=""></span></label>
                 <label class="form-field form-field-wide"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname" placeholder="Opcional"></label>
               </div>
             </section>
@@ -277,42 +249,6 @@
       </form>
     </dialog>
 
-    <dialog id="gym-dialog" class="client-dialog" aria-labelledby="gym-dialog-title">
-      <form id="gym-form" novalidate="">
-        <div class="dialog-heading">
-          <div>
-            <p class="eyebrow">CENTROS TRAINERS POINT</p>
-            <h2 id="gym-dialog-title">Añadir centro</h2>
-            <p>Después podrás asignarlo a cada cliente.</p>
-          </div>
-          <button class="icon-button" id="close-gym-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
-        </div>
-        <div class="form-grid">
-          <label class="form-field form-field-wide">
-            <span>Nombre del centro <b>*</b></span>
-            <input name="name" required="" maxlength="120" placeholder="Ej. Bizkaia Sant Marti">
-          </label>
-          <label class="form-field">
-            <span>Municipio</span>
-            <input name="city" maxlength="100" placeholder="Ej. Sant Martí">
-          </label>
-          <label class="form-field">
-            <span>Provincia</span>
-            <input name="province" maxlength="100" placeholder="Ej. Bizkaia">
-          </label>
-          <label class="form-field form-field-wide">
-            <span>Dirección</span>
-            <input name="address" maxlength="200" autocomplete="street-address" placeholder="Opcional">
-          </label>
-        </div>
-        <p class="form-error" id="gym-form-error" role="alert" hidden=""></p>
-        <div class="dialog-actions">
-          <button class="button button-outline" id="cancel-gym" type="button">Cancelar</button>
-          <button class="button button-primary" id="submit-gym" type="submit">Guardar centro</button>
-        </div>
-      </form>
-    </dialog>
-
     <dialog id="service-history-dialog" class="client-dialog history-dialog" aria-labelledby="history-dialog-title">
       <div class="history-dialog-content">
         <div class="dialog-heading">
@@ -358,7 +294,7 @@
               <div id="purchase-calc-callout" class="form-field form-field-wide bono-calc-callout" hidden="">
                 <div class="bono-calc-chip"><span class="bono-calc-chip-label">Precio/sesión:</span><strong id="purchase-calc-rate">—</strong></div>
                 <div class="bono-calc-chip"><span class="bono-calc-chip-label">Duración:</span><strong id="purchase-calc-duration">—</strong></div>
-                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong>4 semanas solo</strong></div>
+                <div class="bono-calc-chip bono-calc-chip-validity"><span class="bono-calc-chip-label">Validez:</span><strong id="purchase-validity-preview">Según servicio</strong></div>
               </div>
               <label class="form-field">
                 <span>Sesiones incluidas <b>*</b></span>
@@ -409,7 +345,7 @@
                   <h3 id="purchase-ticket-service" class="ticket-title">Selecciona un pack</h3>
                   <div class="ticket-tags">
                     <span id="purchase-ticket-duration" class="ticket-tag">60 min</span>
-                    <span class="ticket-tag ticket-tag-validity">4 semanas solo</span>
+                    <span class="ticket-tag ticket-tag-validity" id="purchase-ticket-validity">Según servicio</span>
                   </div>
                 </div>
                 <div class="ticket-right">

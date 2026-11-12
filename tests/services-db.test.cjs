@@ -110,7 +110,7 @@ test('Base de datos: Valores por defecto en servicios individuales básicos', as
   assert.equal(service.trainingCount, 1, 'Número de entrenamientos por defecto debe ser 1');
   assert.equal(service.durationMin, 45);
   assert.equal(Number(service.price), 40.00);
-  assert.equal(service.validityWeeks, null);
+  assert.equal(service.validityWeeks, 4);
   assert.equal(service.recommendedWeeklyFrequency, null);
   assert.equal(service.conditions, null);
   assert.equal(service.isActive, true, 'Estado por defecto debe ser activo');
@@ -201,10 +201,10 @@ test('Interfaz y archivos: Comprobar existencia y estructura de la página de se
   assert.ok(html.includes('id="service-dialog"'), 'Debe incluir el diálogo modal');
   assert.ok(html.includes('id="service-form"'), 'Debe incluir el formulario');
   assert.ok(html.includes('id="service-search"'), 'Debe incluir el buscador');
-  assert.ok(html.includes('id="count-total"'), 'Debe incluir métricas de resumen');
+  assert.ok(!html.includes('id="count-total"'), 'El catálogo no incluye métricas de resumen');
   assert.ok(html.includes('data-app-menu'), 'Debe incluir el menú de navegación corporativo');
   assert.ok(html.includes('page-heading-logo'), 'Debe incluir el logo de cabecera con el estilo de clientes');
-  assert.ok(html.includes('stats-grid'), 'Debe emplear el componente stats-grid de clientes');
+  assert.ok(!html.includes('class="stats-grid"'), 'Servicios pasa directamente al catálogo');
   assert.ok(html.includes('client-panel'), 'Debe emplear el contenedor client-panel de clientes');
   assert.ok(html.includes('filter-chip'), 'Debe emplear chips de filtro compatibles con clientes');
 
@@ -221,7 +221,7 @@ test('Interfaz y archivos: Comprobar existencia y estructura de la página de se
 test('Integración: servicios compartidos actualizan el calendario y conservan su color y disponibilidad', async () => {
   const { Store } = require('../dist/calendar/store');
   const gym = await prisma.gym.create({ data: { name: 'Centro integración servicios' } });
-  const service = await prisma.service.create({ data: { name: 'Servicio compartido', price: 55, durationMin: 45, modality: 'DUAL', type: 'PACK', trainingCount: 8 } });
+  const service = await prisma.service.create({ data: { name: 'Servicio compartido', color: '#ab1234', category: 'CABIN', validityWeeks: 8, price: 55, durationMin: 45, modality: 'DUAL', type: 'PACK', trainingCount: 8 } });
   createdServiceIds.push(service.id);
   const schedule = Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00', closed: false }));
   const store = new Store(pool, prisma);
@@ -229,7 +229,7 @@ test('Integración: servicios compartidos actualizan el calendario y conservan s
     employees: [{ id: 'e1', name: 'Entrenador', color: '#123456', schedule }],
     rooms: [{ id: 'r1', name: 'Sala' }], clients: [],
     services: [{ id: service.id, name: 'Nombre anterior', duration: 60, capacity: 1, price: 30,
-      color: '#ab1234', schedule, employeeIds: ['e1'] }] });
+      color: '#778899', schedule, employeeIds: ['e1'] }] });
   const synced = (await store.state(gym.id)).services.find(item => item.id === service.id);
   assert.equal(synced.name, 'Servicio compartido');
   assert.equal(synced.duration, 45);
@@ -237,13 +237,15 @@ test('Integración: servicios compartidos actualizan el calendario y conservan s
   assert.equal(synced.capacity, 2);
   assert.equal(synced.trainingCount, 8);
   assert.equal(synced.color, '#ab1234');
+  assert.equal(synced.validityWeeks, 8);
+  assert.equal(synced.category, 'CABIN');
   assert.deepEqual(synced.employeeIds, ['e1']);
   assert.deepEqual(synced.schedule, schedule);
   await prisma.service.update({ where: { id: service.id }, data: { isActive: false } });
   assert.equal((await store.state(gym.id)).services.find(item => item.id === service.id).active, false);
 });
 
-test('Formulario: Configuración de los 11 campos, cálculo automático y duración de 4 semanas solo', () => {
+test('Formulario: catálogo, cálculo automático y validez editable con cuatro semanas por defecto', () => {
   const htmlPath = path.join(__dirname, '..', 'web', 'services', 'services.html');
   const jsPath = path.join(__dirname, '..', 'web', 'services', 'services.js');
   const cssPath = path.join(__dirname, '..', 'web', 'services', 'services.css');
@@ -271,10 +273,12 @@ test('Formulario: Configuración de los 11 campos, cálculo automático y duraci
     assert.ok(html.includes(`id="${fieldId}"`), `El formulario HTML debe contener el campo con id="${fieldId}"`);
   }
 
-  // Comprobar regla de duración de 4 semanas solo
-  assert.ok(html.includes('min="4"') && html.includes('max="4"') && html.includes('value="4"'), 'El campo de validez debe estar fijado a 4 semanas');
-  assert.ok(html.includes('4 semanas solo'), 'Debe indicar visualmente que la duración es de 4 semanas solo');
-  assert.ok(js.includes('validityWeeks !== 4') || js.includes('validityWeeks: 4'), 'El script JS debe asegurar la duración de 4 semanas solo');
+  const { JSDOM } = require('jsdom');
+  const document = new JSDOM(html).window.document;
+  const weeks = document.getElementById('field-validityWeeks');
+  assert.equal(weeks.value, '4'); assert.equal(weeks.readOnly, false); assert.equal(weeks.min, '1');
+  assert.ok(document.getElementById('field-color')); assert.ok(document.getElementById('field-category'));
+  assert.equal(document.querySelectorAll('.stats-grid').length, 0);
 
   // Comprobar contenedor del cálculo automático en HTML
   assert.ok(html.includes('id="calculated-rate-panel"'), 'Debe existir el panel de cálculo automático');
@@ -390,9 +394,13 @@ test('Backend: Verificación de reglas de validación en parseServiceInput (vali
   assert.ok(src.includes('rawTrainingCount < 1') || src.includes('trainingCount < 1'), 'Debe validar que las sesiones sean >= 1');
   assert.ok(src.includes('El número de sesiones debe ser un entero entre 1 y 500'), 'Debe validar rango y enteros en sesiones');
 
-  // Validación de duración de 4 semanas solo
-  assert.ok(src.includes('parsedWeeks !== 4'), 'Debe rechazar cualquier duración que no sea de 4 semanas');
-  assert.ok(src.includes('La duración/validez del servicio debe ser de 4 semanas solo'), 'Debe emitir mensaje indicando la regla de 4 semanas');
+  const { parseServiceInput } = require('../dist/validation/records');
+  const input = { name: 'Cabina', durationMin: 45, price: 100, trainingCount: 5, type: 'PACK', category: 'CABIN', color: '#123456' };
+  assert.equal(parseServiceInput(input).validityWeeks,4);
+  for (const weeks of [1,2,8,52]) assert.equal(parseServiceInput({...input,validityWeeks:weeks}).validityWeeks,weeks);
+  for (const weeks of [0,-1,1.5,5201]) assert.equal(typeof parseServiceInput({...input,validityWeeks:weeks}),'string');
+  assert.equal(typeof parseServiceInput({...input,color:'url(javascript:bad)'}),'string');
+  assert.equal(typeof parseServiceInput({...input,category:'UNKNOWN'}),'string');
 
   // Validación de duración de sesión y completitud
   assert.ok(src.includes('durationMin < 5'), 'Debe validar duración mínima de 5 minutos');
@@ -495,7 +503,7 @@ test('Clientes y Bonos: Interfaz de ficha del cliente contiene modal y lógica d
   assert.ok(profileHtml.includes('id="bono-sessions-bought"'), 'Debe existir campo para sesiones compradas');
   assert.ok(profileHtml.includes('id="bono-total-amount"'), 'Debe existir campo para importe total');
   assert.ok(profileHtml.includes('id="bono-calc-callout"'), 'Debe existir callout de cálculo');
-  assert.ok(profileHtml.includes('4 semanas solo'), 'Debe mostrar la regla de validez de 4 semanas');
+  assert.ok(profileHtml.includes('id="bono-validity-preview"'), 'La ficha muestra la validez del servicio seleccionado');
 
   // Comprobar lógica en el script JS de la ficha
   assert.ok(profileJs.includes('/api/services?activeOnly=true') || profileJs.includes('/api/services'), 'Debe cargar el catálogo de servicios');
@@ -521,7 +529,7 @@ test('Clientes y Bonos: Directorio de clientes incluye botón de asignación rá
   assert.ok(clientsJs.includes('purchaseServiceSelect'), 'Debe escuchar cambios en el selector de servicio');
   assert.ok(clientsJs.includes('updatePurchaseCallout'), 'Debe recalcular valores y tasa por sesión');
   assert.ok(clientsHtml.includes('purchase-calc-callout'), 'Debe contener bloque visual con duración y 4 semanas de validez');
-  assert.ok(clientsHtml.includes('4 semanas solo'), 'Debe reflejar la validez fija de 4 semanas');
+  assert.ok(clientsHtml.includes('purchase-validity-preview'), 'La validez procede del servicio seleccionado');
 });
 
 

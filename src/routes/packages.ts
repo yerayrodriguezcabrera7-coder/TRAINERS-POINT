@@ -9,6 +9,7 @@ import { Packages } from "../finance/packages";
 import type { ApiContext } from '../http/api-context';
 import { readJsonBody, sendError, sendJson } from "../http/json";
 import { prisma } from "../lib/prisma";
+import { accessibleClient, saleScope } from "../network/scope";
 import { isRecord, parseServicePackageInput } from "../validation/records";
 const validAttendanceStatuses: AttendanceStatus[] = ["PENDIENTE", "ASISTIO", "NO_ASISTIO", "CANCELADA"];
 export async function packagesRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
@@ -18,7 +19,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     const clientId = clientHistoryMatch[1];
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, firstName: true, lastName: true, assignedWorkerId: true, gymId: true },
+      select: { id: true, firstName: true, lastName: true, brand: true, assignedWorkerId: true, gymId: true },
     });
     if (!client) {
       sendError(response, 404, "No se encontró el cliente.");
@@ -26,11 +27,15 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     }
     if ((request as any).identity?.role === "TRAINER") {
       const empId = (request as any).identity.employeeId;
-      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [(request as any).selectedGym || currentConfiguredGym, empId, client.id])).rows.length > 0 : false;
+      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE $1::text IS NOT NULL AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [(request as any).selectedGym || currentConfiguredGym, empId, client.id])).rows.length > 0 : false;
       if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
         sendError(response, 403, "No tienes acceso a esta ficha de cliente.");
         return true;
       }
+    }
+    if (!await accessibleClient(prisma,(request as any).selectedGym,client.id)) {
+      sendError(response, 404, "Cliente desconocido en este centro.");
+      return true;
     }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
@@ -63,7 +68,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
         _count: { _all: true },
       }),
       prisma.sale.findMany({
-        where: { clientId, gymKey: (request as any).selectedGym },
+        where: { clientId },
         select: {
           id: true,
           paymentTracking: true,
@@ -81,7 +86,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
         take: 100,
       }),
       prisma.sale.findMany({
-        where: { clientId, gymKey: (request as any).selectedGym, status: SaleStatus.COMPLETADA },
+        where: { clientId, status: SaleStatus.COMPLETADA },
         select: {
           status: true, paymentTracking: true, lines: true,
           currency: true,
@@ -109,7 +114,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     const debt = [...debtByCurrency]
       .map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }))
       .filter(({ amount }) => amount > 0);
-    const heldPackages = calendarPool ? (await calendarPool.query(`SELECT original."packageId",count(*) AS held FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE r.gym_id=$1 AND original."clientId"=$2::uuid AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING') GROUP BY original."packageId"`, [(request as any).selectedGym, clientId])).rows : [];
+    const heldPackages = calendarPool ? (await calendarPool.query(`SELECT original."packageId",count(*) AS held FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE $1::text IS NOT NULL AND original."clientId"=$2::uuid AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING') GROUP BY original."packageId"`, [(request as any).selectedGym, clientId])).rows : [];
     const now = Date.now();
     const mappedPackages = packages.map((servicePackage) => {
       const sessionsUsed = bookingCounts.find((count) => count.packageId === servicePackage.id && count.attendance === AttendanceStatus.ASISTIO)?._count._all ?? 0;
@@ -231,7 +236,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     }
     if (!saleId && booking.paymentPending) throw new ApiError(409, 'Revisa la sesión y su importe antes de registrar el cobro.');
     if (!saleId) { sendJson(response, 200, { outstandingAmount: 0 }); return true; }
-    const sale = await prisma.sale.findFirstOrThrow({ where: { id: saleId, gymKey: gym }, include: { lines: true, payments: true } });
+    const sale = await prisma.sale.findFirstOrThrow({ where: { id: saleId, AND: [await saleScope(prisma,gym)] }, include: { lines: true, payments: true } });
     sendJson(response, 200, { ...saleBalance(sale), scope: booking.packageId ? 'PACKAGE' : 'SESSION' });
     return true;
   }

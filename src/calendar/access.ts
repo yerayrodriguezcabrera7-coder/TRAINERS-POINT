@@ -4,6 +4,8 @@ import { Pool } from "pg";
 import { z } from "zod";
 import { ApiError } from "./model";
 import type { CognitoIdentity } from "../cloud/cognito";
+import { sharedStaff, saveStaff, networkLock } from "./shared-staff";
+import { clientScope } from "../network/scope";
 
 const SCRYPT_N = 131072;
 const SCRYPT_R = 8;
@@ -105,26 +107,29 @@ CREATE TABLE IF NOT EXISTS calendar.external_identities (
  user_id text NOT NULL REFERENCES calendar.users(id) ON DELETE CASCADE,
  PRIMARY KEY(gym_id,issuer,subject), UNIQUE(gym_id,issuer,user_id));
 CREATE INDEX IF NOT EXISTS sessions_user ON calendar.sessions(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS staff_network_username ON calendar.users(lower(username)) WHERE role<>'CLIENT';
+CREATE UNIQUE INDEX IF NOT EXISTS staff_network_employee ON calendar.users(employee_id) WHERE role<>'CLIENT' AND employee_id IS NOT NULL;
 ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS page_permissions jsonb;
 ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS permissions_audit jsonb;`;
 
 export class Access {
   constructor(private pool: Pool, private clientsDb?: PrismaClient) {}
   async needsSetup(gym: string) {
-    return !(await this.pool.query("SELECT 1 FROM calendar.users WHERE gym_id=$1 LIMIT 1",[gym])).rows.length;
+    return !(await this.pool.query("SELECT 1 FROM calendar.users WHERE $1::text IS NOT NULL AND role<>'CLIENT' LIMIT 1",[gym])).rows.length;
   }
   async seedLocalDevelopmentAdmin(gym: string) {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       const gymRow = (await db.query("SELECT config FROM calendar.gyms WHERE id=$1 FOR UPDATE", [gym])).rows[0];
       if (!gymRow) throw new ApiError(404, "Gimnasio desconocido.");
-      const existing = await db.query("SELECT 1 FROM calendar.users WHERE gym_id=$1 LIMIT 1", [gym]);
+      const existing = await db.query("SELECT 1 FROM calendar.users WHERE $1::text IS NOT NULL AND role<>'CLIENT' LIMIT 1", [gym]);
       if (existing.rowCount) {
         await db.query("COMMIT");
         return false;
       }
-      const employee = (gymRow.config?.employees || []).find((item: any) => item.active !== false);
+      const employee = (await sharedStaff(db)).find((item: any) => item.active !== false);
       if (!employee) throw new ApiError(400, "Añade un empleado activo antes de crear el administrador local.");
       const passwordHash = await hashPassword("admin");
       await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,username,role,password_hash,enabled,must_change_password)
@@ -143,13 +148,12 @@ export class Access {
   async list(gym: string, linkedClients: LinkedClient[] = []) {
     const [usersRes, gymRes] = await Promise.all([
       this.pool.query(`SELECT id,employee_id AS "employeeId",client_id AS "clientId",username,role,enabled,
-        must_change_password AS "mustChangePassword",page_permissions AS "pagePermissions",
-        permissions_audit AS "permissionsAudit"
-        FROM calendar.users WHERE gym_id=$1 ORDER BY username`, [gym]),
+        must_change_password AS "mustChangePassword",page_permissions AS "pagePermissions", permissions_audit AS "permissionsAudit"
+        FROM calendar.users WHERE role<>'CLIENT' OR gym_id=$1 OR client_id=ANY($2::text[]) ORDER BY username`, [gym,linkedClients.map(client=>client.id)]),
       this.pool.query(`SELECT config FROM calendar.gyms WHERE id=$1`, [gym]),
     ]);
     const config = gymRes.rows[0]?.config || {};
-    const employees: any[] = config.employees || [];
+    const employees: any[] = await sharedStaff(this.pool);
     const clients: any[] = config.clients || [];
     return usersRes.rows.map((u: any) => {
       let name = "";
@@ -167,8 +171,10 @@ export class Access {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       const gymRow = await db.query("SELECT config FROM calendar.gyms WHERE id=$1 FOR UPDATE", [gym]);
       const config = gymRow.rows[0]?.config || { employees: [], clients: [] };
+      config.employees = await sharedStaff(db);
       let employeeId = input.role === "CLIENT" ? null : input.employeeId;
       let clientId = input.role === "CLIENT" ? input.clientId : null;
 
@@ -220,24 +226,29 @@ export class Access {
         if (!employee || (input.enabled && employee.active === false))
           throw new ApiError(400, "Selecciona un empleado activo.");
       }
-      const users = await db.query("SELECT id FROM calendar.users WHERE gym_id=$1",[gym]);
+      const users = await db.query("SELECT id FROM calendar.users WHERE $1::text IS NOT NULL AND role<>'CLIENT' ",[gym]);
       if (!users.rows.length && (input.role !== "ADMIN" || !input.enabled))
         throw new ApiError(400, "La primera cuenta debe ser un administrador habilitado.");
-      const old = id ? (await db.query("SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2", [gym,id])).rows[0] : null;
+      const old = id ? (await db.query("SELECT * FROM calendar.users WHERE id=$1", [id])).rows[0] : null;
+      if (old?.role === "CLIENT" && !await this.clientAllowed(gym,old)) throw new ApiError(404,"Usuario desconocido en este centro.");
       if (id && !old) throw new ApiError(404, "Usuario desconocido.");
       if (old?.role === "ADMIN" && old.enabled && (input.role !== "ADMIN" || !input.enabled)) {
-        const others = await db.query("SELECT id FROM calendar.users WHERE gym_id=$1 AND role='ADMIN' AND enabled AND id<>$2", [gym,id]);
+        const others = await db.query("SELECT id FROM calendar.users WHERE $1::text IS NOT NULL AND role='ADMIN' AND enabled AND id<>$2", [gym,id]);
         if (!others.rows.length) throw new ApiError(409, "Debe quedar al menos un administrador activo.");
       }
       // Comprobar de forma explícita si el username ya está en uso por otro usuario del mismo gimnasio.
       // Esto garantiza un mensaje de error claro antes de intentar el INSERT.
       const usernameCheck = await db.query(
-        "SELECT 1 FROM calendar.users WHERE gym_id=$1 AND username=$2" + (id ? " AND id<>$3" : ""),
+        "SELECT 1 FROM calendar.users WHERE (role<>'CLIENT' OR gym_id=$1) AND username=$2" + (id ? " AND id<>$3" : ""),
         id ? [gym, input.username, id] : [gym, input.username]
       );
       if (usernameCheck.rows.length) {
         throw new ApiError(409, "Ese nombre de usuario ya está en uso. Elige un nombre de usuario diferente.");
       }
+      if (input.role !== "CLIENT" && employeeId && (await db.query("SELECT 1 FROM calendar.users WHERE role<>'CLIENT' AND employee_id=$1 AND id<>COALESCE($2,'')",[employeeId,id||null])).rowCount)
+        throw new ApiError(409,"Este trabajador ya tiene una cuenta compartida. Edita su cuenta existente.");
+      if (input.role === "CLIENT" && clientId && /^[0-9a-f-]{36}$/i.test(clientId) && (await db.query("SELECT 1 FROM calendar.users WHERE client_id=$1 AND id<>COALESCE($2,'')",[clientId,id||null])).rowCount)
+        throw new ApiError(409,"Este cliente ya tiene una cuenta de acceso.");
       const userId = id || randomUUID();
       let passwordHash = old?.password_hash || await hashPassword(initialPassword);
       let mustChangePassword = old ? old.must_change_password : true;
@@ -252,6 +263,7 @@ export class Access {
         mustChangePassword = input.mustChangePassword;
       }
 
+      if (input.role !== "CLIENT") await saveStaff(db,config.employees.find((e:any)=>e.id===employeeId));
       const pagePermissionsValue = input.pagePermissions !== undefined ? input.pagePermissions : (old?.page_permissions ?? null);
 
       await db.query(`INSERT INTO calendar.users(id,gym_id,employee_id,client_id,username,role,password_hash,enabled,must_change_password,page_permissions)
@@ -285,7 +297,7 @@ export class Access {
         }
         // Si no podemos identificar la restricción exacta, comprobar el username en BD
         const usernameConflict = await db.query(
-          "SELECT 1 FROM calendar.users WHERE gym_id=$1 AND username=$2" + (id ? " AND id<>$3" : ""),
+          "SELECT 1 FROM calendar.users WHERE (role<>'CLIENT' OR gym_id=$1) AND username=$2" + (id ? " AND id<>$3" : ""),
           id ? [gym, input.username, id] : [gym, input.username]
         );
         if (usernameConflict.rows.length) {
@@ -296,10 +308,22 @@ export class Access {
       throw e;
     } finally { db.release(); }
   }
+  async setPagePermissions(gym:string,id:string,pages:string[]|null,actor:Identity) {
+    const db=await this.pool.connect();
+    try{
+      await db.query('BEGIN');await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[networkLock]);
+      const user=(await db.query('SELECT * FROM calendar.users WHERE id=$1 FOR UPDATE',[id])).rows[0];
+      if(!user || (user.role==='CLIENT' && !await this.clientAllowed(gym,user)))throw new ApiError(404,'Usuario no encontrado.');
+      const auditEntry={changedBy:actor.name||actor.username||'Administrador',changedById:actor.id,changedAt:new Date().toISOString(),mode:pages ? `${pages.length} páginas` : 'restaurado al rol'};
+      await db.query('UPDATE calendar.users SET page_permissions=$2,permissions_audit=$3 WHERE id=$1',[id,pages?JSON.stringify(pages):null,JSON.stringify(auditEntry)]);
+      await db.query('COMMIT');return {ok:true,pagePermissions:pages,permissionsAudit:auditEntry};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
   async createClientAccount(gym: string, gymName: string, client: LinkedClient) {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [gym]);
       let gymRow = (await db.query("SELECT config FROM calendar.gyms WHERE id=$1 FOR UPDATE", [gym])).rows[0];
       if (!gymRow) {
@@ -346,6 +370,11 @@ export class Access {
       db.release();
     }
   }
+  private async clientAllowed(gym: string,row: any) {
+    if (this.clientsDb && row.client_id && /^[0-9a-f-]{36}$/i.test(row.client_id))
+      return !!await this.findExternalClient(gym,row.client_id);
+    return row.gym_id === gym;
+  }
   private async findExternalClient(gym: string, clientId: string): Promise<LinkedClient | null> {
     if (!this.clientsDb) return null;
     const calendarGym = (await this.pool.query("SELECT name FROM calendar.gyms WHERE id=$1", [gym])).rows[0];
@@ -357,7 +386,7 @@ export class Access {
     const externalGym = gyms.find(item => item.id === calendarGym.name || gymSlug(item.name) === gymSlug(String(calendarGym.name)));
     if (!externalGym) return null;
     const client = await this.clientsDb.client.findFirst({
-      where: { id: clientId, gymId: externalGym.id },
+      where: { id: clientId, AND: [await clientScope(this.clientsDb,externalGym.id)] },
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true },
     });
     if (!client) return null;
@@ -372,8 +401,11 @@ export class Access {
   }
   async login(gym: string, raw: unknown) {
     const input = z.object({ username: z.string().max(254), password: z.string().max(128), portal: z.enum(["TRAINER", "OFFICE", "CLIENT"]).optional() }).parse(raw);
-    const row = (await this.pool.query(`SELECT u.*,g.config FROM calendar.users u JOIN calendar.gyms g ON g.id=u.gym_id
-      WHERE u.gym_id=$1 AND u.username=$2`, [gym,input.username.trim().toLowerCase()])).rows[0];
+    const candidates = (await this.pool.query(`SELECT u.*,g.config FROM calendar.users u JOIN calendar.gyms g ON g.id=u.gym_id WHERE u.username=$1`,[input.username.trim().toLowerCase()])).rows;
+    const allowed=[];
+    for (const candidate of candidates) if(candidate.role !== "CLIENT" || await this.clientAllowed(gym,candidate)) allowed.push(candidate);
+    const matches=allowed.filter(row=>!input.portal || (input.portal === "OFFICE" ? ["ADMIN","RECEPTION"].includes(row.role) : row.role === input.portal));
+    const row=matches.length===1 ? matches[0] : allowed.length===1 ? allowed[0] : undefined;
     const passwordMatches = await verifyPassword(input.password, row?.password_hash ||
       `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${"00".repeat(16)}$${"00".repeat(64)}`);
     if (!passwordMatches || !row?.enabled)
@@ -384,12 +416,13 @@ export class Access {
       await this.pool.query("UPDATE calendar.users SET password_hash=$2 WHERE id=$1", [row.id,await hashPassword(input.password)]);
     }
     if (row.role === "CLIENT") {
-      const client = (row.client_id ? await this.findExternalClient(gym,row.client_id) : null) ||
+      if (!await this.clientAllowed(gym,row)) throw new ApiError(401,"Inicia sesión en un centro de tu marca.");
+      const client = (row.client_id ? await this.findExternalClient(row.gym_id,row.client_id) : null) ||
         row?.config.clients.find((c: any) => c.id === row.client_id);
       if (!client || client.status === "BLOCKED")
         throw new ApiError(401, "Usuario o contraseña incorrectos, o cuenta desactivada.");
     } else {
-      const employee = row?.config.employees.find((e: any) => e.id === row.employee_id);
+      const employee = (await sharedStaff(this.pool)).find((e: any) => e.id === row.employee_id);
       if (!employee || employee.active === false)
         throw new ApiError(401, "Usuario o contraseña incorrectos, o cuenta desactivada.");
     }
@@ -401,10 +434,15 @@ export class Access {
   async loginWithCognito(gym: string, identity: CognitoIdentity, portal?: "CLIENT" | "TRAINER" | "OFFICE") {
     if (!identity.subject || !identity.issuer || !Number.isFinite(identity.expiresAt) || identity.expiresAt <= Date.now())
       throw new ApiError(401, "El acceso de Cognito ha caducado.");
-    const row = (await this.pool.query(`SELECT u.* FROM calendar.external_identities e
+    const candidates = (await this.pool.query(`SELECT u.* FROM calendar.external_identities e
       JOIN calendar.users u ON u.id=e.user_id AND u.gym_id=e.gym_id
-      WHERE e.gym_id=$1 AND e.issuer=$2 AND e.subject=$3 AND u.enabled`,
-    [gym,identity.issuer,identity.subject])).rows[0];
+      WHERE e.issuer=$1 AND e.subject=$2 AND u.enabled`,
+    [identity.issuer,identity.subject])).rows;
+    const allowed=[];
+    for(const candidate of candidates)if(candidate.role!=='CLIENT' || await this.clientAllowed(gym,candidate))allowed.push(candidate);
+    const matching=portal ? allowed.filter(candidate=>portal==='OFFICE' ? ['ADMIN','RECEPTION'].includes(candidate.role) : candidate.role===portal) : allowed;
+    if(matching.length>1)throw new ApiError(403,"Hay varias cuentas vinculadas. Administración debe revisar el acceso.");
+    const row=matching[0];
     if (!row) throw new ApiError(403, "Recepción debe vincular tu cuenta del centro antes de que puedas acceder con Cognito.");
     if (portal && !(portal === "OFFICE" ? ["ADMIN","RECEPTION"].includes(row.role) : row.role === portal))
       throw new ApiError(403, "Esta cuenta pertenece a otro acceso. Utiliza la entrada correspondiente a tu perfil.");
@@ -430,13 +468,15 @@ export class Access {
       message: "Las contraseñas nuevas no coinciden.",
       path: ["confirmPassword"],
     }).parse(raw);
+    await this.identify(gym,token);
     const tokenHash = digest(token);
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       const row = (await db.query(`SELECT u.id,u.password_hash,s.external_issuer FROM calendar.sessions s
         JOIN calendar.users u ON u.id=s.user_id
-        WHERE s.token_hash=$1 AND s.expires_at>now() AND u.gym_id=$2 AND u.enabled FOR UPDATE OF u`, [tokenHash,gym])).rows[0];
+        WHERE s.token_hash=$1 AND s.expires_at>now() AND $2::text IS NOT NULL AND u.enabled FOR UPDATE OF u`, [tokenHash,gym])).rows[0];
       if (!row) throw new ApiError(401, "Inicia sesión para continuar.");
       if (row.external_issuer) throw new ApiError(403, "Cambia la contraseña desde el acceso de Cognito.");
       if (!(await verifyPassword(input.currentPassword, row.password_hash)))
@@ -459,7 +499,9 @@ export class Access {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
-      const user = (await db.query("SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2 FOR UPDATE", [gym, userId])).rows[0];
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
+      const user = (await db.query("SELECT * FROM calendar.users WHERE id=$1 FOR UPDATE", [userId])).rows[0];
+      if (user?.role === "CLIENT" && !await this.clientAllowed(gym,user)) throw new ApiError(404,"Usuario desconocido en este centro.");
       if (!user) throw new ApiError(404, "Usuario no encontrado.");
 
       const pwd = (explicitPassword && explicitPassword.trim()) ? explicitPassword.trim() : initialPassword;
@@ -484,18 +526,19 @@ export class Access {
   async identify(gym: string, token: string): Promise<Identity> {
     const row = (await this.pool.query(`SELECT u.*,g.config,s.external_issuer FROM calendar.sessions s
       JOIN calendar.users u ON u.id=s.user_id JOIN calendar.gyms g ON g.id=u.gym_id
-      WHERE s.token_hash=$1 AND s.expires_at>now() AND u.gym_id=$2 AND u.enabled
+      WHERE s.token_hash=$1 AND s.expires_at>now() AND EXISTS(SELECT 1 FROM calendar.gyms target WHERE target.id=$2) AND u.enabled
       AND (s.external_issuer IS NULL OR EXISTS (SELECT 1 FROM calendar.external_identities e
         WHERE e.gym_id=u.gym_id AND e.user_id=u.id AND e.issuer=s.external_issuer AND e.subject=s.external_subject))`, [digest(token),gym])).rows[0];
     if (!row) throw new ApiError(401, "Inicia sesión para continuar.");
     const mustChangePassword = !row.external_issuer && row.must_change_password;
     if (row.role === "CLIENT") {
-      const client = (row.client_id ? await this.findExternalClient(gym,row.client_id) : null) ||
+      if (!await this.clientAllowed(gym,row)) throw new ApiError(401,"Inicia sesión en un centro de tu marca.");
+      const client = (row.client_id ? await this.findExternalClient(row.gym_id,row.client_id) : null) ||
         row?.config.clients.find((c: any) => c.id === row.client_id);
       if (!client || client.status === "BLOCKED") throw new ApiError(401, "Inicia sesión para continuar.");
       return { id: row.id, username: row.username, name: client.name, role: row.role, employeeId: null, clientId: client.id, mustChangePassword, pagePermissions: row.page_permissions ?? null };
     }
-    const employee = row?.config.employees.find((e: any) => e.id === row.employee_id);
+    const employee = (await sharedStaff(this.pool)).find((e: any) => e.id === row.employee_id);
     if (!employee || employee.active === false) throw new ApiError(401, "Inicia sesión para continuar.");
     return { id: row.id, username: row.username, name: employee.name, role: row.role, employeeId: employee.id, clientId: null, mustChangePassword, pagePermissions: row.page_permissions ?? null };
   }

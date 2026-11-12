@@ -36,35 +36,6 @@
             </button>
           </header>
 
-          <!-- Métricas de resumen (mismo estilo stats-grid de clientes) -->
-          <section class="stats-grid" aria-label="Filtros rápidos de servicios">
-            <button class="stat-card stat-card-primary" type="button" data-filter="all" aria-pressed="true">
-              <span class="stat-label">Total servicios</span>
-              <strong class="stat-value" id="count-total">—</strong>
-              <span class="stat-foot">En el catálogo</span>
-            </button>
-            <button class="stat-card" type="button" data-filter="active" aria-pressed="false">
-              <span class="stat-label">Activos</span>
-              <strong class="stat-value" id="count-active">—</strong>
-              <span class="stat-foot">Disponibles</span>
-            </button>
-            <button class="stat-card" type="button" data-filter="inactive" aria-pressed="false">
-              <span class="stat-label">Inactivos</span>
-              <strong class="stat-value" id="count-inactive">—</strong>
-              <span class="stat-foot">Desactivados</span>
-            </button>
-            <button class="stat-card" type="button" data-filter="INDIVIDUAL" aria-pressed="false">
-              <span class="stat-label">Individuales</span>
-              <strong class="stat-value" id="count-individual">—</strong>
-              <span class="stat-foot">Modalidad individual</span>
-            </button>
-            <button class="stat-card" type="button" data-filter="DUAL" aria-pressed="false">
-              <span class="stat-label">Duales / Packs</span>
-              <strong class="stat-value" id="count-packs">—</strong>
-              <span class="stat-foot">Packs y parejas</span>
-            </button>
-          </section>
-
           <!-- Panel de catálogo (mismo estilo client-panel de clientes) -->
           <section class="client-panel" aria-labelledby="services-panel-title">
             <div class="panel-heading">
@@ -77,6 +48,7 @@
 
             <!-- Chips de filtro idénticos a clientes -->
             <div class="client-filter-chips" role="group" aria-label="Filtrar servicios">
+              <button class="filter-chip" type="button" data-filter="CABIN" aria-pressed="false">Cabinas</button>
               <button class="filter-chip active" type="button" data-filter="all" aria-pressed="true">Todos</button>
               <button class="filter-chip" type="button" data-filter="active" aria-pressed="false">Activos</button>
               <button class="filter-chip" type="button" data-filter="inactive" aria-pressed="false">Inactivos</button>
@@ -142,6 +114,8 @@
             </select>
           </label>
 
+          <label class="form-field"><span>Categoría</span><select id="field-category" name="category"><option value="TRAINING">Entrenamiento</option><option value="CABIN">Cabina</option></select></label>
+          <label class="form-field"><span>Color en el calendario</span><input id="field-color" name="color" type="color" value="#317b9b"><span class="field-hint">Identifica las reservas de este servicio.</span></label>
           <label class="form-field">
             <span>Tipo de servicio <b>*</b></span>
             <select name="type" id="field-type" required="">
@@ -197,10 +171,10 @@
           <label class="form-field">
             <span>Validez / Duración <b>*</b></span>
             <div class="validity-input-wrap">
-              <input name="validityWeeks" id="field-validityWeeks" type="number" min="4" max="4" value="4" readonly="" required="">
-              <span class="validity-badge">4 semanas solo</span>
+              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4" required="">
+              <span class="validity-badge">semanas</span>
             </div>
-            <span class="field-hint">Duración fijada a 4 semanas solo (política del centro).</span>
+            <span class="field-hint">4 semanas por defecto. Puedes adaptar la vigencia de cada servicio.</span>
           </label>
 
           <label class="form-field">

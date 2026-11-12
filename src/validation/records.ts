@@ -9,6 +9,7 @@ type ClientInput = {
   email: string;
   phone: string;
   gymId: string;
+  brand: "TRAINERS_POINT" | "COBOSU";
   dni?: string | null;
   address?: string | null;
   birthDate?: string;
@@ -61,6 +62,7 @@ export type GymScheduleDay = {
 
 type GymInput = {
   name: string;
+  brand?: "TRAINERS_POINT" | "COBOSU";
   city?: string;
   province?: string;
   address?: string;
@@ -84,12 +86,16 @@ type ServiceInput = {
   recommendedWeeklyFrequency: number | null;
   conditions: string | null;
   isActive: boolean;
+  category: "TRAINING" | "CABIN";
+  color: string;
 };
 
 export const serviceSelectFields = {
   id: true,
   name: true,
   description: true,
+  category: true,
+  color: true,
   durationMin: true,
   price: true,
   modality: true,
@@ -141,6 +147,8 @@ export function parseClientInput(value: unknown): ClientInput | string {
   const objective = typeof value.objective === "string" ? value.objective.trim() : "";
   const birthDate = typeof value.birthDate === "string" ? value.birthDate.trim() : "";
   const gymId = typeof value.gymId === "string" ? value.gymId.trim() : "";
+  const brand = value.brand ?? "TRAINERS_POINT";
+  if (brand !== "TRAINERS_POINT" && brand !== "COBOSU") return "Selecciona la marca del cliente: Trainers Point o Cobosu.";
   const sex = value.sex === undefined ? undefined : value.sex === null || value.sex === "" ? null : value.sex;
   const source = value.source === undefined ? undefined : value.source === null || value.source === "" ? null : value.source;
   const contactPreference = value.contactPreference === undefined ? undefined : value.contactPreference === null || value.contactPreference === "" ? null : value.contactPreference;
@@ -245,6 +253,7 @@ export function parseClientInput(value: unknown): ClientInput | string {
     email,
     phone,
     gymId,
+    brand,
     ...(dni !== undefined ? { dni: dni || null } : {}),
     ...(address !== undefined ? { address: address || null } : {}),
     ...(birthDate ? { birthDate } : {}),
@@ -298,6 +307,8 @@ export function parseGymInput(value: unknown): GymInput | string {
   }
 
   const name = typeof value.name === "string" ? value.name.trim() : "";
+  const brand = value.brand;
+  if (brand !== undefined && brand !== "TRAINERS_POINT" && brand !== "COBOSU") return "Selecciona la marca del centro.";
   const city = typeof value.city === "string" ? value.city.trim() : "";
   const province = typeof value.province === "string" ? value.province.trim() : "";
   const address = typeof value.address === "string" ? value.address.trim() : "";
@@ -346,6 +357,7 @@ export function parseGymInput(value: unknown): GymInput | string {
 
   return {
     name,
+    ...(brand !== undefined ? {brand} : {}),
     ...(city ? { city } : {}),
     ...(province ? { province } : {}),
     ...(address ? { address } : {}),
@@ -399,6 +411,10 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
 
   const name = typeof value.name === "string" ? value.name.trim() : "";
   const description = typeof value.description === "string" ? value.description.trim() : "";
+  const category = value.category ?? "TRAINING";
+  if (category !== "TRAINING" && category !== "CABIN") return "Selecciona entrenamiento o cabina como categoría.";
+  const color = value.color ?? "#317b9b";
+  if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) return "Selecciona un color válido para el servicio.";
   const durationMin = typeof value.durationMin === "number" ? value.durationMin : Number(value.durationMin);
   const price = typeof value.price === "number" ? value.price : Number(value.price);
 
@@ -439,10 +455,10 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
   let validityWeeks: number = 4;
   if (value.validityWeeks != null && value.validityWeeks !== "") {
     const parsedWeeks = Number(value.validityWeeks);
-    if (!Number.isInteger(parsedWeeks) || parsedWeeks !== 4) {
-      return "La duración/validez del servicio debe ser de 4 semanas solo.";
+    if (!Number.isSafeInteger(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 5200) {
+      return "La validez debe ser un número entero entre 1 y 5200 semanas.";
     }
-    validityWeeks = 4;
+    validityWeeks = parsedWeeks;
   }
 
   let recommendedWeeklyFrequency: number | null = null;
@@ -468,6 +484,8 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
     name,
     durationMin,
     price,
+    category,
+    color,
     modality,
     type,
     trainingCount,

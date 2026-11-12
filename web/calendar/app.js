@@ -98,6 +98,7 @@ async function loadBookingClients() {
       email: client.email || '',
       phone: client.phone || '',
       notes: client.notes || '',
+      brand: client.brand || 'TRAINERS_POINT',
       status: client.status === 'BAJA' ? 'BLOCKED' : client.status === 'INACTIVO' ? 'INACTIVE' : 'ACTIVE',
     }));
   } catch (_) {
@@ -203,7 +204,7 @@ function debtBadge(b){const amount=upcomingDebt(b);if(b.paymentDue&&amount<=0&&[
 function updateDebtDetail(){
  const box=$('booking-debt');if(!box)return;
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
- box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/productos.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
+ box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/ventas.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
 }
 function upcomingRenewal(b){return ['pending','confirmed'].includes(b.status)?(data.clientPackageAlerts?.[b.clientId]||null):null;}
 function renewalBadge(b){const alert=upcomingRenewal(b);if(!alert||!alert.needsRenewal)return '';return `<span class="booking-renewal-badge" title="${escapeHTML(alert.message)}">🔄 ${escapeHTML(alert.message)}</span>`;}
@@ -350,6 +351,11 @@ function renderTimeGrid(dates, bookings, employees) {
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
+        const periods = C.employeePeriods(employee, d.date, data.schedule);
+        const shiftText = periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre');
+        const isOff = !periods.length && employee.id !== '__unassigned';
+        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned';
+        html += `<div class="employee-heading" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:#7b858d" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
         const isCobosu = employee.id === COBOSU_ID;
         const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
@@ -394,6 +400,22 @@ function renderTimeGrid(dates, bookings, employees) {
           html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${isParking ? 'Crear reserva sin asignar en domingo' : open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
         }
         const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
+        const placed = C.layoutEvents(dayColBookings);
+        placed.forEach(({ event: b, lane, count }) => {
+          const startMin = C.minutes(b.start);
+          const endMin = C.minutes(b.end);
+          const top = startMin * 1.4;
+          const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
+          const width = 100 / count;
+          const left = lane * width;
+          const color = lookup('services', b.serviceId).color || '#317b9b';
+          const soft = `${color}18`;
+          const clientName = lookup('clients', b.clientId).name;
+          const serviceName = lookup('services', b.serviceId).name;
+          const roomName = lookup('rooms', b.roomId).name;
+          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+        });
+        if (d.date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
         if (isParking) {
           html += '<div class="sunday-parking-list">';
           if (!dayColBookings.length) {
@@ -828,6 +850,7 @@ async function loadClientPackages(selected=null){
   if (panel) panel.hidden = false;
   if ($('booking-package-message')) $('booking-package-message').hidden = false;
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
+  state.packagesBrand=null;$('create-pending-package').hidden=true;
   $('package-create-result').textContent='';
   if(!clientId){
     packageBusy=false;
@@ -852,6 +875,7 @@ async function loadClientPackages(selected=null){
     const result=await api('clients/'+encodeURIComponent(clientId)+'/service-history');
     if(request!==packageRequest)return;
     clientPackages=result.packages||[];
+    state.packagesBrand=result.client?.brand;
     if (result.renewalAlert) {
       if (!data.clientPackageAlerts) data.clientPackageAlerts = {};
       data.clientPackageAlerts[clientId] = result.renewalAlert;
@@ -896,6 +920,7 @@ function renderPackages(selected){
   const existingWrap = $('existing-package-wrap');
   const toggleBuyBtn = $('toggle-buy-package-btn');
   const cancelBuyBtn = $('cancel-buy-package-btn');
+  const manualAllowed=currentUser?.role!=='TRAINER' && state.packagesBrand!=='COBOSU' && awsClients.find(c=>c.id===clientId)?.brand!=='COBOSU';
 
   if (!isRealClient) {
     if (existingWrap) existingWrap.hidden = true;
@@ -928,7 +953,7 @@ function renderPackages(selected){
   if (chosen) {
     if (existingWrap) existingWrap.hidden = false;
     if (buyCard) buyCard.hidden = true;
-    if (toggleBuyBtn) toggleBuyBtn.hidden = false;
+    if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
     if (chosen.paymentStatus === 'PAGADO') {
       msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Sesión asignada al bono "${escapeHTML(chosen.service.name)}" (${chosen.sessionsRemaining} disponibles).</span>`;
     } else {
@@ -937,17 +962,17 @@ function renderPackages(selected){
   } else if (availablePaid.length === 0) {
     if (existingWrap) existingWrap.hidden = true;
     if (buyCard) {
-      buyCard.hidden = false;
+      buyCard.hidden = !manualAllowed;
       updateBuyPackageServices();
       if (cancelBuyBtn) cancelBuyBtn.hidden = true;
       const sub = $('buy-package-sub-text');
       if (sub) sub.textContent = 'El cliente no tiene ningún bono disponible. Elige el bono y si se cobra ahora o queda pendiente:';
     }
-    msgEl.innerHTML = `<div style="padding:6px 10px; border-radius:6px; background:#fee2e2; border:1px solid #fca5a5; color:#b91c1c; font-size:12px; font-weight:600;">⚠️ Este cliente no tiene bonos disponibles. Puedes adquirir uno ahora mismo:</div>`;
+    msgEl.textContent=manualAllowed ? 'Este cliente no tiene bonos disponibles. Puedes registrar uno ahora o reservar sin bono, con pago pendiente.' : 'No hay bonos disponibles. Los clientes Cobosu no admiten bonos manuales; puedes organizar su cita sin crear otro bono.';
   } else {
     if (existingWrap) existingWrap.hidden = false;
     if (buyCard) buyCard.hidden = true;
-    if (toggleBuyBtn) toggleBuyBtn.hidden = false;
+    if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
     msgEl.innerHTML = `<span style="color:var(--tp-muted); font-size:12px;">Selecciona de qué bono descontar la sesión o continúa sin bono (pago pendiente).</span>`;
   }
   syncNoPackageServiceWrap();
@@ -959,8 +984,20 @@ $('booking-package').onchange=()=>{
   renderPackages();updateHoursHint();
 };
 
+$('create-pending-package').onclick=async()=>{
+ const button=$('create-pending-package'),service=lookup('services',$('booking-service').value),clientId=$('booking-client').value;
+ if(packageBusy||!clientId||clientId==='new')return;
+ if(state.packagesBrand==='COBOSU'||awsClients.find(c=>c.id===clientId)?.brand==='COBOSU')return;
+ button.disabled=true;packageBusy=true;
+ try{
+  const result=await api('clients/'+encodeURIComponent(clientId)+'/service-packages','POST',{requestKey:pendingPackageKey,serviceId:service.id,sessionsBought:service.trainingCount||1,totalAmount:service.price||0,paymentMethod:'OTRO',paymentStatus:'PENDIENTE',notes:'Creado desde el calendario. Pendiente de cobro.'});
+  const history=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if($('booking-client').value!==clientId)return;clientPackages=history.packages||[];newPendingPackageId=result.servicePackage.id;renderPackages(newPendingPackageId);$('package-create-result').textContent='Bono pendiente guardado en la ficha. Ahora confirma la reserva.';
+ }catch(e){$('package-create-result').textContent=e.message;}finally{button.disabled=false;packageBusy=false;}
+};
+
 if ($('toggle-buy-package-btn')) {
   $('toggle-buy-package-btn').onclick = () => {
+    pendingPackageKey=uid();
     $('existing-package-wrap').hidden = true;
     $('buy-package-card').hidden = false;
     if ($('cancel-buy-package-btn')) $('cancel-buy-package-btn').hidden = false;
@@ -1022,6 +1059,7 @@ async function createClientServicePackage(clientId, serviceId, isNow, rawPayment
 async function handleBuyPackage(isNow) {
   const clientId = $('booking-client').value;
   if (!clientId || clientId === 'new' || packageBusy) return null;
+  if(currentUser?.role==='TRAINER' || state.packagesBrand==='COBOSU' || awsClients.find(c=>c.id===clientId)?.brand==='COBOSU')return null;
   const serviceId = $('buy-package-service').value;
   const service = lookup('services', serviceId);
   if (!service) return null;
@@ -1040,10 +1078,27 @@ async function handleBuyPackage(isNow) {
   }
 
   try {
+    const result = await api('clients/' + encodeURIComponent(clientId) + '/service-packages', 'POST', {
+      requestKey: pendingPackageKey || (pendingPackageKey=uid()),
+      serviceId,
+      sessionsBought,
+      totalAmount,
+      paymentStatus,
+      paymentMethod,
+      notes: `Contratado desde el calendario (${isNow ? 'Pagado por ' + paymentMethod : 'Pendiente de cobro'}).`
+    });
     const result = await createClientServicePackage(clientId, serviceId, isNow, paymentMethod);
     const history = await api('clients/' + encodeURIComponent(clientId) + '/service-history');
     if ($('booking-client').value === clientId) {
       clientPackages = history.packages || [];
+      const newPkgId = result.servicePackage?.id;
+      newPendingPackageId=newPkgId;
+      $('booking-service').value = serviceId;
+      if (service.duration && $('booking-start').value) {
+        $('booking-end').value = C.timeLabel(C.minutes($('booking-start').value) + service.duration);
+        const summaryDt = $('summary-datetime');
+        if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
+      }
       const newPkgId = result?.servicePackage?.id;
       syncSelectedService(serviceId);
       renderPackages(newPkgId);
@@ -1122,6 +1177,8 @@ $('booking-form').addEventListener('submit', async event => {
     if(state.saving)return;
     state.saving=true;
     try {
+      // Purchases and receipts require the explicit buy buttons; saving a booking alone never buys a bono.
+      booking.packageId = $('booking-package').value || null;
       const buyCard = $('buy-package-card');
       const mode = document.querySelector('input[name="buy-pkg-mode"]:checked')?.value || 'now';
       if (buyCard && !buyCard.hidden && !$('booking-package').value && clientId !== 'new' && (mode === 'now' || mode === 'later')) {

@@ -32,6 +32,7 @@ test('Geolocalización en fichajes: en centro vs fuera de centro', async () => {
 
   const mockClient = {
     query: async (sql, params) => {
+      if (sql.includes('FROM calendar.shared_staff')) return {rows:[{data:{id:'e1',name:'Entrenador Uno',active:true}}]};
       if (sql.includes('SELECT config FROM calendar.gyms')) {
         return {
           rows: [{

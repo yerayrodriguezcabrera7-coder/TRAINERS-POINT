@@ -3,9 +3,13 @@ import { type IncomingMessage, type ServerResponse } from "node:http";
 import type { ApiContext } from '../http/api-context';
 import { readJsonBody, sendError, sendJson } from "../http/json";
 import { prisma } from "../lib/prisma";
+import { accessibleClient, clientScope, clientScopeSQL } from "../network/scope";
 import { isRecord, parseClientInput, parseMeasurementInput, phoneDigits, validStatuses } from "../validation/records";
 export async function clientsRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
   const { port, currentConfiguredGym, calendarPool, hasTrustedOrigin } = context;
+  const selectedGym=(request as any).selectedGym || currentConfiguredGym;
+  const item=url.pathname.match(/^\/api\/clients\/([0-9a-f-]{36})(?:\/|$)/i);
+  if(item && !await accessibleClient(prisma,selectedGym,item[1])) { sendError(response,404,"Cliente desconocido en este centro."); return true; }
   if (request.method === "GET" && url.pathname === "/api/clients/duplicates") {
     const email = url.searchParams.get("email")?.trim().toLowerCase().slice(0, 254) ?? "";
     const phone = url.searchParams.get("phone")?.trim().slice(0, 40) ?? "";
@@ -28,8 +32,8 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       phone: string;
     }>>(Prisma.sql`
       SELECT id, "firstName", "lastName", email, phone
-      FROM "Client"
-      WHERE (${phoneCondition}) OR (${emailCondition})
+      FROM "Client" c
+      WHERE ${clientScopeSQL(selectedGym)} AND ((${phoneCondition}) OR (${emailCondition}))
       LIMIT 100
     `);
     const matches = candidates.flatMap((client) => {
@@ -50,6 +54,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       select: {
         id: true,
         firstName: true,
+        brand: true,
         lastName: true,
         dni: true, assignedWorkerId: true,
         address: true,
@@ -82,7 +87,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
     }
     if ((request as any).identity?.role === "TRAINER") {
       const empId = (request as any).identity.employeeId;
-      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [(request as any).selectedGym || currentConfiguredGym, empId, client.id])).rows.length > 0 : false;
+      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE $1::text IS NOT NULL AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [(request as any).selectedGym || currentConfiguredGym, empId, client.id])).rows.length > 0 : false;
       if (!trainerBookings && (client as any).assignedWorkerId !== empId) {
         sendError(response, 403, "No tienes acceso a esta ficha de cliente.");
         return true;
@@ -300,19 +305,13 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
   if (request.method === "GET" && url.pathname === "/api/clients") {
     const search = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
     const status = url.searchParams.get("status") ?? "";
-    const gymId = url.searchParams.get("gymId") ?? "";
     if (status && !validStatuses.includes(status as ClientStatus)) {
       sendError(response, 400, "El filtro de estado no es válido.");
       return true;
     }
-    if (gymId &&
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gymId)) {
-      sendError(response, 400, "El filtro de gimnasio no es válido.");
-      return true;
-    }
     const where: Prisma.ClientWhereInput = {
       ...(status ? { status: status as ClientStatus } : {}),
-      ...(gymId ? { gymId } : {}),
+      AND: [await clientScope(prisma,selectedGym)],
       ...(search
         ? {
           OR: [
@@ -338,14 +337,14 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
     }
     if ((request as any).identity?.role === "TRAINER") {
       const empId = (request as any).identity.employeeId;
-      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT data->>'clientId' as cid FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2", [(request as any).selectedGym || currentConfiguredGym, empId])).rows.map((r: any) => r.cid) : [];
+      const trainerBookings = calendarPool ? (await calendarPool.query("SELECT data->>'clientId' as cid FROM calendar.bookings WHERE $1::text IS NOT NULL AND data->>'employeeId'=$2", [(request as any).selectedGym || currentConfiguredGym, empId])).rows.map((r: any) => r.cid) : [];
       const trainerConditions: Prisma.ClientWhereInput[] = [];
       if (empId)
         trainerConditions.push({ assignedWorkerId: empId });
       if (trainerBookings.length)
         trainerConditions.push({ id: { in: trainerBookings } });
       if (trainerConditions.length) {
-        where.AND = [{ OR: trainerConditions }];
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : []),{ OR: trainerConditions }];
       }
       else {
         where.id = "00000000-0000-0000-0000-000000000000";
@@ -359,6 +358,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           firstName: true,
           lastName: true,
           email: true,
+          brand: true,
           phone: true,
           notes: true,
           objective: true,
@@ -443,7 +443,8 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       sendError(response, 403, "Origen de la solicitud no permitido.");
       return true;
     }
-    const input = parseClientInput(await readJsonBody(request));
+    const raw = await readJsonBody(request);
+    const input = parseClientInput(isRecord(raw) ? {...raw,gymId:selectedGym} : raw);
     if (typeof input === "string") {
       sendError(response, 400, input);
       return true;
@@ -462,6 +463,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           ...(input.dni !== undefined ? { dni: input.dni } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           gym: { connect: { id: input.gymId } },
+          brand: input.brand,
           ...(input.birthDate ? { birthDate: new Date(`${input.birthDate}T00:00:00.000Z`) } : {}),
           ...(input.notes ? { notes: input.notes } : {}),
           ...(input.objective ? { objective: input.objective } : {}),
@@ -507,6 +509,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           status: true,
           gymId: true,
           gym: { select: { id: true, name: true, city: true, province: true } },
+          brand: true,
           createdAt: true,
         },
       });

@@ -3,6 +3,8 @@ import { DateTime } from "luxon";
 import { randomUUID } from "node:crypto";
 import { Pool,PoolClient } from "pg";
 import { accessMigration, type Identity } from "./access";
+import { sharedStaffMigration, sharedStaff, saveStaff, saveSharedLeave, networkLock } from "./shared-staff";
+import { clientScope } from "../network/scope";
 import {
 ApiError,
 Booking,
@@ -83,7 +85,9 @@ export class Store {
   constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
 
   private async externalConfig(gym: string, raw: unknown) {
-    const config = configSchema.parse(raw);
+    const staff = await sharedStaff(this.pool);
+    const leaves = (await this.pool.query("SELECT data FROM calendar.shared_leaves ORDER BY id")).rows.map(row=>row.data);
+    const config = configSchema.parse({...raw as object,...(staff.length ? {employees:staff} : {}),...(leaves.length ? {leaveRequests:leaves} : {})});
     if (!this.clientsDb) return config;
     const row = (await this.pool.query("SELECT name FROM calendar.gyms WHERE id=$1", [gym])).rows[0];
     if (!row) return config;
@@ -92,6 +96,7 @@ export class Store {
     const externalGym = gyms.find(item => item.id === row.name || slug(item.name) === slug(String(row.name)));
     if (!externalGym) return config;
     const clientsQuery = this.clientsDb.client.findMany({
+      where: await clientScope(this.clientsDb,externalGym.id),
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
@@ -110,6 +115,8 @@ export class Store {
         validityWeeks: true,
         recommendedWeeklyFrequency: true,
         conditions: true,
+        category: true,
+        color: true,
       },
     });
     const [clients, services] = await Promise.all([clientsQuery, servicesQuery]);
@@ -126,8 +133,7 @@ export class Store {
     if (services.length) {
       const saved = config.services;
       const savedById = new Map(saved.map(service => [service.id, service]));
-      const defaultPalette = ["#ff7f0a", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899", "#f59e0b", "#06b6d4", "#6366f1"];
-      config.services = services.map((service, index) => ({
+      config.services = services.map(service => ({
         ...savedById.get(service.id),
         id: service.id,
         name: service.name,
@@ -142,7 +148,8 @@ export class Store {
         validityWeeks: service.validityWeeks,
         recommendedWeeklyFrequency: service.recommendedWeeklyFrequency,
         conditions: service.conditions,
-        color: savedById.get(service.id)?.color || defaultPalette[index % defaultPalette.length],
+        category: service.category,
+        color: service.color,
       }));
     }
     const allCenters = await this.centers();
@@ -169,6 +176,10 @@ export class Store {
       "INSERT INTO calendar.gyms(id,name,config) VALUES($1,$1,$2) ON CONFLICT (id) DO UPDATE SET name=COALESCE(calendar.gyms.name, EXCLUDED.name)",
       [gym, configSchema.parse(config)],
     );
+    for (const employee of configSchema.parse(config).employees)
+      await this.pool.query("INSERT INTO calendar.shared_staff(id,data) VALUES($1,$2) ON CONFLICT(id) DO NOTHING",[employee.id,employee]);
+    for (const leave of config.leaveRequests || [])
+      await this.pool.query("INSERT INTO calendar.shared_leaves(id,data) VALUES($1,$2) ON CONFLICT(id) DO NOTHING",[leave.id,leave]);
   }
   async listGyms() {
     return (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
@@ -213,6 +224,7 @@ export class Store {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       await db.query("SET LOCAL lock_timeout = '5s'");
       const { rows } = await db.query(
         "SELECT config,revision FROM calendar.gyms WHERE id=$1 FOR UPDATE",
@@ -318,8 +330,8 @@ export class Store {
       if(b.packageId)throw new ApiError(400,"Selecciona un cliente y servicio del catálogo para utilizar un bono.");
       return;
     }
-    const real=(await db.query('SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid',[b.clientId,b.serviceId])).rowCount;
-    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo.");
+    const real=(await db.query(`SELECT 1 FROM "Client" c JOIN "Service" s ON s.id=$2::uuid WHERE c.id=$1::uuid AND (c."gymId"=$3::uuid OR (c.brand='TRAINERS_POINT' AND EXISTS(SELECT 1 FROM "Gym" g WHERE g.id=$3::uuid AND g.brand='TRAINERS_POINT' AND g."isActive")))`,[b.clientId,b.serviceId,gym])).rowCount;
+    if(!real)throw new ApiError(400,"El cliente o servicio no pertenece al catálogo de este centro.");
     if(b.packageId&&b.recoveryId)throw new ApiError(400,"Selecciona un bono o una recuperación, sin utilizar ambos para la misma sesión.");
     // Keep the lock order: calendar centre, finance centre, package/booking rows.
     await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[gym]);
@@ -328,14 +340,14 @@ export class Store {
       throw new ApiError(409,"Esta sesión ya tiene una venta vinculada. No cambies el cliente, servicio o bono; revisa su cobro en la ficha.");
     let effectivePackageId=b.packageId;
     if(b.recoveryId){
-      effectivePackageId=(await db.query('SELECT p."packageId" FROM calendar.recoveries r JOIN "Booking" p ON p.id::text=r.original_id WHERE r.gym_id=$1 AND r.id=$2',[gym,b.recoveryId])).rows[0]?.packageId||null;
+      effectivePackageId=(await db.query('SELECT p."packageId" FROM calendar.recoveries r JOIN "Booking" p ON p.id::text=r.original_id WHERE r.data->>\'clientId\'=$1 AND r.id=$2',[b.clientId,b.recoveryId])).rows[0]?.packageId||null;
     }
     let paid=false;
     if(effectivePackageId){
       const pkg=(await db.query('SELECT * FROM "ClientServicePackage" WHERE id=$1::uuid FOR UPDATE',[effectivePackageId])).rows[0];
       if(!pkg||pkg.clientId!==b.clientId||pkg.serviceId!==b.serviceId||!['PAGADO','PENDIENTE'].includes(pkg.paymentStatus))throw new ApiError(409,"El bono no es compatible con este cliente o servicio.");
       const count=Number((await db.query(`SELECT count(*) FROM "Booking" WHERE "packageId"=$1::uuid AND id<>$2::uuid AND attendance IN ('PENDIENTE','ASISTIO') AND status<>'CANCELADA'`,[pkg.id,b.id])).rows[0].count);
-      const held=Number((await db.query(`SELECT count(*) FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE original."packageId"=$1::uuid AND r.gym_id=$2 AND r.id<>COALESCE($3,'') AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING')`,[pkg.id,gym,b.recoveryId||null])).rows[0].count);
+      const held=Number((await db.query(`SELECT count(*) FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE original."packageId"=$1::uuid AND ($2::text IS NOT NULL) AND r.id<>COALESCE($3,'') AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING')`,[pkg.id,gym,b.recoveryId||null])).rows[0].count);
       if(!['CANCELLED','NO_SHOW'].includes(b.status)&&count+held>=pkg.sessionsBought)throw new ApiError(409,"Este bono ya no tiene sesiones disponibles. Actualiza los bonos del cliente.");
       paid=pkg.paymentStatus==='PAGADO';
     }
@@ -448,7 +460,7 @@ export class Store {
       }
       if (old && (old.recoveryId || null) !== (b.recoveryId || null)) throw new ApiError(409, "No se puede cambiar la recuperación de una reserva.");
       if (b.recoveryId) {
-        const row = (await db.query("SELECT data FROM calendar.recoveries WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId])).rows[0];
+        const row = (await db.query("SELECT data,gym_id FROM calendar.recoveries WHERE id=$2 AND (gym_id=$1 OR data->>'clientId'=ANY($3::text[])) FOR UPDATE",[gym,b.recoveryId,await this.sharedRecoveryClients(gym)])).rows[0];
         const credit = row?.data;
         if (!credit || credit.clientId !== b.clientId || credit.serviceId !== b.serviceId) throw new ApiError(409, "Recuperación incompatible.");
         if (!old && (credit.status !== "PENDING" || b.status !== "CONFIRMED")) throw new ApiError(409, "La recuperación debe estar pendiente y confirmarse en esta reserva.");
@@ -461,7 +473,8 @@ export class Store {
           credit.status = b.needsReschedule ? "RESCHEDULE_PENDING" : notice >= 2*3600000 ? "PENDING" : "FORFEITED";
           if (credit.status === "PENDING") credit.bookingId = null;
         }
-        await db.query("UPDATE calendar.recoveries SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.recoveryId,credit]);
+        await db.query("UPDATE calendar.recoveries SET data=$3 WHERE gym_id=$1 AND id=$2",[row.gym_id,b.recoveryId,credit]);
+        if(row.gym_id!==gym)await db.query("UPDATE calendar.gyms SET revision=revision+1 WHERE id=$1",[row.gym_id]);
       } else b.chargeAmount = old?.chargeAmount ?? c.services.find(s=>s.id===b.serviceId)?.price ?? 0;
       await this.syncPackageBooking(db,gym,b,c);
       if (old) b.version++;
@@ -500,8 +513,14 @@ export class Store {
       await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,id,old]);return old;
     });
   }
+  private async sharedRecoveryClients(gym: string) {
+    if(!this.clientsDb || !/^[0-9a-f-]{36}$/i.test(gym))return [];
+    const center=await this.clientsDb.gym.findUnique({where:{id:gym},select:{brand:true,isActive:true}});
+    if(!center?.isActive || center.brand!=='TRAINERS_POINT')return [];
+    return (await this.clientsDb.client.findMany({where:{brand:'TRAINERS_POINT'},select:{id:true}})).map(client=>client.id);
+  }
   async recoveries(gym: string) {
-    return (await this.pool.query("SELECT data FROM calendar.recoveries WHERE gym_id=$1 ORDER BY data->>'createdAt' DESC",[gym])).rows.map(r=>r.data);
+    return (await this.pool.query("SELECT data,gym_id FROM calendar.recoveries WHERE gym_id=$1 OR data->>'clientId'=ANY($2::text[]) ORDER BY data->>'createdAt' DESC",[gym,await this.sharedRecoveryClients(gym)])).rows.map(r=>({...r.data,originCenterId:r.gym_id}));
   }
   async deferBooking(gym: string, id: string, actor: {id:string;role:string;employeeId:string|null}, exception = false) {
     return this.transaction(gym,async(db,c,bookings)=>{
@@ -527,7 +546,10 @@ export class Store {
           409,
           "Los datos han cambiado. Actualiza antes de guardar.",
         );
+      const roster=(items:Config['employees'])=>JSON.stringify([...items].sort((a,b)=>a.id.localeCompare(b.id)));
       await this.validateConfig(db, gym, config, bookings);
+      if(roster(config.employees)!==roster(_c.employees))
+        throw new ApiError(409,"Gestiona la plantilla compartida desde Profesionales para comprobar las agendas de todos los centros.");
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [
         gym,
         config,
@@ -567,16 +589,24 @@ export class Store {
         assertAvailable({...b,centerId:b.centerId||gym}, bookings.map(o=>({...o,centerId:o.centerId||gym})), config);
       }
     }
-    const linked = (await db.query(`SELECT employee_id FROM calendar.attendance WHERE gym_id=$1
-      UNION SELECT employee_id FROM calendar.users WHERE gym_id=$1`, [gym])).rows;
+    const linked = (await db.query(`SELECT employee_id FROM calendar.attendance WHERE $1::text IS NOT NULL
+      UNION SELECT employee_id FROM calendar.users WHERE $1::text IS NOT NULL AND employee_id IS NOT NULL`, [gym])).rows;
     if (linked.some(r => !config.employees.some(e => e.id === r.employee_id)))
       throw new ApiError(409, "El empleado tiene fichajes o usuario. Desactívalo en lugar de eliminarlo.");
-    const open = (await db.query("SELECT employee_id FROM calendar.attendance WHERE gym_id=$1 AND clock_out IS NULL", [gym])).rows;
+    const open = (await db.query("SELECT employee_id FROM calendar.attendance WHERE $1::text IS NOT NULL AND clock_out IS NULL", [gym])).rows;
     if (open.some(r => config.employees.find(e => e.id === r.employee_id)?.active === false))
       throw new ApiError(409, "Cierra la jornada del empleado antes de desactivarlo.");
-    const admins = (await db.query("SELECT employee_id FROM calendar.users WHERE gym_id=$1 AND role='ADMIN' AND enabled", [gym])).rows;
+    const admins = (await db.query("SELECT employee_id FROM calendar.users WHERE $1::text IS NOT NULL AND role='ADMIN' AND enabled", [gym])).rows;
     if (admins.length && !admins.some(r => config.employees.find(e => e.id === r.employee_id)?.active !== false))
       throw new ApiError(409, "Debe quedar al menos un administrador activo.");
+  }
+  private async validateOtherRosters(db:PoolClient,gym:string,config:Config) {
+    const others=(await db.query("SELECT id,config FROM calendar.gyms WHERE id<>$1",[gym])).rows;
+    for(const other of others){
+      const context=await this.externalConfig(other.id,other.config);context.employees=config.employees;
+      const existing=(await db.query("SELECT data FROM calendar.bookings WHERE gym_id=$1",[other.id])).rows.map(row=>row.data);
+      await this.validateConfig(db,other.id,context,existing);
+    }
   }
   async manage(gym: string, kind: string, raw: unknown, revision: number, id?: string) {
     if (!["clients","services","employees"].includes(kind)) throw new ApiError(404, "Sección desconocida.");
@@ -589,6 +619,10 @@ export class Store {
       if (id && index < 0) throw new ApiError(404, "Ficha desconocida.");
       if (id) list[index] = record; else list.push(record);
       await this.validateConfig(db,gym,c,bookings);
+      if (kind === "employees") {
+        await this.validateOtherRosters(db,gym,c);
+        await saveStaff(db,record,gym);
+      }
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym,c]);
       return record;
     });
@@ -609,6 +643,7 @@ export class Store {
         createdAt: new Date().toISOString(), reviewedAt: null, reviewerId: null,
       };
       c.leaveRequests.push(leave);
+      await saveSharedLeave(db,leave,gym);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
       return leave;
     });
@@ -619,7 +654,8 @@ export class Store {
       if (!leave) throw new ApiError(404, "Solicitud desconocida.");
       if (leave.status !== "PENDING") throw new ApiError(409, "Esta solicitud ya fue revisada.");
       if (status === "APPROVED") {
-        const conflict = bookings.find((booking) => booking.employeeId === leave.employeeId &&
+        const networkBookings=(await db.query("SELECT data FROM calendar.bookings")).rows.map(row=>row.data as Booking);
+        const conflict = networkBookings.find((booking) => booking.employeeId === leave.employeeId &&
           ["PENDING", "CONFIRMED"].includes(booking.status) &&
           booking.date >= leave.startDate && booking.date <= leave.endDate);
         if (conflict) throw new ApiError(409, "Hay reservas activas en esas fechas. Reasígnalas o cancélalas antes de aprobar la ausencia.");
@@ -627,6 +663,7 @@ export class Store {
       leave.status = status;
       leave.reviewedAt = new Date().toISOString();
       leave.reviewerId = reviewerId;
+      await saveSharedLeave(db,leave,gym);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
       return leave;
     });
@@ -637,9 +674,18 @@ export class Store {
       if (!leave || leave.employeeId !== employeeId) throw new ApiError(404, "Solicitud desconocida.");
       if (leave.status !== "PENDING") throw new ApiError(409, "Solo puedes retirar solicitudes pendientes.");
       leave.status = "CANCELLED";
+      await saveSharedLeave(db,leave,gym);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
       return leave;
     });
+  }
+  private async assertNetworkAvailable(db: PoolClient,gym: string,booking: Booking) {
+    const conflict=(await db.query(`SELECT 1 FROM calendar.bookings
+      WHERE gym_id<>$1 AND data->>'date'=$2 AND data->>'status' IN ('PENDING','CONFIRMED','COMPLETED')
+      AND data->>'start'<$4 AND data->>'end'>$3
+      AND (($5::text ~ '^[0-9a-f-]{36}$' AND data->>'clientId'=$5) OR ($6::text IS NOT NULL AND data->>'employeeId'=$6)) LIMIT 1`,
+      [gym,booking.date,booking.start,booking.end,booking.clientId,booking.employeeId])).rowCount;
+    if (conflict) throw new ApiError(409,"El cliente o trabajador ya tiene una reserva a esa hora en otro centro.");
   }
   async slots(gym: string, query: Record<string, string>) {
     const day = date.parse(query.date),
@@ -654,6 +700,7 @@ export class Store {
       throw new ApiError(400, "Recursos desconocidos.");
     if (service.active === false || (!isCobosu && c.employees.find(e => e.id === query.employeeId)?.active === false)) return [];
     c.centers = await this.centers();
+    const busy = (await this.pool.query("SELECT data FROM calendar.bookings WHERE gym_id<>$1 AND data->>'date'=$2 AND data->>'employeeId'=$3 AND data->>'status' IN ('PENDING','CONFIRMED','COMPLETED')",[gym,day,query.employeeId])).rows.map(row=>row.data as Booking);
     const slots = [];
     for (let start = 0; start + service.duration < 1440; start += 15) {
       try {
@@ -682,6 +729,7 @@ export class Store {
         b.centerId=query.centerId||gym;
         if(query.excludeId)b.id=query.excludeId;
         assertAvailable(b, c.bookings.map(o=>({...o,centerId:o.centerId||gym})), c);
+        if (busy.some(other=>other.start<b.end && other.end>b.start)) continue;
         slots.push({ start: b.start, end: b.end });
       } catch (e) {
         if (!(e instanceof ApiError)) throw e;
@@ -710,6 +758,10 @@ export class Store {
        ORDER BY clock_in DESC`,
       [gym, start.toUTC().toISO(), end.toUTC().toISO()],
     );
+    // Open shifts follow the person between centres. Closed history and exports stay local.
+    const openRows=(await this.pool.query(`SELECT a.id,a.employee_id AS "employeeId",a.clock_in AS "clockIn",a.clock_out AS "clockOut",
+      a.geo_in AS "geoIn",a.actor_in AS "actorIn",a.gym_id AS "centerId",COALESCE(g.name,g.id) AS "centerName"
+      FROM calendar.attendance a JOIN calendar.gyms g ON g.id=a.gym_id WHERE a.clock_out IS NULL`)).rows;
 
     let employeesList = current.employees;
     let recordsList = rows;
@@ -733,6 +785,7 @@ export class Store {
         }),
       ),
       records: recordsList,
+      openRecords: openRows.filter(r=>!employeeId || r.employeeId===employeeId).filter(r=>viewerRole!=='TRAINER' || r.employeeId===employeeId),
       serverNow: new Date().toISOString(),
       from: first,
       to: last,
@@ -743,10 +796,11 @@ export class Store {
     const input = attendanceActionSchema.parse(raw);
     if (actor && (!['ADMIN','RECEPTION','TRAINER'].includes(actor.role) || (actor.role === 'TRAINER' && actor.employeeId !== input.employeeId)))
       throw new ApiError(403, 'Solo puedes registrar tus propios fichajes.');
-    const audit = actor ? JSON.stringify({id:actor.id,name:actor.name,username:actor.username || null,role:actor.role,employeeId:actor.employeeId,onBehalf:actor.employeeId !== input.employeeId}) : null;
+    const audit = actor ? JSON.stringify({id:actor.id,name:actor.name,username:actor.username || null,role:actor.role,employeeId:actor.employeeId,centerId:gym,onBehalf:actor.employeeId !== input.employeeId}) : null;
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[networkLock]);
       await db.query("SET LOCAL lock_timeout = '5s'");
       const gymResult = await db.query(
         "SELECT config FROM calendar.gyms WHERE id=$1 FOR SHARE",
@@ -754,15 +808,13 @@ export class Store {
       );
       if (!gymResult.rows.length)
         throw new ApiError(404, "Gimnasio desconocido.");
-      const employee = gymResult.rows[0].config.employees.find(
-        (item: { id: string }) => item.id === input.employeeId,
-      );
+      const employee = (await sharedStaff(db)).find((item: {id:string})=>item.id===input.employeeId);
       if (!employee) throw new ApiError(404, "Empleado desconocido.");
       if (employee.active === false && input.action === "IN") throw new ApiError(409, "Empleado inactivo.");
       const open = await db.query(
         `SELECT id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut"
          FROM calendar.attendance
-         WHERE gym_id=$1 AND employee_id=$2 AND clock_out IS NULL
+         WHERE $1::text IS NOT NULL AND employee_id=$2 AND clock_out IS NULL
          FOR UPDATE`,
         [gym, input.employeeId],
       );
@@ -832,7 +884,8 @@ export class Store {
   }
 
   async updateEmployeeShift(gym: string, employeeId: string, dateStr: string, periods: Array<{ open: string; close: string }> | null) {
-    return this.transaction(gym, async (db, c) => {
+    date.parse(dateStr);
+    return this.transaction(gym, async (db, c, bookings) => {
       const employee = c.employees.find(e => e.id === employeeId);
       if (!employee) throw new ApiError(404, "Empleado no encontrado.");
       employee.shifts = employee.shifts || [];
@@ -844,13 +897,19 @@ export class Store {
         if (existingIdx >= 0) employee.shifts[existingIdx].periods = sorted;
         else employee.shifts.push({ date: dateStr, periods: sorted });
       }
+      await this.validateConfig(db,gym,c,bookings);
+      await this.validateOtherRosters(db,gym,c);
+      await saveStaff(db,employeeSchema.parse(employee),gym);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
       return { ok: true, employeeId, date: dateStr, periods };
     });
   }
 
   async copyWeekShifts(gym: string, fromMonday: string, toMonday: string) {
-    return this.transaction(gym, async (db, c) => {
+    date.parse(fromMonday);date.parse(toMonday);
+    if([fromMonday,toMonday].some(value=>DateTime.fromISO(value).weekday!==1))throw new ApiError(400,"Selecciona el lunes de cada semana.");
+    return this.transaction(gym, async (db, c, bookings) => {
+      const previous=new Map(c.employees.map(employee=>[employee.id,JSON.stringify(employee)]));
       const fromDates: string[] = [];
       const toDates: string[] = [];
       for (let i = 0; i < 7; i++) {
@@ -880,6 +939,9 @@ export class Store {
           }
         }
       }
+      await this.validateConfig(db,gym,c,bookings);
+      await this.validateOtherRosters(db,gym,c);
+      for(const employee of c.employees)if(previous.get(employee.id)!==JSON.stringify(employee))await saveStaff(db,employeeSchema.parse(employee),gym);
       await db.query("UPDATE calendar.gyms SET config=$2 WHERE id=$1", [gym, c]);
       return { ok: true, fromMonday, toMonday };
     });

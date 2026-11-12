@@ -9,7 +9,6 @@ async function fetchUserRole() {
         document.querySelector("#open-add-bono-top")?.setAttribute("hidden", "");
         document.querySelector("#open-add-bono")?.setAttribute("hidden", "");
         document.querySelector("#btn-renew-bono-banner")?.setAttribute("hidden", "");
-        document.querySelector("#profile-gym-form")?.setAttribute("hidden", "");
         const detailsForm = document.querySelector("#client-details-form");
         if (detailsForm) {
           detailsForm.querySelectorAll("button[type=submit], input, select").forEach(el => el.disabled = true);
@@ -113,9 +112,6 @@ const objectiveInput = document.querySelector("#objective-input");
 const objectiveFeedback = document.querySelector("#objective-feedback");
 const clientDetailsForm = document.querySelector("#client-details-form");
 const clientDetailsFeedback = document.querySelector("#client-details-feedback");
-const gymForm = document.querySelector("#profile-gym-form");
-const gymSelect = document.querySelector("#profile-gym-select");
-const gymFeedback = document.querySelector("#profile-gym-feedback");
 const purchaseHistory = document.querySelector("#purchase-history");
 const bookingHistory = document.querySelector("#client-booking-history");
 const measurementDialog = document.querySelector("#measurement-dialog");
@@ -159,6 +155,14 @@ function showProfileToast(message) {
 }
 
 function renderHeader(client) {
+  const cobosu = client.brand === "COBOSU";
+  for (const id of ["open-add-bono", "open-add-bono-top", "btn-renew-bono-banner"]) {
+    const button = document.getElementById(id); if (button) button.hidden = cobosu || currentUserRole === "TRAINER";
+  }
+  let note = document.getElementById("manual-package-info");
+  if (!note) { note = document.createElement("p"); note.id = "manual-package-info"; document.querySelector("#profile-name").parentElement.append(note); }
+  note.hidden = !cobosu;
+  note.textContent = "Cliente Cobosu. Sus bonos se adquieren desde la app; no se añaden manualmente desde el panel.";
   document.title = `Ficha de ${client.firstName} ${client.lastName} | Trainers Point`;
   document.querySelector("#profile-avatar").textContent = initials(client);
   document.querySelector("#profile-name").textContent = `${client.firstName} ${client.lastName}`;
@@ -169,7 +173,6 @@ function renderHeader(client) {
   document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
-  gymSelect.value = client.gym?.id || "";
 }
 
 function currencyText(value, currency = "EUR") {
@@ -309,7 +312,7 @@ function renderPurchaseHistory(data) {
     if(pkg.sale){const balance=document.createElement('p');balance.textContent=`Cobrado: ${currencyText(pkg.sale.paidAmount)} · Pendiente: ${currencyText(pkg.sale.outstandingAmount)}`;footer.append(balance);}
     if(currentUserRole!=='TRAINER'&&pkg.paymentStatus!=='PAGADO'){
       const pay=document.createElement('button');pay.type='button';pay.className='profile-secondary-button';pay.textContent='Registrar pago del bono';
-      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/productos.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
+      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/ventas.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
       footer.append(pay);
     }
     card.append(header, progressWrap, footer);
@@ -373,7 +376,7 @@ async function loadPurchaseHistory() {
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
     if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
-      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/productos.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/ventas.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }
     renderBookingHistory(data.bookings);
@@ -384,25 +387,6 @@ async function loadPurchaseHistory() {
       message.textContent = error instanceof Error ? error.message : "No se pudo cargar el historial.";
       container.replaceChildren(message);
     }
-  }
-}
-
-async function loadAvailableGyms() {
-  try {
-    const response = await fetch("/api/gyms", { headers: { Accept: "application/json" } });
-    const data = await response.json();
-    if (!response.ok) return;
-    gymSelect.replaceChildren();
-    for (const gym of data.gyms) {
-      const option = document.createElement("option");
-      option.value = gym.id;
-      option.textContent = gym.name;
-      gymSelect.append(option);
-    }
-    gymSelect.value = progress.client.gym?.id || "";
-    gymForm.hidden = data.gyms.length < 2;
-  } catch {
-    gymForm.hidden = true;
   }
 }
 
@@ -666,7 +650,6 @@ async function loadProfile() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "No se pudo cargar esta ficha.");
     renderProgress(data); loading.hidden = true; view.hidden = false;
-    void loadAvailableGyms();
     void loadPurchaseHistory();
     void loadBonoServices();
   } catch (error) {
@@ -675,31 +658,6 @@ async function loadProfile() {
       : "No se pudo cargar esta ficha. Inténtalo de nuevo.");
   }
 }
-
-gymForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  gymFeedback.textContent = "Guardando…";
-  const submit = gymForm.querySelector('button[type="submit"]');
-  submit.disabled = true;
-  try {
-    const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/gym`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ gymId: gymSelect.value }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "No se pudo cambiar el centro.");
-    progress.client.gym = { ...progress.client.gym, ...data.client.gym };
-    document.querySelector("#profile-gym").textContent = data.client.gym.name;
-    document.querySelector("#profile-location").textContent = [data.client.gym.city, data.client.gym.province].filter(Boolean).join(", ") || "Sin ubicación";
-    gymSelect.value = data.client.gym.id;
-    gymFeedback.textContent = "Centro actualizado.";
-  } catch (error) {
-    gymFeedback.textContent = error instanceof Error ? error.message : "No se pudo cambiar el centro.";
-  } finally {
-    submit.disabled = false;
-  }
-});
 
 clientDetailsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -985,7 +943,7 @@ function renderBonoCardsGrid() {
 
     const meta = document.createElement("div");
     meta.className = "bono-card-meta";
-    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">4 semanas</span>`;
+    meta.innerHTML = `<span>${service.trainingCount} sesiones</span> · <span>${service.durationMin || 60} min</span> · <span class="bono-card-validity-tag">${service.validityWeeks || 4} semanas</span>`;
 
     card.append(topRow, name, priceRow, meta);
 
@@ -1014,6 +972,8 @@ function selectBonoCard(serviceId) {
 }
 
 function updateBonoCalculation() {
+  const selected = activeServicesList.find(service => service.id === bonoServiceSelect?.value);
+  for (const id of ["bono-validity-preview", "ticket-validity"]) { const el = document.getElementById(id); if (el) el.textContent = selected ? `${selected.validityWeeks || 4} semanas de validez` : "Según servicio"; }
   const selectedId = bonoServiceSelect?.value;
   const service = activeServicesList.find((s) => s.id === selectedId);
   const sessions = Number(bonoSessionsInput?.value || 0);
@@ -1060,6 +1020,7 @@ function updateBonoCalculation() {
 }
 
 function openAddBonoModal() {
+  if (progress?.client?.brand === "COBOSU") { showProfileToast("Los bonos Cobosu se adquieren desde la app."); return; }
   if (!addBonoDialog) return;
   addBonoForm.reset();
   if (bonoFormError) bonoFormError.hidden = true;
@@ -1139,7 +1100,7 @@ if (bonoAmountInput) bonoAmountInput.addEventListener("input", updateBonoCalcula
 if (addBonoForm) {
   addBonoForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (currentUserRole === "TRAINER") return;
+    if (currentUserRole === "TRAINER" || progress?.client?.brand === "COBOSU") return;
     if (bonoFormError) bonoFormError.hidden = true;
     if (!addBonoForm.reportValidity()) return;
 

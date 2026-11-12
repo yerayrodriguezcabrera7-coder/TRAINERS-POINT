@@ -56,17 +56,23 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "No tienes permiso para acceder a la gestión de servicios.");
         return true;
       }
-      if (url.pathname.startsWith("/api/gyms") && !perms.includes("gimnasios")) {
+      if (url.pathname.startsWith("/api/gyms") && request.method!=="GET" && !perms.includes("gimnasios")) {
         sendError(response, 403, "No tienes permiso para acceder a la gestión de sedes.");
         return true;
       }
-      if (url.pathname.startsWith("/api/finance/cash") && !perms.includes("caja.html")) {
+      if (url.pathname.startsWith("/api/cash/") && !perms.includes("caja.html")) {
         sendError(response, 403, "No tienes permiso para acceder a la gestión de caja.");
         return true;
       }
-      if (url.pathname.startsWith("/api/finance/inventory") && !perms.includes("productos.html") && !perms.includes("tienda.html")) {
+      if (url.pathname.startsWith("/api/inventory/") && !["productos.html","tienda.html","ventas.html"].some(page=>perms.includes(page))) {
         sendError(response, 403, "No tienes permiso para acceder al catálogo o inventario.");
         return true;
+      }
+      if (/^\/api\/inventory\/products(?:\/|$)/.test(url.pathname) && request.method!=="GET" && !perms.includes("productos.html")) {
+        sendError(response,403,"No tienes permiso para modificar el catálogo de productos.");return true;
+      }
+      if (url.pathname==="/api/pending-packages" && !perms.includes("pendientes.html")) {
+        sendError(response,403,"No tienes permiso para organizar sesiones pendientes.");return true;
       }
     }
     if (identity.role === "CLIENT") {
@@ -77,7 +83,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       }
     }
     if (url.pathname.startsWith("/api/gyms")) {
-      if (identity.role !== "ADMIN" && !(identity.role === "RECEPTION" && request.method === "GET")) {
+      if (identity.role !== "ADMIN" && !(["RECEPTION","TRAINER"].includes(identity.role) && request.method === "GET")) {
         sendError(response, 403, "Solo administración puede gestionar sedes.");
         return true;
       }

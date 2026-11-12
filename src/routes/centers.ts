@@ -63,6 +63,7 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
       select: {
         id: true,
         name: true,
+        brand: true,
         city: true,
         province: true,
         address: true,
@@ -126,10 +127,29 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
     try {
       const { photoData, latitude, longitude, radiusMeters, maxBookingsPerHour, schedule, ...gymData } = input;
       const gym = await prisma.gym.create({
-        data: gymData,
-        select: { id: true, name: true, city: true, province: true, address: true },
+        data: {...gymData,brand:gymData.brand || (gymData.name.toLowerCase().includes("cobosu") ? "COBOSU" : "TRAINERS_POINT")},
+        select: { id: true, name: true, brand:true, city: true, province: true, address: true },
       });
       await syncGymExtras(gym, { photoData, latitude, longitude, radiusMeters, maxBookingsPerHour, schedule }, calendarPool);
+      if (calendarPool) await calendarPool.query(`INSERT INTO calendar.gyms(id,name,config)
+        SELECT $1,$1,(config - 'location' - 'centers') || '{"clients":[],"leaveRequests":[]}'::jsonb
+        FROM calendar.gyms ORDER BY id LIMIT 1 ON CONFLICT(id) DO NOTHING`,[gym.id]);
+      await prisma.$executeRaw(Prisma.sql`UPDATE "Gym" SET "photoData" = COALESCE(${photoData}, "photoData"), "latitude" = ${latitude ?? null}, "longitude" = ${longitude ?? null}, "radiusMeters" = ${radiusMeters ?? 200}, "maxBookingsPerHour" = ${maxBookingsPerHour ?? null} WHERE "id" = ${gym.id}::uuid`).catch(() => { });
+      if (calendarPool) {
+        await calendarPool.query(`UPDATE calendar.gyms SET config = jsonb_set(config, '{maxBookingsPerHour}', $2::jsonb) WHERE id=$1 OR name=$3`, [gym.id, JSON.stringify(maxBookingsPerHour ?? null), gym.name]).catch(() => { });
+      }
+      if (typeof latitude === "number" && typeof longitude === "number") {
+        const locationObj = {
+          latitude,
+          longitude,
+          radiusMeters: radiusMeters ?? 200,
+          maxBookingsPerHour: maxBookingsPerHour ?? null,
+          address: [gym.address, gym.city, gym.province].filter(Boolean).join(", "),
+        };
+        if (calendarPool) {
+          await calendarPool.query(`UPDATE calendar.gyms SET config = jsonb_set(config, '{location}', $2::jsonb) WHERE id=$1 OR name=$3`, [gym.id, JSON.stringify(locationObj), gym.name]).catch(() => { });
+        }
+      }
       sendJson(response, 201, {
         gym: {
           ...gym,
@@ -168,7 +188,7 @@ export async function centersRoutes(request: IncomingMessage, response: ServerRe
       const updated = await prisma.gym.update({
         where: { id: gymId },
         data: gymData,
-        select: { id: true, name: true, city: true, province: true, address: true },
+        select: { id: true, name: true, brand:true, city: true, province: true, address: true },
       });
       await syncGymExtras(updated, { photoData, latitude, longitude, radiusMeters, maxBookingsPerHour, schedule }, calendarPool);
       sendJson(response, 200, {

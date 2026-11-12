@@ -80,16 +80,6 @@
 
   function updateStats() {
     const total = services.length;
-    const active = services.filter(s => s.isActive).length;
-    const inactive = total - active;
-    const individual = services.filter(s => s.modality === 'INDIVIDUAL').length;
-    const packs = services.filter(s => s.type === 'PACK' || s.modality === 'DUAL').length;
-
-    $('count-total').textContent = String(total);
-    $('count-active').textContent = String(active);
-    $('count-inactive').textContent = String(inactive);
-    $('count-individual').textContent = String(individual);
-    $('count-packs').textContent = String(packs);
     $('heading-count').textContent = `(${total})`;
 
     const filtered = getFilteredServices();
@@ -106,6 +96,7 @@
   function getFilteredServices() {
     return services.filter(service => {
       // Filtro por chips
+      if (activeFilter === 'CABIN' && service.category !== 'CABIN') return false;
       if (activeFilter === 'active' && !service.isActive) return false;
       if (activeFilter === 'inactive' && service.isActive) return false;
       if (activeFilter === 'INDIVIDUAL' && service.modality !== 'INDIVIDUAL') return false;
@@ -122,6 +113,7 @@
           service.conditions,
           service.modality,
           service.type,
+          service.category === "CABIN" ? "cabina" : "entrenamiento",
         ].filter(Boolean).join(' ').toLowerCase();
 
         if (!haystack.includes(query)) return false;
@@ -172,7 +164,7 @@
             </div>
           </div>
 
-          <h3 class="service-name">${esc(service.name)}</h3>
+          <h3 class="service-name"><span class="service-color-dot" style="background:${/^#[0-9a-f]{6}$/i.test(service.color) ? service.color : "#317b9b"}" aria-hidden="true"></span>${esc(service.name)}</h3><p class="service-category">${service.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
           <p class="service-description">${esc(service.description || 'Sin descripción detallada.')}</p>
 
           <div class="service-price-box">
@@ -191,12 +183,12 @@
               <span class="spec-value">⏱ ${service.durationMin} min / sesión</span>
             </div>
             <div class="spec-item">
-              <span class="spec-label">Entrenamientos</span>
+              <span class="spec-label">Sesiones</span>
               <span class="spec-value">🏋️ ${count} ${count === 1 ? 'sesión' : 'sesiones'}</span>
             </div>
             <div class="spec-item">
               <span class="spec-label">Validez / Duración</span>
-              <span class="spec-value spec-duration-4weeks">📅 4 semanas (duración fija)</span>
+              <span class="spec-value spec-duration-4weeks">📅 ${service.validityWeeks || 4} semanas</span>
             </div>
             <div class="spec-item">
               <span class="spec-label">Frecuencia rec.</span>
@@ -312,12 +304,14 @@
     $('dialog-title').textContent = 'Nuevo servicio';
     $('dialog-subtitle').textContent = 'Introduce las características y tarifa del servicio.';
     $('field-name').value = '';
+    $('field-category').value = 'TRAINING';
+    $('field-color').value = ['#317b9b','#b85c38','#63805b','#885b9c','#a67a18'][services.length % 5];
     $('field-modality').value = 'INDIVIDUAL';
     $('field-type').value = 'SESION_INDIVIDUAL';
     $('field-trainingCount').value = '1';
     $('field-durationMin').value = '60';
     $('field-price').value = '';
-    $('field-validityWeeks').value = '4'; // Duración fijada a 4 semanas solo
+    $('field-validityWeeks').value = '4';
     $('field-frequency').value = '';
     $('field-isActive').value = 'true';
     $('field-description').value = '';
@@ -337,12 +331,14 @@
     $('dialog-title').textContent = 'Editar servicio';
     $('dialog-subtitle').textContent = `Modifica las características y tarifa de «${service.name}».`;
     $('field-name').value = service.name || '';
+    $('field-category').value = service.category || 'TRAINING';
+    $('field-color').value = service.color || '#317b9b';
     $('field-modality').value = service.modality || 'INDIVIDUAL';
     $('field-type').value = service.type || 'SESION_INDIVIDUAL';
     $('field-trainingCount').value = service.trainingCount ?? (service.type === 'PACK' ? 10 : 1);
     $('field-price').value = service.price != null ? Number(service.price).toFixed(2) : '';
     $('field-durationMin').value = service.durationMin || 60;
-    $('field-validityWeeks').value = '4'; // Duración fijada a 4 semanas solo
+    $('field-validityWeeks').value = String(service.validityWeeks || 4);
     $('field-frequency').value = service.recommendedWeeklyFrequency ?? '';
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
@@ -479,11 +475,11 @@
         return setFieldError('field-durationMin', 'La duración debe ser un entero entre 5 y 720 minutos.');
       }
 
-      // 7. Validez en semanas (duración fijada a 4 semanas solo)
+      // 7. Validez editable en semanas completas.
       const weeksRaw = $('field-validityWeeks').value.trim();
-      const validityWeeks = Number(weeksRaw) || 4;
-      if (validityWeeks !== 4) {
-        return setFieldError('field-validityWeeks', 'La duración/validez debe ser de 4 semanas solo.');
+      const validityWeeks = Number(weeksRaw);
+      if (!Number.isSafeInteger(validityWeeks) || validityWeeks < 1 || validityWeeks > 5200) {
+        return setFieldError('field-validityWeeks', 'Indica una validez entre 1 y 5200 semanas.');
       }
 
       // 8. Frecuencia semanal recomendada (opcional)
@@ -523,7 +519,9 @@
         trainingCount,
         price,
         durationMin,
-        validityWeeks: 4, // Duración fijada a 4 semanas solo
+        validityWeeks,
+        category: $('field-category').value,
+        color: $('field-color').value,
         recommendedWeeklyFrequency,
         conditions: conditions || null,
         isActive,

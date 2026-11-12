@@ -1,4 +1,4 @@
-const { test, before, after } = require("node:test");
+const { test, before, after, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const { mkdtemp } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
@@ -74,6 +74,13 @@ before(async () => {
   await store.migrate();
 });
 
+beforeEach(async () => {
+  // Each test describes an independent company network. Sharing is exercised
+  // within each test, never through records left by the preceding scenario.
+  const tables=(await pool.query("SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('public','calendar') AND tablename<>'_prisma_migrations'")).rows;
+  const names=tables.map(t=>'"'+t.schemaname.replaceAll('"','""')+'"."'+t.tablename.replaceAll('"','""')+'"').join(',');
+  if(names)await pool.query('TRUNCATE '+names+' RESTART IDENTITY CASCADE');
+});
 after(async () => {
   await pool?.end();
   await pg?.stop();

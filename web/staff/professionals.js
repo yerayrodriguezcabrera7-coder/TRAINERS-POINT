@@ -28,15 +28,6 @@
       .slice(0, 60);
   }
 
-  function getAvatarTone(name) {
-    const text = String(name || '').trim().toLocaleLowerCase('es');
-    let hash = 0;
-    for (const char of text) {
-      hash = (hash * 31 + char.codePointAt(0)) >>> 0;
-    }
-    return hash % 6;
-  }
-
   function getInitials(name) {
     if (!name) return 'TP';
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -195,12 +186,9 @@
       identity.className = 'client-card-identity';
 
       const avatar = document.createElement('span');
-      avatar.className = `client-avatar client-avatar-tone-${getAvatarTone(empName)}`;
+      avatar.className = 'client-avatar';
       avatar.setAttribute('aria-hidden', 'true');
       avatar.textContent = getInitials(empName);
-      if (emp.color) {
-        avatar.style.borderLeft = `3px solid ${esc(emp.color)}`;
-      }
 
       const nameBlock = document.createElement('span');
       nameBlock.style.minWidth = '0';
@@ -304,14 +292,12 @@
       $('prof-name').value = emp.name || '';
       jobSelect.value = normalized;
       $('prof-email').value = emp.email || '';
-      $('prof-color').value = emp.color || '#317b9b';
       $('prof-active').value = String(isActive(emp));
     } else {
       eyebrowEl.textContent = 'NUEVO PROFESIONAL';
       titleEl.textContent = 'Añadir profesional';
       if (subtitleEl) subtitleEl.textContent = 'Selecciona su puesto laboral (Entrenador, Recepción o Administración) y completa sus datos.';
       jobSelect.value = 'Entrenador';
-      $('prof-color').value = '#317b9b';
       $('prof-active').value = 'true';
     }
 
@@ -476,7 +462,6 @@
       const name = $('prof-name').value.trim();
       const jobTitle = $('prof-job').value; // 'Entrenador', 'Recepción' o 'Administración'
       const email = $('prof-email').value.trim();
-      const color = $('prof-color').value;
       const active = $('prof-active').value === 'true';
       const securityRole = roleToSecurityRole[jobTitle] || 'TRAINER';
 
@@ -497,7 +482,6 @@
         name,
         email,
         jobTitle,
-        color,
         active,
         schedule: editingEmployee?.schedule || defaultSchedule,
         shifts: editingEmployee?.shifts || [],

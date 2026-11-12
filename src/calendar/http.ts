@@ -12,6 +12,7 @@ import { saveOmission, listOmissions } from './attendance-omissions';
 import { attendanceCsv } from "./attendance-export";
 import { mobileStaffView, staffClientIds } from "./mobile-view";
 import type { CognitoVerifier } from "../cloud/cognito";
+import { pendingPackages } from "../planning/pending-packages";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -57,7 +58,11 @@ export function server(
         return;
       }
       if (path.startsWith("/api/")) {
-        if (!(await store.gymExists(gym))) throw new ApiError(404, "Gimnasio desconocido.");
+        if (!(await store.gymExists(gym))) {
+          if (!req.headers.authorization && !path.startsWith("/api/public/") && !["/api/login","/api/cognito/login"].includes(path))
+            throw new ApiError(401,"Inicia sesión para continuar.");
+          throw new ApiError(404, "Gimnasio desconocido.");
+        }
         if (req.method === "POST" && (path === "/api/login" || path === "/api/cognito/login")) {
           const key = req.socket.remoteAddress || "unknown";
           const now = Date.now();
@@ -105,6 +110,10 @@ export function server(
             throw new ApiError(403, "Debes cambiar la contraseña antes de continuar.");
 
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
+          if (req.method === "GET" && path === "/api/pending-packages") {
+            if(!office || !hasPage('pendientes.html'))throw new ApiError(403,"Solo recepción y administración con permiso de pendientes pueden organizar los bonos.");
+            send(res,200,{packages:store.clientsDb ? await pendingPackages(store.clientsDb,gym) : []});return;
+          }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
           if (req.method === "POST" && path === "/api/password/change") {
             send(res,200,await access.changePassword(gym,bearer,await body(req)));
@@ -168,7 +177,7 @@ export function server(
               employees = s.employees.filter((e: any) => e.id === identity.employeeId);
               staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
             }
-            send(res,200,{ ...identity, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
+            send(res,200,{ ...identity, gymId:gym, centers:s.centers, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
               clients,
               services: s.services,
               bookings,
@@ -192,19 +201,7 @@ export function server(
             const userId = decodeURIComponent(permissionsMatch[1]);
             const raw = await body(req);
             const pages = z.array(z.string().min(1).max(200)).nullable().parse(raw.pagePermissions);
-            const userRow = (await store.pool.query('SELECT * FROM calendar.users WHERE gym_id=$1 AND id=$2', [gym, userId])).rows[0];
-            if (!userRow) throw new ApiError(404, 'Usuario no encontrado.');
-
-            const auditEntry = {
-              changedBy: identity.name || identity.username || 'Administrador',
-              changedById: identity.id,
-              changedAt: new Date().toISOString(),
-              mode: pages ? `${pages.length} páginas` : 'restaurado al rol',
-            };
-
-            await store.pool.query('UPDATE calendar.users SET page_permissions=$1, permissions_audit=$2 WHERE gym_id=$3 AND id=$4',
-              [pages ? JSON.stringify(pages) : null, JSON.stringify(auditEntry), gym, userId]);
-            send(res, 200, { ok: true, pagePermissions: pages, permissionsAudit: auditEntry });
+            send(res,200,await access.setPagePermissions(gym,userId,pages,identity));
             return;
           }
           if (path === "/api/calendar/shifts" && req.method === "POST") {

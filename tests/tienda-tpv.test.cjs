@@ -79,7 +79,7 @@ test('Tienda TPV: asset-catalog y menu incluyen las rutas de la tienda', () => {
 
   const menu = fs.readFileSync('web/shared/menu.js', 'utf8');
   assert.ok(menu.includes("['Tienda TPV','bag','/tienda.html']"), 'El menú debe incluir Tienda TPV');
-  assert.ok(menu.includes("['Ventas y caja',['Tienda TPV','Productos','Caja']]"), 'El grupo de ventas y caja debe incluir Tienda TPV');
+  assert.ok(menu.includes("['Ventas y caja',['Tienda TPV','Productos','Ventas y cobros','Caja']]"), 'El grupo de ventas y caja debe incluir Tienda TPV');
 });
 
 test('Tienda TPV: simulación de ticket, cálculo de cambio y arqueo con caja', async () => {

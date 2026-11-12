@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Pool } from 'pg';
 import type { Identity } from '../calendar/access';
 import { ApiError } from '../calendar/model';
+import { accessibleClient, clientScopeSQL } from '../network/scope';
 
 export const planDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v, 'Fecha no válida');
 const shortText = z.string().trim().max(200);
@@ -24,12 +25,12 @@ export const planInput = z.object({
 export async function planAccess(db: PrismaClient, pool: Pool | undefined, gym: string, clientId: string, actor: Identity, write: boolean) {
   if (!actor || !['ADMIN', 'RECEPTION', 'TRAINER'].includes(actor.role) || (write && actor.role === 'RECEPTION'))
     throw new ApiError(403, 'Solo administración y el entrenador pueden editar rutinas.');
-  const client = await db.client.findFirst({ where: { id: clientId, gymId: gym } });
+  const client = await accessibleClient(db,gym,clientId);
   if (!client) throw new ApiError(404, 'Cliente desconocido en este centro.');
   if (actor.role === 'TRAINER') {
     if (!actor.employeeId) throw new ApiError(403, 'No tienes un trabajador asignado.');
     if (client.assignedWorkerId !== actor.employeeId) {
-      const assigned = pool && (await pool.query("SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 AND data->>'status' <> 'CANCELLED' LIMIT 1", [gym, actor.employeeId, clientId])).rowCount;
+      const assigned = pool && (await pool.query("SELECT 1 FROM calendar.bookings WHERE $1::text IS NOT NULL AND data->>'employeeId'=$2 AND data->>'clientId'=$3 AND data->>'status' <> 'CANCELLED' LIMIT 1", [gym, actor.employeeId, clientId])).rowCount;
       if (!assigned) throw new ApiError(403, 'Solo puedes consultar y planificar tus propios clientes.');
     }
   }
@@ -46,7 +47,7 @@ export async function savePlan(db: PrismaClient, gym: string, clientId: string, 
   const input = planInput.parse(raw);
   return db.$transaction(async tx => {
     // Serialize activation and edits for this client, without changing bookings or payments.
-    const locked = await tx.$queryRaw<any[]>`SELECT id FROM "Client" WHERE id=${clientId}::uuid AND "gymId"=${gym}::uuid FOR UPDATE`;
+    const locked = await tx.$queryRaw<any[]>`SELECT c.id FROM "Client" c WHERE c.id=${clientId}::uuid AND ${clientScopeSQL(gym)} FOR UPDATE`;
     if (!locked.length) throw new ApiError(404, 'Cliente desconocido.');
     const old = await tx.trainingPlan.findUnique({where:{id: input.id}});
     if (old && old.clientId !== clientId) throw new ApiError(404, 'Plan desconocido.');
