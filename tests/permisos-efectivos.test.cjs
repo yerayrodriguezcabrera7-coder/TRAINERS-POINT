@@ -15,14 +15,19 @@ function mockRes() {
   };
 }
 
-test('Menú y matriz de permisos: sin duplicidad entre Permisos y Permisos de página', () => {
+test('Menú y matriz de permisos: sin duplicidad, sin En preparación y sin Turnos antiguo', () => {
   const menu = fs.readFileSync('web/shared/menu.js', 'utf8');
   const perms = fs.readFileSync('web/admin/permisos-pagina.js', 'utf8');
 
   assert.ok(!menu.includes("'/gestion.html?section=roles'"), 'No debe existir enlace duplicado a gestion.html?section=roles en el menú');
-  assert.ok(!menu.includes("'Permisos','Permisos de página'"), 'Administración no debe tener dos entradas de Permisos');
+  assert.ok(!menu.includes("'/gestion.html?section=shifts'"), 'No debe existir enlace antiguo a Turnos en el menú');
+  assert.ok(!menu.includes('menu-future') && !menu.includes('En preparación'), 'No debe existir la sección desplegable En preparación');
+  for (const dead of ['Informes', 'Cuadro de mando', 'Historial de eventos', 'Reserva web', 'App móvil', 'Notificaciones', 'Buzón de consultas']) {
+    assert.ok(!menu.includes(dead), `No debe existir la opción deshabilitada "${dead}" en el menú`);
+  }
+  assert.ok(menu.includes("['Equipo',['Profesionales','Fichajes','Ausencias del equipo']]"), 'Equipo no debe incluir Turnos');
   assert.ok(menu.includes("['Administración',['Gimnasios','Usuarios','Permisos de página','Configuración']]"), 'Administración debe tener una única entrada de Permisos de página');
-  assert.ok(!perms.includes("gestion.html?section=services"), 'No debe haber rutas obsoletas en presets o defaults');
+  assert.ok(!perms.includes("gestion.html?section=services") && !perms.includes("gestion.html?section=shifts"), 'No debe haber rutas obsoletas en presets o defaults');
   assert.ok(perms.includes("key: 'caja.html', label: 'Caja y ventas'"), 'La matriz debe reflejar Caja y ventas');
 });
 

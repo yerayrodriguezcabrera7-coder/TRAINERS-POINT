@@ -13,7 +13,6 @@
     { key: 'profesionales', label: 'Profesionales' },
     { key: 'fichajes.html', label: 'Fichajes' },
     { key: 'ausencias.html', label: 'Ausencias del equipo' },
-    { key: 'gestion.html?section=shifts', label: 'Turnos' },
     { key: 'usuarios', label: 'Usuarios' },
     { key: 'permisos-pagina.html', label: 'Permisos de página' },
     { key: 'tienda.html', label: 'Tienda TPV' },
@@ -34,8 +33,8 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
-    TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
+    TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     CLIENT: ['mis-reservas.html', 'configuracion.html'],
   };
 
@@ -43,22 +42,22 @@
     {
       id: 'trainer_std',
       label: 'Entrenador estándar',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     },
     {
       id: 'trainer_sales',
       label: 'Entrenador + Ventas/Caja',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html', 'productos.html', 'caja.html'],
+      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'tienda.html', 'productos.html', 'caja.html'],
     },
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'inicio.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html'],
     },
     {
       id: 'clock_only',
-      label: 'Solo fichaje y turnos',
-      pages: ['fichajes.html', 'ausencias.html', 'gestion.html?section=shifts', 'configuracion.html'],
+      label: 'Solo fichaje y ausencias',
+      pages: ['fichajes.html', 'ausencias.html', 'configuracion.html'],
     },
   ];
 
