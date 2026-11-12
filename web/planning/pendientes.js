@@ -136,7 +136,7 @@
   $('search').oninput=()=>{if(data)render();};
   $('refresh').onclick=()=>load().catch(error=>$('notice').textContent=error.message);
   try {
-    const me=await api('me');if(!['ADMIN','RECEPTION'].includes(me.role))throw Error('Solo recepción y administración pueden gestionar pendientes.');
+    const me=await api('me');const canPending=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)?me.pagePermissions.includes('pendientes.html'):['ADMIN','RECEPTION'].includes(me.role));if(!canPending)throw Error('No tienes permiso para gestionar pendientes.');
     await load();
     window.TrainersPoint.poll(()=>!$('editor').open ? load() : undefined,2000,error=>$('notice').textContent=error.message);
   } catch(error){$('notice').textContent=error.message;$('list-summary').textContent='No se pudieron cargar los pendientes.';$('rows').innerHTML='<tr><td colspan="5">Pulsa Actualizar para volver a intentarlo.</td></tr>';}

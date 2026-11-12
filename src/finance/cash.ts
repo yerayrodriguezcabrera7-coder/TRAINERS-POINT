@@ -13,6 +13,12 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => DateTime.fromIS
 export function cashPermission(actor: Identity | undefined) {
   if (!actor)
     throw new ApiError(401, 'Inicia sesión.');
+  if (actor.role === 'ADMIN') return;
+  if (Array.isArray(actor.pagePermissions)) {
+    if (!actor.pagePermissions.includes('caja.html') && !actor.pagePermissions.includes('tienda.html'))
+      throw new ApiError(403, 'No tienes permiso para acceder a la gestión de caja.');
+    return;
+  }
   if (!['ADMIN', 'RECEPTION'].includes(actor.role))
     throw new ApiError(403, 'Solo administración y recepción pueden gestionar la caja.');
 }

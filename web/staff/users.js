@@ -238,8 +238,10 @@
     }
   }
 
+  const canUsers = () => Boolean(manageData && (manageData.role === 'ADMIN' || (Array.isArray(manageData.pagePermissions) && manageData.pagePermissions.includes('usuarios'))));
+
   function openEditor(user) {
-    if (!manageData || manageData.role !== 'ADMIN') {
+    if (!canUsers()) {
       showToast('No se han cargado los datos de administración. Inicia sesión de nuevo.', true);
       return;
     }
@@ -294,7 +296,7 @@
 
     try {
       manageData = await api('manage');
-      if (manageData.role !== 'ADMIN') {
+      if (!canUsers()) {
         location.replace('/index.html');
         return;
       }
@@ -417,7 +419,7 @@
       errorEl.textContent = '';
 
       const form = e.target;
-      if (!editingUser || !manageData || manageData.role !== 'ADMIN') {
+      if (!editingUser || !canUsers()) {
         errorEl.textContent = 'No se han cargado los datos de administración. Actualiza la página e inicia sesión de nuevo.';
         errorEl.hidden = false;
         return;

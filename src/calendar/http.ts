@@ -86,6 +86,11 @@ export function server(
           if (!identity.pagePermissions) return true; // null = use role defaults, no extra restriction
           return identity.pagePermissions.includes(pageKey);
         };
+        const canAccessPage = (pageKey: string, fallback: boolean): boolean => {
+          if (identity.role === "ADMIN") return true;
+          if (Array.isArray(identity.pagePermissions)) return identity.pagePermissions.includes(pageKey);
+          return fallback;
+        };
         const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!publicRoute) {
           const actual = Buffer.from(req.headers.authorization || "");
@@ -111,7 +116,7 @@ export function server(
 
           if (req.method === "GET" && path === "/api/me") { send(res,200,identity); return; }
           if (req.method === "GET" && path === "/api/pending-packages") {
-            if(!office || !hasPage('pendientes.html'))throw new ApiError(403,"Solo recepción y administración con permiso de pendientes pueden organizar los bonos.");
+            if(!canAccessPage('pendientes.html', office))throw new ApiError(403,"No tienes permiso para organizar los bonos pendientes.");
             send(res,200,{packages:store.clientsDb ? await pendingPackages(store.clientsDb,gym) : []});return;
           }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
@@ -170,25 +175,27 @@ export function server(
             let bookings = s.bookings;
             let employees = s.employees;
             let staffNames = s.employees.map((e: any) => ({id:e.id,name:e.name}));
-            if (trainer) {
+            if (trainer && !canAccessPage('clientes', false)) {
               const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
               clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || c.assignedWorkerId === identity.employeeId);
               bookings = s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map(workerBooking);
               employees = s.employees.filter((e: any) => e.id === identity.employeeId);
               staffNames = employees.map((e: any) => ({id:e.id,name:e.name}));
             }
+            const canSeeAllEmployees = admin || reception || canAccessPage('profesionales', false) || canAccessPage('usuarios', false);
+            const canSeeUsers = canAccessPage('usuarios', admin) || canAccessPage('permisos-pagina.html', admin);
             send(res,200,{ ...identity, gymId:gym, centers:s.centers, revision:s.revision, timezone:s.timezone, schedule:s.schedule,
               clients,
               services: s.services,
               bookings,
               staffNames,
-              employees: (admin || reception) ? s.employees : employees,
-              users: admin ? await access.list(gym,s.clients) : [],
+              employees: canSeeAllEmployees ? s.employees : employees,
+              users: canSeeUsers ? await access.list(gym,s.clients) : [],
             }); return;
           }
                     const resetMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/reset-password$/);
           if (resetMatch && req.method === "POST") {
-            if (!admin) throw new ApiError(403, "Solo administración puede restablecer contraseñas.");
+            if (!canAccessPage('usuarios', admin)) throw new ApiError(403, "No tienes permiso para restablecer contraseñas.");
             const userId = decodeURIComponent(resetMatch[1]);
             const raw = await body(req).catch(() => ({}));
             const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined);
@@ -197,7 +204,7 @@ export function server(
           }
           const permissionsMatch = path.match(/^\/api\/manage\/users\/([^/]+)\/permissions$/);
           if (permissionsMatch && req.method === 'PUT') {
-            if (!admin) throw new ApiError(403, 'Solo administración puede gestionar permisos de página.');
+            if (!canAccessPage('permisos-pagina.html', admin)) throw new ApiError(403, 'No tienes permiso para gestionar permisos de página.');
             const userId = decodeURIComponent(permissionsMatch[1]);
             const raw = await body(req);
             const pages = z.array(z.string().min(1).max(200)).nullable().parse(raw.pagePermissions);
@@ -232,10 +239,10 @@ export function server(
           }
           const management = path.match(/^\/api\/manage\/(clients|services|employees|users)(?:\/([^/]+))?$/);
           if (management && ["POST","PUT"].includes(req.method || "")) {
-            if (management[1] === "users" && (!admin || !hasPage("usuarios"))) throw new ApiError(403,"Solo administración puede gestionar usuarios.");
-            if (management[1] === "services" && (!admin || !hasPage("servicios"))) throw new ApiError(403,"Solo administración puede modificar servicios.");
-            if (management[1] === "employees" && (!admin && !reception || !hasPage("profesionales"))) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
-            if (management[1] === "clients" && (!admin && !reception || !hasPage("clientes"))) throw new ApiError(403,"No tienes permiso para modificar clientes.");
+            if (management[1] === "users" && !canAccessPage("usuarios", admin)) throw new ApiError(403,"No tienes permiso para gestionar usuarios.");
+            if (management[1] === "services" && !canAccessPage("servicios", admin)) throw new ApiError(403,"No tienes permiso para modificar servicios.");
+            if (management[1] === "employees" && !canAccessPage("profesionales", office)) throw new ApiError(403,"No tienes permiso para modificar esta sección.");
+            if (management[1] === "clients" && !canAccessPage("clientes", office)) throw new ApiError(403,"No tienes permiso para modificar clientes.");
             if ((req.method === "PUT") !== Boolean(management[2])) throw new ApiError(400,"Ruta de edición inválida.");
             const raw = await body(req), id = management[2] ? decodeURIComponent(management[2]) : undefined;
             const result = management[1] === "users"
@@ -343,7 +350,7 @@ export function server(
             store.clientsDb ? clientPackageAlerts(store.clientsDb, gym) : {},
           ]);
           let clients = s.clients;
-          if (identity.role === "TRAINER") {
+          if (identity.role === "TRAINER" && !(Array.isArray(identity.pagePermissions) && identity.pagePermissions.includes("clientes"))) {
             const trainerBookingClientIds = new Set(s.bookings.filter((b: any) => b.employeeId === identity.employeeId).map((b: any) => b.clientId));
             clients = s.clients.filter((c: any) => trainerBookingClientIds.has(c.id) || (c as any).assignedWorkerId === identity.employeeId);
           }

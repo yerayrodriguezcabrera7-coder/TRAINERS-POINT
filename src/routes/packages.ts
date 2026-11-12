@@ -25,7 +25,8 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
       sendError(response, 404, "No se encontró el cliente.");
       return true;
     }
-    if ((request as any).identity?.role === "TRAINER") {
+    const pkgIdentity = (request as any).identity;
+    if (pkgIdentity?.role === "TRAINER" && !(Array.isArray(pkgIdentity.pagePermissions) && pkgIdentity.pagePermissions.includes("clientes"))) {
       const empId = (request as any).identity.employeeId;
       const trainerBookings = calendarPool ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE $1::text IS NOT NULL AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [(request as any).selectedGym || currentConfiguredGym, empId, client.id])).rows.length > 0 : false;
       if (!trainerBookings && (client as any).assignedWorkerId !== empId) {

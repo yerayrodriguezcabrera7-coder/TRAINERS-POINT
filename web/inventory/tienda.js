@@ -50,10 +50,11 @@
   async function loadInitialData() {
     try {
       me = await api('me');
-      if (!['ADMIN', 'RECEPTION'].includes(me.role)) {
-        throw new Error('Solo el personal de recepción y administración tiene acceso a la tienda.');
+      const canTienda = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('tienda.html') : ['ADMIN', 'RECEPTION'].includes(me.role));
+      if (!canTienda) {
+        throw new Error('Tu perfil no permite acceder a la tienda.');
       }
-      $('btn-quick-new-product').hidden = me.role !== 'ADMIN';
+      $('btn-quick-new-product').hidden = !(me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) && me.pagePermissions.includes('productos.html')));
 
       const [prodRes, manageRes, restockRes] = await Promise.all([
         api('inventory/products'),

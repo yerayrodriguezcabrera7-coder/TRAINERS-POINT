@@ -153,7 +153,8 @@
     const states = { COMPLETADA: 'Confirmada', CANCELADA: 'Anulada', REEMBOLSADA: 'Devuelta', BORRADOR: 'Borrador' };
     $('sales').innerHTML = sales.map(s => {
       const returned = s.lines.reduce((v, l) => v + Number(l.unitPrice) * l.returnedQuantity, 0);
-      return `<article class="sale-entry" data-sale-id="${esc(s.id)}"><header><div><strong>${s.clientId ? esc(s.client ? s.client.firstName + ' ' + s.client.lastName : 'Cliente registrado') : 'Persona de paso'}</strong><p>${new Date(s.soldAt).toLocaleString('es-ES')} · ${states[s.status]} · Ref. ${esc(s.id)}</p></div><strong>${euros(s.totalAmount)}</strong></header><table><thead><tr><th>Producto o bono</th><th>Unidades</th><th>Devueltas</th><th>Precio aplicado</th><th>Importe original</th></tr></thead><tbody>${s.lines.map(l => `<tr><td>${esc(l.description)}</td><td>${esc(l.quantity)}</td><td>${l.returnedQuantity}</td><td>${euros(l.unitPrice)}</td><td>${euros(l.lineTotal)}</td></tr>`).join('')}</tbody></table>${s.gymKey && s.gymKey !== operatingGym ? `<p>Venta de ${esc(centers.find(c => c.id === s.gymKey)?.name || 'otro centro')}. Puedes registrar aquí sus pagos. Las devoluciones de productos se gestionan en el centro de la venta.</p>` : ''}<p>Importe devuelto: ${euros(returned)} · Importe neto: ${euros(Number(s.totalAmount) - returned)}</p>${paymentInfo(s)}${returnInfo(s)}${['ADMIN', 'RECEPTION'].includes(me.role) && s.status === 'COMPLETADA' && (!s.gymKey || s.gymKey === operatingGym) && s.lines.every(l => l.type !== 'SERVICIO') ? `<button data-return="${s.id}">Devolver productos</button>${me.role === 'ADMIN' ? `<button data-cancel="${s.id}">Anular venta</button>` : ''}` : ''}</article>`;
+      const canCancel = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) && me.pagePermissions.includes('caja.html'));
+      return `<article class="sale-entry" data-sale-id="${esc(s.id)}"><header><div><strong>${s.clientId ? esc(s.client ? s.client.firstName + ' ' + s.client.lastName : 'Cliente registrado') : 'Persona de paso'}</strong><p>${new Date(s.soldAt).toLocaleString('es-ES')} · ${states[s.status]} · Ref. ${esc(s.id)}</p></div><strong>${euros(s.totalAmount)}</strong></header><table><thead><tr><th>Producto o bono</th><th>Unidades</th><th>Devueltas</th><th>Precio aplicado</th><th>Importe original</th></tr></thead><tbody>${s.lines.map(l => `<tr><td>${esc(l.description)}</td><td>${esc(l.quantity)}</td><td>${l.returnedQuantity}</td><td>${euros(l.unitPrice)}</td><td>${euros(l.lineTotal)}</td></tr>`).join('')}</tbody></table>${s.gymKey && s.gymKey !== operatingGym ? `<p>Venta de ${esc(centers.find(c => c.id === s.gymKey)?.name || 'otro centro')}. Puedes registrar aquí sus pagos. Las devoluciones de productos se gestionan en el centro de la venta.</p>` : ''}<p>Importe devuelto: ${euros(returned)} · Importe neto: ${euros(Number(s.totalAmount) - returned)}</p>${paymentInfo(s)}${returnInfo(s)}${(me.role === 'ADMIN' || Array.isArray(me.pagePermissions) ? canCancel : ['ADMIN', 'RECEPTION'].includes(me.role)) && s.status === 'COMPLETADA' && (!s.gymKey || s.gymKey === operatingGym) && s.lines.every(l => l.type !== 'SERVICIO') ? `<button data-return="${s.id}">Devolver productos</button>${canCancel ? `<button data-cancel="${s.id}">Anular venta</button>` : ''}` : ''}</article>`;
     }).join('') || '<p>No hay ventas para estos filtros.</p>';
   }
 
@@ -319,7 +320,8 @@
 
   try {
     me = await api('me');
-    if (!['ADMIN','RECEPTION'].includes(me.role)) throw Error('Tu perfil no permite consultar la caja.');
+    const canCash = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('caja.html') : ['ADMIN','RECEPTION'].includes(me.role));
+    if (!canCash) throw Error('Tu perfil no permite consultar la caja.');
     await refresh();
     await history();
     try {

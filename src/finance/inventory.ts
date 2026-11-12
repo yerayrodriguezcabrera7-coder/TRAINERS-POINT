@@ -371,6 +371,16 @@ export class Inventory {
 export function inventoryPermission(actor: Identity | undefined, action: string) {
   if (!actor)
     throw new ApiError(401, 'Inicia sesión.');
-  if (actor.role !== 'ADMIN' && !(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock'].includes(action)))
+  if (actor.role === 'ADMIN') return;
+  if (Array.isArray(actor.pagePermissions)) {
+    const perms = actor.pagePermissions;
+    const allowed = action === 'admin'
+      ? (perms.includes('productos.html') || perms.includes('caja.html'))
+      : ['read', 'sell', 'return', 'restock'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html'].some(p => perms.includes(p));
+    if (!allowed)
+      throw new ApiError(403, 'No tienes permiso para esta operación.');
+    return;
+  }
+  if (!(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock'].includes(action)))
     throw new ApiError(403, 'No tienes permiso para esta operación.');
 }

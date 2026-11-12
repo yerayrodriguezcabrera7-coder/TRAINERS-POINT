@@ -375,7 +375,8 @@ async function loadPurchaseHistory() {
     if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
-    if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
+    const canCashLink = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('caja.html') : ['ADMIN','RECEPTION'].includes(me.role));
+    if(canCashLink&&!document.querySelector('#profile-debt-card [data-payment-link]')){
       const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/caja.html?client='+encodeURIComponent(clientId)+'#sales-panel';link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }

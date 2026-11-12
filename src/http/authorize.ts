@@ -46,10 +46,21 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       sendError(response, 403, "Debes cambiar la contraseña antes de continuar.");
       return true;
     }
-    if (identity.role !== "ADMIN" && identity.pagePermissions) {
+    if (identity.role === "CLIENT") {
+      const isMeOrLogout = ["/api/client-calendar", "/api/client-slots", "/api/recoveries"].includes(url.pathname) || url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
+      if (!isMeOrLogout) {
+        sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
+        return true;
+      }
+    }
+    if (identity.role !== "ADMIN" && Array.isArray(identity.pagePermissions)) {
       const perms = identity.pagePermissions;
       if (url.pathname.startsWith("/api/clients") && !perms.includes("clientes")) {
         sendError(response, 403, "No tienes permiso para acceder a la gestión de clientes.");
+        return true;
+      }
+      if (url.pathname.startsWith("/api/service-packages") && !perms.includes("clientes") && !perms.includes("pendientes.html")) {
+        sendError(response, 403, "No tienes permiso para gestionar bonos de clientes.");
         return true;
       }
       if (url.pathname.startsWith("/api/services") && !perms.includes("servicios")) {
@@ -60,7 +71,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "No tienes permiso para acceder a la gestión de sedes.");
         return true;
       }
-      if (url.pathname.startsWith("/api/cash/") && !perms.includes("caja.html")) {
+      if (url.pathname.startsWith("/api/cash/") && !perms.includes("caja.html") && !perms.includes("tienda.html")) {
         sendError(response, 403, "No tienes permiso para acceder a la gestión de caja.");
         return true;
       }
@@ -74,32 +85,24 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       if (url.pathname==="/api/pending-packages" && !perms.includes("pendientes.html")) {
         sendError(response,403,"No tienes permiso para organizar sesiones pendientes.");return true;
       }
-    }
-    if (identity.role === "CLIENT") {
-      const isMeOrLogout = ["/api/client-calendar", "/api/client-slots", "/api/recoveries"].includes(url.pathname) || url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
-      if (!isMeOrLogout) {
-        sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
-        return true;
-      }
-    }
-    if (url.pathname.startsWith("/api/gyms")) {
-      if (identity.role !== "ADMIN" && !(["RECEPTION","TRAINER"].includes(identity.role) && request.method === "GET")) {
+    } else if (identity.role !== "ADMIN" && identity.role !== "CLIENT") {
+      if (url.pathname.startsWith("/api/gyms") && !(["RECEPTION","TRAINER"].includes(identity.role) && request.method === "GET")) {
         sendError(response, 403, "Solo administración puede gestionar sedes.");
         return true;
       }
-    }
-    if (identity.role === "TRAINER") {
-      if (url.pathname.startsWith("/api/services") && request.method !== "GET") {
-        sendError(response, 403, "Tu perfil no permite modificar servicios.");
-        return true;
-      }
-      if (url.pathname.startsWith("/api/clients") && request.method !== "GET" && !/^\/api\/clients\/[^/]+\/training-plans$/.test(url.pathname)) {
-        sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
-        return true;
-      }
-      if (url.pathname.startsWith("/api/service-packages") || /^\/api\/bookings\/[^/]+\/attendance$/.test(url.pathname)) {
-        sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
-        return true;
+      if (identity.role === "TRAINER") {
+        if (url.pathname.startsWith("/api/services") && request.method !== "GET") {
+          sendError(response, 403, "Tu perfil no permite modificar servicios.");
+          return true;
+        }
+        if (url.pathname.startsWith("/api/clients") && request.method !== "GET" && !/^\/api\/clients\/[^/]+\/training-plans$/.test(url.pathname)) {
+          sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
+          return true;
+        }
+        if (url.pathname.startsWith("/api/service-packages") || /^\/api\/bookings\/[^/]+\/attendance$/.test(url.pathname)) {
+          sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
+          return true;
+        }
       }
     }
     (request as any).identity = identity;

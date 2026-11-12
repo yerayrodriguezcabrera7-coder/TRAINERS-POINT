@@ -25,7 +25,7 @@
     ['Mis reservas','calendar','/mis-reservas.html'], ['Inicio','home','/inicio.html'],
     ['Calendario','calendar','/index.html'], ['Clientes','people','/clientes'], ['Gimnasios','globe','/gimnasios'], ['Servicios','list','/servicios'],
     ['Profesionales','staff','/profesionales'], ['Fichajes','clock','/fichajes.html'], ['Ausencias del equipo','history','/ausencias.html'], ['Recuperaciones','calendar','/recuperaciones.html'],
-    ['Turnos','calendar','/gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos de página','settings','/permisos-pagina.html'], ['Permisos','settings','/gestion.html?section=roles'], ['Tienda TPV','bag','/tienda.html'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
+    ['Turnos','calendar','/gestion.html?section=shifts'], ['Usuarios','people','/usuarios'], ['Permisos de página','settings','/permisos-pagina.html'], ['Tienda TPV','bag','/tienda.html'], ['Productos','bag','/productos.html'], ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Caja','cash','/caja.html'], ['Informes','report'], ['Cuadro de mando','chart'],
     ['Historial de eventos','history'], ['Configuración','settings','/configuracion.html'],
     ['Reserva web','globe'], ['App móvil','phone'], ['Notificaciones','bell'],
@@ -53,7 +53,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Día a día',['Mis reservas','Inicio','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Turnos','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos','Permisos de página','Configuración']]];
+  const groups=[['Día a día',['Mis reservas','Inicio','Calendario','Pendientes de asignación','Recuperaciones']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Equipo',['Profesionales','Turnos','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página','Configuración']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="inicio.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'<details class="menu-future"><summary title="Módulos en preparación"><span class="app-menu-label">En preparación</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.plus+'</svg></summary>'+items.filter(x=>!x[2]).map(entry).join('')+'</details></nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -152,9 +152,9 @@
         group.hidden = visibleItems.length === 0;
         if (group.hidden) group.style.display = 'none';
       });
-      if (me.role === 'TRAINER') {
+      if (allowed !== null && !allowed.includes('inicio.html')) {
         const brandLink = host.querySelector('.app-menu-brand');
-        if (brandLink) brandLink.href = '/index.html';
+        if (brandLink) brandLink.href = '/' + (allowed.includes('index.html') ? 'index.html' : (allowed[0] || 'index.html').replace(/^\//, ''));
       }
       if (me.role === 'CLIENT') {
         const nav = host.querySelector('#app-navigation');

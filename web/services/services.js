@@ -52,11 +52,13 @@
   async function loadServices() {
     try {
       const me = await api('me');
-      if (me.role === 'TRAINER' || me.role === 'CLIENT') {
+      const canView = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('servicios') : me.role === 'RECEPTION');
+      if (!canView) {
         location.replace('/index.html');
         return;
       }
-      if (me.role !== 'ADMIN') {
+      const canEdit = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) && me.pagePermissions.includes('servicios'));
+      if (!canEdit) {
         const createBtn = $('open-service-create');
         if (createBtn) createBtn.hidden = true;
       }
