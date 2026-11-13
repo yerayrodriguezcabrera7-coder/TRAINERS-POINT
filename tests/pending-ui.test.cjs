@@ -38,7 +38,7 @@ test('Pendientes: cuatro prioridades por cliente, lista completa, búsqueda y ag
  }finally{dom.window.close();}
 });
 
-test('Ficha: se conserva la información del centro de origen y desaparece el cambio de centro',()=>{
+test('Ficha: no aparece información ni formulario residual de centro en el resumen del cliente',()=>{
  const dom=new JSDOM(fs.readFileSync('web/clients/client-profile.html','utf8'));
- try{assert.ok(dom.window.document.getElementById('profile-gym'));assert.equal(dom.window.document.getElementById('profile-gym-form'),null);assert.equal(dom.window.document.getElementById('profile-gym-select'),null);}finally{dom.window.close();}
+ try{assert.equal(dom.window.document.getElementById('profile-gym'),null);assert.equal(dom.window.document.getElementById('profile-location'),null);assert.equal(dom.window.document.getElementById('profile-gym-form'),null);assert.equal(dom.window.document.getElementById('profile-gym-select'),null);}finally{dom.window.close();}
 });

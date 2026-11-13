@@ -23,7 +23,12 @@ form.addEventListener('submit', async event => {
     const identityResponse = await fetch('/api/me', { headers: { Authorization: 'Bearer ' + token, 'X-Calendar-Gym': gym } });
     const identity = await identityResponse.json();
     if (!identityResponse.ok) throw new Error(identity.error || 'No se pudo verificar la sesión.');
-    location.href = identity.role === 'CLIENT' ? 'mis-reservas.html' : identity.role === 'TRAINER' ? 'index.html' : 'inicio.html';
+    const defaultHome = identity.role === 'CLIENT'
+      ? 'mis-reservas.html'
+      : (identity.role !== 'ADMIN' && Array.isArray(identity.pagePermissions) && !identity.pagePermissions.includes('index.html'))
+        ? (identity.pagePermissions[0] || 'index.html').replace(/^\//, '')
+        : 'index.html';
+    location.href = defaultHome;
   } catch (e) {
     error.textContent = e.message || 'No se pudo cambiar la contraseña.';
     error.hidden = false;

@@ -72,10 +72,6 @@ function loadData() {
 }
 const serverMode = window.CALENDAR_SERVER === true;
 let adminToken = serverMode ? sessionStorage.getItem('calendar-user-token') || sessionStorage.getItem('calendar-admin-token') || window.CALENDAR_DEV_TOKEN || '' : '';
-$('mode-title').textContent = serverMode ? 'Servidor conectado' : 'Demostración local';
-$('mode-description').textContent = serverMode
-  ? 'Reservas y disponibilidad actualizadas para tu equipo.'
-  : 'Los cambios se guardan solo en este navegador.';
 const fromServer = b => ({...b,status:b.status.toLowerCase()});
 const toServer = b => ({...b,status:b.status.toUpperCase()});
 async function api(path,method='GET',body) {
@@ -209,7 +205,7 @@ function debtBadge(b){const amount=upcomingDebt(b);if(b.paymentDue&&amount<=0&&[
 function updateDebtDetail(){
  const box=$('booking-debt');if(!box)return;
  const id=$('booking-client').value,amount=Number(data.clientDebts?.[id]||0);
- box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/ventas.html?client=${encodeURIComponent(id)}">Consultar deudas y registrar un pago ↗</a>`:'';
+ box.hidden=!(amount>0);box.innerHTML=amount>0?`<strong>Pago pendiente · ${escapeHTML(debtMoney(amount))}</strong><p>Saldo pendiente de productos y bonos del cliente. Este aviso no bloquea la reserva.</p><a href="/caja.html?client=${encodeURIComponent(id)}#sales-panel">Consultar deudas y registrar un pago ↗</a>`:'';
 }
 function upcomingRenewal(b){return ['pending','confirmed'].includes(b.status)?(data.clientPackageAlerts?.[b.clientId]||null):null;}
 function renewalBadge(b){const alert=upcomingRenewal(b);if(!alert||!alert.needsRenewal)return '';return `<span class="booking-renewal-badge" title="${escapeHTML(alert.message)}">🔄 ${escapeHTML(alert.message)}</span>`;}
@@ -471,10 +467,6 @@ function render(updatePeriodTitle = false) {
   const reschedules=data.bookings.filter(b=>b.needsReschedule);
   $('planning-alerts').innerHTML=serverMode&&currentUser?.role!=='TRAINER'?`<a href="pendientes.html?tipo=asignacion" ${queues.length?'':'hidden'}>${queues.length} reservas pendientes de asignación →</a><a href="pendientes.html?tipo=reprogramacion" ${reschedules.length?'':'hidden'}>${reschedules.length} reservas pendientes de reprogramación →</a>`:'';
   $('period-label').textContent = titleForPeriod(dates);
-  $('stat-total').textContent=bookings.length;
-  $('stat-confirmed').textContent=bookings.filter(b=>b.status==='confirmed').length;
-  $('stat-pending').textContent=bookings.filter(b=>b.status==='pending').length;
-  $('stat-team').textContent=employees.filter(e=>e.id!=='__unassigned').length;
   $('result-count').textContent=bookings.length+' reservas';
   $('clear-filters').hidden=['employee','service'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
@@ -606,20 +598,7 @@ function syncDualClientPicker(selectedPkgId = null) {
   syncDualPanel();
   loadDualClientPackages(selectedPkgId);
 }
-function updateHoursHint() {
-  loadAvailableSlots();
-  const date = $('booking-date').value;
-  if(!$('booking-employee').value){$('booking-hours').textContent='Pendiente de asignación: se guarda sin confirmar. La disponibilidad se comprobará al asignar un trabajador.';return;}
-  if (!C.validDate(date)) { $('booking-hours').textContent = ''; return; }
-  const hours = C.hoursFor(date, data.schedule);
-  if ($('booking-employee').value === COBOSU_ID) {
-    $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : `Columna Cobosu. Apertura: ${hours.open} – ${hours.close}.`;
-    return;
-  }
-  const employee=lookup('employees',$('booking-employee').value);
-  const periods=employee?C.employeePeriods(employee,date,data.schedule):[];
-  $('booking-hours').textContent = hours.closed ? 'El centro está cerrado este día.' : !periods.length ? 'Este empleado no trabaja este día.' : `Apertura: ${hours.open} – ${hours.close}. Turno: ${periods.map(p=>p.open+'–'+p.close).join(' y ')}. La reserva completa debe caber en una franja.`;
-}
+
 function showBooking(id, date = state.date, minute, employeeId) {
   if (currentUser?.role === 'TRAINER' && !id) return;
   if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
@@ -651,7 +630,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const duration = service.duration || 60;
   const defaultEmp = (sunday || employeeId === '__unassigned') ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee));
   const values = b || {clientId:'',employeeId:defaultEmp,serviceId:service.id,date,start:C.timeLabel(start),end:C.timeLabel(sunday ? Math.min(start+duration, 1410) : Math.min(start+duration,C.minutes(hours.close))),status:defaultEmp ? 'confirmed' : 'pending',notes:''};
-  for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',date:'date',start:'start',end:'end',status:'status',notes:'notes'})) $('booking-'+field).value = values[key] || '';
+  for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',date:'date',start:'start',end:'end',status:'status'})) $('booking-'+field).value = values[key] || '';
   if ($('no-package-service')) $('no-package-service').value = values.serviceId || '';
   if ($('dual-booking-client')) $('dual-booking-client').value = partner?.clientId || '';
   const defaultDualMode = document.querySelector('input[name="dual-pkg-mode"][value="none"]');
@@ -708,22 +687,13 @@ function showBooking(id, date = state.date, minute, employeeId) {
   });
 
   $('reschedule-booking').hidden=isTrainer||!b||!['pending','confirmed'].includes(b.status);
+  if ($('defer-booking')) $('defer-booking').hidden = !serverMode || !b || b.status !== 'confirmed' || Boolean(b.recoveryId) || !['ADMIN', 'TRAINER'].includes(currentUser?.role);
   $('worker-complete').hidden=!isTrainer||b?.status!=='confirmed';
   $('worker-incident').hidden=!isTrainer||!b;
-  updateClientFields(); updateHoursHint(); syncDualPanel();
+  updateClientFields(); syncDualPanel();
   $('booking-dialog').showModal();
   if (!b) setTimeout(() => $('client-search')?.focus(), 60);
 }
-let slotsRequest=0;
-async function loadAvailableSlots(){
- if(!serverMode)return;
- const query={date:$('booking-date').value,serviceId:$('booking-service').value,employeeId:$('booking-employee').value,centerId:currentGymId()};
- const select=$('booking-available-slot'),request=++slotsRequest;
- if(!query.employeeId||!C.validDate(query.date)){select.innerHTML='<option value="">Selecciona trabajador, servicio y fecha</option>';return;}
- if(state.editing)query.excludeId=state.editing;
- try{const slots=await api('slots?'+new URLSearchParams(query));if(request!==slotsRequest)return;const list=Array.isArray(slots)?slots:[];select.innerHTML='<option value="">'+(list.length?'Elige un horario libre ('+list.length+' opciones)':'No hay horarios libres con estos filtros')+'</option>'+list.map(s=>`<option value="${escapeHTML(s.start)}">${escapeHTML(s.start)} – ${escapeHTML(s.end)}</option>`).join('');}catch(e){if(request===slotsRequest)select.innerHTML='<option value="">No se pudo consultar la disponibilidad. Se comprobará al guardar.</option>';}
-}
-$('booking-available-slot').onchange=()=>{if(!$('booking-available-slot').value)return;$('booking-start').value=$('booking-available-slot').value;$('booking-start').dispatchEvent(new Event('change'));};
 function syncNoPackageServiceWrap() {
   const wrap = $('no-package-service-wrap');
   if (!wrap) return;
@@ -834,8 +804,7 @@ async function loadClientPackages(selected=null){
   if (panel) panel.hidden = false;
   if ($('booking-package-message')) $('booking-package-message').hidden = false;
   const clientId=$('booking-client').value,request=++packageRequest;state.packagesClientId=clientId;clientPackages=[];newPendingPackageId=null;pendingPackageKey=uid();
-  state.packagesBrand=null;$('create-pending-package').hidden=true;
-  $('package-create-result').textContent='';
+  state.packagesBrand=null;
   if(!clientId){
     packageBusy=false;
     $('booking-package-message').textContent='Selecciona primero un cliente para consultar sus bonos o elige el tipo de sesión:';
@@ -965,18 +934,7 @@ function renderPackages(selected){
 $('booking-package').onchange=()=>{
   const p=clientPackages.find(p=>p.id===$('booking-package').value);
   if(p?.service?.id) syncSelectedService(p.service.id);
-  renderPackages();updateHoursHint();
-};
-
-$('create-pending-package').onclick=async()=>{
- const button=$('create-pending-package'),service=lookup('services',$('booking-service').value),clientId=$('booking-client').value;
- if(packageBusy||!clientId||clientId==='new')return;
- if(state.packagesBrand==='COBOSU'||awsClients.find(c=>c.id===clientId)?.brand==='COBOSU')return;
- button.disabled=true;packageBusy=true;
- try{
-  const result=await api('clients/'+encodeURIComponent(clientId)+'/service-packages','POST',{requestKey:pendingPackageKey,serviceId:service.id,sessionsBought:service.trainingCount||1,totalAmount:service.price||0,paymentMethod:'OTRO',paymentStatus:'PENDIENTE',notes:'Creado desde el calendario. Pendiente de cobro.'});
-  const history=await api('clients/'+encodeURIComponent(clientId)+'/service-history');if($('booking-client').value!==clientId)return;clientPackages=history.packages||[];newPendingPackageId=result.servicePackage.id;renderPackages(newPendingPackageId);$('package-create-result').textContent='Bono pendiente guardado en la ficha. Ahora confirma la reserva.';
- }catch(e){$('package-create-result').textContent=e.message;}finally{button.disabled=false;packageBusy=false;}
+  renderPackages();
 };
 
 if ($('toggle-buy-package-btn')) {
@@ -1014,13 +972,11 @@ document.querySelectorAll('input[name="buy-pkg-mode"]').forEach(radio => {
 if ($('buy-package-service')) {
   $('buy-package-service').onchange = () => {
     syncSelectedService($('buy-package-service').value, { updateBuySelect: false });
-    updateHoursHint();
   };
 }
 if ($('no-package-service')) {
   $('no-package-service').onchange = () => {
     syncSelectedService($('no-package-service').value);
-    updateHoursHint();
   };
 }
 
@@ -1136,7 +1092,7 @@ $('booking-form').addEventListener('submit', async event => {
   if(packageBusy){formError('booking-error','Espera a que termine la consulta de bonos del cliente.');return;}
   if(dualPackageBusy){formError('booking-error','Espera a que termine la consulta de bonos de la 2ª persona.');return;}
   if (clientId === 'new' && !$('client-name').value.trim()) { formError('booking-error','Escribe el nombre del cliente.'); return; }
-  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:state.editingSnapshot?.roomId || data.rooms?.[0]?.id || 'r1',date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:$('booking-notes').value.trim()};
+  const booking = {id:state.editing || uid(),clientId:clientId === 'new' ? uid() : clientId,employeeId:$('booking-employee').value||null,centerId:currentGymId(),serviceId:$('booking-service').value,roomId:state.editingSnapshot?.roomId || data.rooms?.[0]?.id || 'r1',date:$('booking-date').value,start:$('booking-start').value,end:$('booking-end').value,status:$('booking-status').value,notes:state.editingSnapshot?.notes || ''};
   const initialDualSelected = isDualService(booking.serviceId);
   const requestedDualClientId = initialDualSelected ? ($('dual-booking-client')?.value || '') : '';
   const partner = state.editingPartnerSnapshot;
@@ -1309,7 +1265,6 @@ $('booking-service').addEventListener('change', () => {
   syncSelectedService(service.id);
   renderPackages();
 });
-$('booking-employee').addEventListener('change',updateHoursHint);
 if ($('unassign-booking')) {
   $('unassign-booking').addEventListener('click', async () => {
     if (!state.editingSnapshot) return;
@@ -1345,6 +1300,30 @@ $('reschedule-booking').onclick=async()=>{
   if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
   try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
 };
+if ($('defer-booking')) {
+  $('defer-booking').onclick = async () => {
+    if (!state.editingSnapshot || !confirm('¿Dejar esta sesión pendiente de recuperar? Se liberará el hueco y se generará un crédito de recuperación.')) return;
+    try {
+      await api('bookings/' + encodeURIComponent(state.editing) + '/defer', 'POST', {});
+      $('booking-dialog').close();
+      await refreshServer(true);
+      toast('Sesión dejada pendiente de recuperación.');
+    } catch (err) {
+      if (currentUser?.role === 'ADMIN' && err.message.includes('dos horas') && confirm('El aviso llega con menos de dos horas. ¿Autorizar una excepción?')) {
+        try {
+          await api('bookings/' + encodeURIComponent(state.editing) + '/defer', 'POST', { exception: true });
+          $('booking-dialog').close();
+          await refreshServer(true);
+          toast('Sesión dejada pendiente de recuperación.');
+        } catch (x) {
+          formError('booking-error', x.message);
+        }
+      } else {
+        formError('booking-error', err.message);
+      }
+    }
+  };
+}
 async function offerBookingPayment(id) {
   try { await window.TrainersPoint.collectBookingPayment(id, async () => { await refreshServer(true); toast('Cobro registrado. El saldo y Caja se han actualizado.'); }); }
   catch (error) { warn('La asistencia está guardada. No se pudo abrir el cobro: ' + error.message); }
@@ -1356,7 +1335,6 @@ async function workerAction(action){
   try{const completed = await api('bookings/'+encodeURIComponent(state.editing)+'/worker-action','POST',{action,message,version:state.editingVersion});$('booking-dialog').close();await refreshServer(true);toast(action==='COMPLETE'?(completed.paymentDue?'Sesión realizada. Pago pendiente: avisa a recepción para registrar el cobro.':'Sesión realizada.'):'Incidencia comunicada a recepción.');}catch(e){formError('booking-error',e.message);}
 }
 $('worker-complete').onclick=()=>workerAction('COMPLETE');$('worker-incident').onclick=()=>workerAction('INCIDENT');
-$('booking-date').addEventListener('change', updateHoursHint);
 $('booking-start').addEventListener('change', () => {
   const service = lookup('services', $('booking-service').value);
   if (service.duration && $('booking-start').value) {

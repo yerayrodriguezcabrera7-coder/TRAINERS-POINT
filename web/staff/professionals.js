@@ -258,9 +258,11 @@
     });
   }
 
+  const canProfessionals = () => Boolean(manageData && (manageData.role === 'ADMIN' || (Array.isArray(manageData.pagePermissions) ? manageData.pagePermissions.includes('profesionales') : manageData.role === 'RECEPTION')));
+
   function openEditor(emp) {
-    if (!manageData || (manageData.role !== 'ADMIN' && manageData.role !== 'RECEPTION')) {
-      showToast('Solo administración y recepción pueden gestionar los profesionales.', true);
+    if (!canProfessionals()) {
+      showToast('No tienes permiso para gestionar los profesionales.', true);
       return;
     }
     editingEmployee = emp || null;
@@ -333,7 +335,7 @@
 
     try {
       manageData = await api('manage');
-      if (manageData.role !== 'ADMIN' && manageData.role !== 'RECEPTION') {
+      if (!canProfessionals()) {
         location.replace('/index.html');
         return;
       }
@@ -453,7 +455,7 @@
       errorEl.hidden = true;
       errorEl.textContent = '';
 
-      if (!manageData || (manageData.role !== 'ADMIN' && manageData.role !== 'RECEPTION')) {
+      if (!canProfessionals()) {
         errorEl.textContent = 'No tienes permisos para guardar cambios.';
         errorEl.hidden = false;
         return;

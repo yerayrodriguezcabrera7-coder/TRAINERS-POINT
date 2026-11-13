@@ -20,9 +20,14 @@ document.getElementById('login-form').addEventListener('submit', async event => 
     const safeReturnTo = returnTo && /^\/clientes\/[0-9a-f-]+\/ficha(?:\?.*)?$/i.test(returnTo)
       ? returnTo
       : '';
+    const defaultHome = result.role === 'CLIENT'
+      ? 'mis-reservas.html'
+      : (result.role !== 'ADMIN' && Array.isArray(result.pagePermissions) && !result.pagePermissions.includes('index.html'))
+        ? (result.pagePermissions[0] || 'index.html').replace(/^\//, '')
+        : 'index.html';
     location.href = result.mustChangePassword
       ? 'change-password.html'
-      : safeReturnTo || (result.role === 'CLIENT' ? 'mis-reservas.html' : result.role === 'TRAINER' ? 'index.html' : 'inicio.html');
+      : safeReturnTo || defaultHome;
   } catch (e) {
     error.replaceChildren(document.createTextNode(e.message || 'No se pudo conectar.'));
     if (e.message?.includes('otro acceso')) {

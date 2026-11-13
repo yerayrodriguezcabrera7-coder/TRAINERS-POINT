@@ -4,16 +4,13 @@
   const esc = str => String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const PAGES = [
-    { key: 'inicio.html', label: 'Inicio' },
     { key: 'index.html', label: 'Calendario' },
     { key: 'pendientes.html', label: 'Pendientes de asignación' },
-    { key: 'recuperaciones.html', label: 'Recuperaciones' },
     { key: 'clientes', label: 'Clientes' },
     { key: 'servicios', label: 'Servicios' },
     { key: 'profesionales', label: 'Profesionales' },
     { key: 'fichajes.html', label: 'Fichajes' },
     { key: 'ausencias.html', label: 'Ausencias del equipo' },
-    { key: 'gestion.html?section=shifts', label: 'Turnos' },
     { key: 'usuarios', label: 'Usuarios' },
     { key: 'permisos-pagina.html', label: 'Permisos de página' },
     { key: 'tienda.html', label: 'Tienda TPV' },
@@ -23,8 +20,8 @@
     { key: 'cuadro-mando.html', label: 'Cuadro de mando' },
     { key: 'informes.html', label: 'Informes y exportación' },
     { key: 'historial-eventos.html', label: 'Historial de eventos' },
+    { key: 'caja.html', label: 'Caja y ventas' },
     { key: 'gimnasios', label: 'Gimnasios / Sedes' },
-    { key: 'configuracion.html', label: 'Configuración' },
     { key: 'mis-reservas.html', label: 'Mis reservas (clientes)' },
   ];
 
@@ -38,31 +35,31 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'ventas.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
-    TRAINER: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
-    CLIENT: ['mis-reservas.html', 'configuracion.html'],
+    RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+    TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+    CLIENT: ['mis-reservas.html'],
   };
 
   const PRESETS = [
     {
       id: 'trainer_std',
       label: 'Entrenador estándar',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     },
     {
       id: 'trainer_sales',
       label: 'Entrenador + Ventas/Caja',
-      pages: ['configuracion.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html', 'productos.html', 'caja.html'],
+      pages: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html', 'tienda.html', 'productos.html', 'caja.html'],
     },
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['configuracion.html', 'caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'ventas.html', 'inicio.html', 'index.html', 'clientes', 'gestion.html?section=services', 'fichajes.html', 'ausencias.html', 'recuperaciones.html', 'gestion.html?section=shifts', 'tienda.html'],
+      pages: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     },
     {
       id: 'clock_only',
-      label: 'Solo fichaje y turnos',
-      pages: ['fichajes.html', 'ausencias.html', 'gestion.html?section=shifts', 'configuracion.html'],
+      label: 'Solo fichaje y ausencias',
+      pages: ['fichajes.html', 'ausencias.html'],
     },
   ];
 
@@ -411,7 +408,8 @@
     $('perms-list').innerHTML = '<p class="list-message">Cargando usuarios…</p>';
     try {
       manageData = await api('manage');
-      if (manageData.role !== 'ADMIN') { location.replace('/index.html'); return; }
+      const canManagePerms = manageData.role === 'ADMIN' || (Array.isArray(manageData.pagePermissions) && manageData.pagePermissions.includes('permisos-pagina.html'));
+      if (!canManagePerms) { location.replace('/index.html'); return; }
       renderList();
 
       // Si viene ?userId=... en la URL, enfocar y abrir ese usuario automáticamente

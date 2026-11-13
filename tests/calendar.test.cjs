@@ -394,6 +394,9 @@ test('Panel: guarda en servidor y recibe reservas públicas por polling sin reca
       w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
     }});
     const w=dom.window,d=w.document;
+    await until(()=>d.getElementById('employee-filter').options.length===4);
+    assert.equal(d.getElementById('mode-banner'), null);
+    assert.equal(d.querySelector('.stats'), null);
     await until(()=>d.getElementById('employee-filter').options.length===5);
     assert.equal(d.getElementById('mode-title').textContent,'Servidor conectado');
     const jump=d.getElementById('jump-date');jump.value='2030-10-22';jump.dispatchEvent(new w.Event('change'));

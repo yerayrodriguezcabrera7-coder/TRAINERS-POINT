@@ -169,8 +169,6 @@ function renderHeader(client) {
   document.querySelector("#profile-status").textContent = { LEAD: "Nuevo interesado", ACTIVO: "Activo", INACTIVO: "Inactivo", BAJA: "Baja" }[client.status] || "Cliente";
   document.querySelector("#profile-email").textContent = client.email || "Sin email";
   document.querySelector("#profile-phone").textContent = client.phone || "Sin teléfono";
-  document.querySelector("#profile-gym").textContent = client.gym?.name || "Sin centro";
-  document.querySelector("#profile-location").textContent = [client.gym?.city, client.gym?.province].filter(Boolean).join(", ") || "Sin ubicación";
   objectiveInput.value = client.objective || "";
   document.querySelector("#profile-objective-preview").textContent = client.objective || "Sin objetivo definido";
 }
@@ -312,7 +310,7 @@ function renderPurchaseHistory(data) {
     if(pkg.sale){const balance=document.createElement('p');balance.textContent=`Cobrado: ${currencyText(pkg.sale.paidAmount)} · Pendiente: ${currencyText(pkg.sale.outstandingAmount)}`;footer.append(balance);}
     if(currentUserRole!=='TRAINER'&&pkg.paymentStatus!=='PAGADO'){
       const pay=document.createElement('button');pay.type='button';pay.className='profile-secondary-button';pay.textContent='Registrar pago del bono';
-      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/ventas.html?client='+encodeURIComponent(clientId);}catch(error){showProfileToast(error.message);pay.disabled=false;}};
+      pay.onclick=async()=>{pay.disabled=true;try{const r=await fetch('/api/service-packages/'+encodeURIComponent(pkg.id)+'/billing',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const result=await r.json();if(!r.ok)throw Error(result.error||'No se pudo abrir el cobro.');window.location.href='/caja.html?client='+encodeURIComponent(clientId)+'#sales-panel';}catch(error){showProfileToast(error.message);pay.disabled=false;}};
       footer.append(pay);
     }
     card.append(header, progressWrap, footer);
@@ -375,8 +373,9 @@ async function loadPurchaseHistory() {
     if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial.");
     renderPurchaseHistory(data);
     const me=await (await fetch('/api/me')).json();
-    if(['ADMIN','RECEPTION'].includes(me.role)&&!document.querySelector('#profile-debt-card [data-payment-link]')){
-      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/ventas.html?client='+encodeURIComponent(clientId);link.textContent='Consultar ventas y registrar pagos ↗';
+    const canCashLink = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('caja.html') : ['ADMIN','RECEPTION'].includes(me.role));
+    if(canCashLink&&!document.querySelector('#profile-debt-card [data-payment-link]')){
+      const link=document.createElement('a');link.dataset.paymentLink='true';link.href='/caja.html?client='+encodeURIComponent(clientId)+'#sales-panel';link.textContent='Consultar ventas y registrar pagos ↗';
       document.querySelector('#profile-debt-card').append(link);
     }
     renderBookingHistory(data.bookings);

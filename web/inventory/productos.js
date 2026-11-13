@@ -1,6 +1,6 @@
 (async () => {
   'use strict';
-  if (new URLSearchParams(location.search).has('client')) { location.replace('/ventas.html'+location.search); return; }
+  if (new URLSearchParams(location.search).has('client')) { location.replace('/caja.html'+location.search+'#sales-panel'); return; }
   const $=id=>document.getElementById(id), form=$('product-form');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const eur=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));
@@ -22,7 +22,7 @@
   function render() {
     const q=$('search').value.trim().toLocaleLowerCase('es');
     $('products').innerHTML=products.filter(p=>[p.name,p.description,p.barcode,p.sku].join(' ').toLocaleLowerCase('es').includes(q)).map(p=>
-      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${me.role==='ADMIN'&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con esta búsqueda.</td></tr>';
+      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${(me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html')))&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con esta búsqueda.</td></tr>';
     const count=products.filter(p=>p.isActive&&p.trackStock!==false&&p.stock===0).length;
     $('stats').innerHTML=`<article><span>Sin stock</span><strong>${count}</strong><small>Productos activos con seguimiento de stock</small></article>`;
   }
@@ -77,6 +77,9 @@
   $('search').oninput=render;$('refresh').onclick=()=>load().catch(error=>$('notice').textContent=error.message);
   try{
     const response=await fetch('/api/me');if(!response.ok)throw Error('Inicia sesión para consultar los productos.');me=await response.json();
-    if(!['ADMIN','RECEPTION'].includes(me.role))throw Error('Tu perfil no permite acceder a productos.');$('new-product').hidden=me.role!=='ADMIN';await load();
+    const canProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)?me.pagePermissions.includes('productos.html'):['ADMIN','RECEPTION'].includes(me.role));
+    if(!canProducts)throw Error('Tu perfil no permite acceder a productos.');
+    const canEditProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html'));
+    $('new-product').hidden=!canEditProducts;await load();
   }catch(error){$('notice').textContent=error.message;}
 })();
