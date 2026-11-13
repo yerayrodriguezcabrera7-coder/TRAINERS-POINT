@@ -15,12 +15,10 @@
     { key: 'permisos-pagina.html', label: 'Permisos de página' },
     { key: 'tienda.html', label: 'Tienda TPV' },
     { key: 'productos.html', label: 'Productos' },
-    { key: 'ventas.html', label: 'Ventas y cobros' },
-    { key: 'caja.html', label: 'Caja' },
+    { key: 'caja.html', label: 'Caja y ventas' },
     { key: 'cuadro-mando.html', label: 'Cuadro de mando' },
     { key: 'informes.html', label: 'Informes y exportación' },
     { key: 'historial-eventos.html', label: 'Historial de eventos' },
-    { key: 'caja.html', label: 'Caja y ventas' },
     { key: 'gimnasios', label: 'Gimnasios / Sedes' },
     { key: 'mis-reservas.html', label: 'Mis reservas (clientes)' },
   ];

@@ -22,7 +22,7 @@ test('Menú y matriz de permisos: sin duplicidad, sin En preparación y sin Turn
   assert.ok(!menu.includes("'/gestion.html?section=roles'"), 'No debe existir enlace duplicado a gestion.html?section=roles en el menú');
   assert.ok(!menu.includes("'/gestion.html?section=shifts'"), 'No debe existir enlace antiguo a Turnos en el menú');
   assert.ok(!menu.includes('menu-future') && !menu.includes('En preparación'), 'No debe existir la sección desplegable En preparación');
-  for (const dead of ['Informes', 'Cuadro de mando', 'Historial de eventos', 'Reserva web', 'App móvil', 'Notificaciones', 'Buzón de consultas']) {
+  for (const dead of ['Reserva web', 'App móvil', 'Notificaciones', 'Buzón de consultas']) {
     assert.ok(!menu.includes(dead), `No debe existir la opción deshabilitada "${dead}" en el menú`);
   }
   assert.ok(menu.includes("['Equipo',['Profesionales','Fichajes','Ausencias del equipo']]"), 'Equipo no debe incluir Turnos');

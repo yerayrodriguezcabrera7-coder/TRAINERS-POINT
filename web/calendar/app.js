@@ -1109,17 +1109,6 @@ $('booking-form').addEventListener('submit', async event => {
     try {
       // Purchases and receipts require the explicit buy buttons; saving a booking alone never buys a bono.
       booking.packageId = $('booking-package').value || null;
-      const buyCard = $('buy-package-card');
-      const mode = document.querySelector('input[name="buy-pkg-mode"]:checked')?.value || 'now';
-      if (buyCard && !buyCard.hidden && !$('booking-package').value && clientId !== 'new' && (mode === 'now' || mode === 'later')) {
-        const pkg = await handleBuyPackage(mode === 'now');
-        if (pkg?.id) {
-          booking.packageId = pkg.id;
-          booking.serviceId = $('buy-package-service').value;
-        }
-      } else {
-        booking.packageId = $('booking-package').value || null;
-      }
       const dualSelected = isDualService(booking.serviceId);
       const dualClientId = dualSelected ? ($('dual-booking-client')?.value || '') : '';
       if (dualClientId && clientId !== 'new' && dualClientId === clientId) {
