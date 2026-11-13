@@ -279,7 +279,7 @@ export function assertAvailable(b: Booking, all: Booking[], c: Config) {
       (o) => Boolean(b.employeeId) && o.employeeId === b.employeeId,
     );
     if (resources.some((o) => !same(o)))
-      throw new ApiError(409, "Entrenador ya ocupado.");
+      throw new ApiError(409, "Uno o varios recursos ya están ocupados.");
     if (resources.length >= capacity) throw new ApiError(409, "Aforo completo.");
   }
 

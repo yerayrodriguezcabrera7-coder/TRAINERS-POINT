@@ -5,6 +5,7 @@ import type { Identity } from '../calendar/access';
 import { ApiError } from '../calendar/model';
 import { cents } from './money';
 import { financeTransaction } from './transaction';
+import { recordAudit } from '../audit/log';
 const amount = z.number().min(0).max(1000000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const openInput = z.object({ requestKey: z.string().uuid(), openingAmount: amount });
 const movementInput = z.object({ requestKey: z.string().uuid(), direction: z.enum(['IN', 'OUT']), category: z.enum(['CHANGE', 'WITHDRAWAL', 'OTHER']), amount: amount.refine(v => v > 0), reason: z.string().trim().min(3).max(1000) });
@@ -83,6 +84,7 @@ export class CashRegister {
       if (await tx.cashSession.findFirst({ where: { gymKey: gym, closedAt: null } }))
         throw new ApiError(409, 'Ya hay una caja abierta en este centro.');
       const session = await tx.cashSession.create({ data: { gymKey: gym, requestKey: v.requestKey, businessDate: DateTime.now().setZone('Europe/Madrid').toISODate()!, openingAmount: v.openingAmount, openedBy: actor.id, openedByName: actor.name } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'CASH_OPENED', entityType: 'CashSession', entityId: session.id, requestKey: v.requestKey, detail: `Caja abierta con ${v.openingAmount.toFixed(2)} € de efectivo inicial.` });
       return { ...session, summary: await this.summary(tx, session) };
     });
   }
@@ -104,6 +106,7 @@ export class CashRegister {
         throw new ApiError(409, 'La caja ya está cerrada.');
       const movement = await tx.cashMovement.create({ data: { ...v, sessionId: id, actorId: actor.id, actorName: actor.name } });
       await tx.cashSession.update({ where: { id }, data: { revision: { increment: 1 } } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'CASH_MOVEMENT', entityType: 'CashMovement', entityId: movement.id, requestKey: v.requestKey, detail: `${v.direction === 'IN' ? 'Entrada' : 'Salida'} de ${v.amount.toFixed(2)} €. ${v.reason}`, metadata: { direction: v.direction, category: v.category, amount: v.amount, sessionId: id } });
       return movement;
     });
   }
@@ -121,7 +124,9 @@ export class CashRegister {
       if (session.revision !== v.revision)
         throw new ApiError(409, 'Hay operaciones nuevas desde el recuento. Actualiza el importe esperado y revisa el efectivo antes de cerrar.');
       const summary = await this.summary(tx, session);
-      return tx.cashSession.update({ where: { id }, data: { closedAt: new Date(), closedBy: actor.id, closedByName: actor.name, countedAmount: v.countedAmount, expectedAmount: summary.expectedCash, difference: (cents(v.countedAmount) - cents(summary.expectedCash)) / 100, closingNote: v.note, closeRequestKey: v.requestKey, revision: { increment: 1 }, summary: JSON.parse(JSON.stringify(summary)) } });
+      const closed = await tx.cashSession.update({ where: { id }, data: { closedAt: new Date(), closedBy: actor.id, closedByName: actor.name, countedAmount: v.countedAmount, expectedAmount: summary.expectedCash, difference: (cents(v.countedAmount) - cents(summary.expectedCash)) / 100, closingNote: v.note, closeRequestKey: v.requestKey, revision: { increment: 1 }, summary: JSON.parse(JSON.stringify(summary)) } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'CASH_CLOSED', entityType: 'CashSession', entityId: id, requestKey: v.requestKey, detail: `Caja cerrada: esperado ${summary.expectedCash.toFixed(2)} €, contado ${v.countedAmount.toFixed(2)} €, diferencia ${Number(closed.difference).toFixed(2)} €.`, metadata: { expected: summary.expectedCash, counted: v.countedAmount, difference: Number(closed.difference), note: v.note } });
+      return closed;
     });
   }
   async detail(gym: string, id: string) {

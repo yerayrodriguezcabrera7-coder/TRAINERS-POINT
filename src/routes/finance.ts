@@ -62,21 +62,21 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
       else if (product && request.method === 'GET' && !product[1])
         sendJson(response, 200, { products: await inventory.products(gym) });
       else if (product && request.method === 'POST' && !product[1])
-        sendJson(response, 201, await inventory.saveProduct(gym, await readJsonBody(request)));
+        sendJson(response, 201, await inventory.saveProduct(gym, await readJsonBody(request), undefined, actor!));
       else if (product && request.method === 'PUT' && product[1])
-        sendJson(response, 200, await inventory.saveProduct(gym, await readJsonBody(request), product[1]));
+        sendJson(response, 200, await inventory.saveProduct(gym, await readJsonBody(request), product[1], actor!));
       else if (product && request.method === 'DELETE' && product[1])
-        sendJson(response, 200, await inventory.removeProduct(gym, product[1]));
+        sendJson(response, 200, await inventory.removeProduct(gym, product[1], actor!));
       else if (url.pathname === '/api/inventory/sales' && request.method === 'GET')
         sendJson(response, 200, await inventory.salesPage(gym, url.searchParams));
       else if (url.pathname === '/api/inventory/sales' && request.method === 'POST')
-        sendJson(response, 201, await inventory.sell(gym, actor!.id, await readJsonBody(request)));
+        sendJson(response, 201, await inventory.sell(gym, actor!, await readJsonBody(request)));
       else if (payment && request.method === 'POST')
-        sendJson(response, 200, await inventory.pay(gym, actor!.id, payment[1], await readJsonBody(request)));
+        sendJson(response, 200, await inventory.pay(gym, actor!, payment[1], await readJsonBody(request)));
       else if (receiptAction && request.method === 'POST')
-        sendJson(response, 200, await (receiptAction[2] === 'refunds' ? inventory.refund(gym, actor!.id, receiptAction[1], await readJsonBody(request)) : inventory.verifyPaid(gym, actor!.id, receiptAction[1], await readJsonBody(request))));
+        sendJson(response, 200, await (receiptAction[2] === 'refunds' ? inventory.refund(gym, actor!, receiptAction[1], await readJsonBody(request)) : inventory.verifyPaid(gym, actor!, receiptAction[1], await readJsonBody(request))));
       else if (reversal && request.method === 'POST')
-        sendJson(response, 200, await inventory.reverse(gym, reversal[1], reversal[2] === 'cancel' ? {} : await readJsonBody(request), reversal[2] === 'cancel', actor!.id));
+        sendJson(response, 200, await inventory.reverse(gym, reversal[1], reversal[2] === 'cancel' ? {} : await readJsonBody(request), reversal[2] === 'cancel', actor!));
       else
         sendError(response, 404, "Operación desconocida.");
     }

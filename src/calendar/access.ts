@@ -114,6 +114,11 @@ ALTER TABLE calendar.users ADD COLUMN IF NOT EXISTS permissions_audit jsonb;`;
 
 export class Access {
   constructor(private pool: Pool, private clientsDb?: PrismaClient) {}
+  private async audit(db: { query: (sql: string, values?: unknown[]) => Promise<any> }, gym: string, actor: { id: string; name?: string; username?: string; role?: string }, action: string, entityId: string, detail: string, metadata: Record<string, unknown> = {}) {
+    if (!this.clientsDb) return;
+    await db.query(`INSERT INTO "AuditLog" (id,"actorId",action,"entityType","entityId",metadata,"occurredAt") VALUES($1::uuid,NULL,$2,'User',$3,$4::jsonb,now())`,
+      [randomUUID(), action, entityId, JSON.stringify({ gymKey: gym, actorId: actor.id, actorName: actor.name || actor.username || actor.id, actorRole: actor.role || 'SYSTEM', detail, ...metadata })]);
+  }
   async needsSetup(gym: string) {
     return !(await this.pool.query("SELECT 1 FROM calendar.users WHERE $1::text IS NOT NULL AND role<>'CLIENT' LIMIT 1",[gym])).rows.length;
   }
@@ -316,6 +321,7 @@ export class Access {
       if(!user || (user.role==='CLIENT' && !await this.clientAllowed(gym,user)))throw new ApiError(404,'Usuario no encontrado.');
       const auditEntry={changedBy:actor.name||actor.username||'Administrador',changedById:actor.id,changedAt:new Date().toISOString(),mode:pages ? `${pages.length} páginas` : 'restaurado al rol'};
       await db.query('UPDATE calendar.users SET page_permissions=$2,permissions_audit=$3 WHERE id=$1',[id,pages?JSON.stringify(pages):null,JSON.stringify(auditEntry)]);
+      await this.audit(db,gym,actor,'PERMISSIONS_CHANGED',id,`Permisos de página ${pages ? `actualizados (${pages.length} páginas)` : 'restaurados al perfil del rol'}.`,{pagePermissions:pages,targetUsername:user.username});
       await db.query('COMMIT');return {ok:true,pagePermissions:pages,permissionsAudit:auditEntry};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
@@ -486,6 +492,8 @@ export class Access {
       const passwordHash = await hashPassword(input.newPassword);
       await db.query(`UPDATE calendar.users SET password_hash=$2,must_change_password=false WHERE id=$1`, [row.id,passwordHash]);
       await db.query("DELETE FROM calendar.sessions WHERE user_id=$1 AND token_hash<>$2", [row.id,tokenHash]);
+      const changedUser=(await db.query('SELECT username,role FROM calendar.users WHERE id=$1',[row.id])).rows[0];
+      await this.audit(db,gym,{id:row.id,username:changedUser?.username,role:changedUser?.role},'PASSWORD_CHANGED',row.id,'El usuario cambió su propia contraseña.');
       await db.query("COMMIT");
       return { ok: true };
     } catch (error) {
@@ -495,7 +503,7 @@ export class Access {
       db.release();
     }
   }
-    async adminResetPassword(gym: string, userId: string, explicitPassword?: string, callerToken?: string) {
+    async adminResetPassword(gym: string, userId: string, explicitPassword?: string, callerToken?: string, actor?: Identity) {
     const db = await this.pool.connect();
     try {
       await db.query("BEGIN");
@@ -514,6 +522,7 @@ export class Access {
       } else {
         await db.query("DELETE FROM calendar.sessions WHERE user_id=$1", [userId]);
       }
+      await this.audit(db,gym,actor || {id:'bootstrap',name:'Administrador local',role:'ADMIN'},'PASSWORD_RESET',userId,`Contraseña restablecida para ${user.username}; deberá cambiarla al acceder.`,{targetUsername:user.username});
       await db.query("COMMIT");
       return { ok: true, username: user.username, temporaryPassword: pwd, mustChangePassword: true };
     } catch (e) {

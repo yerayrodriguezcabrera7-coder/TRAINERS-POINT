@@ -41,6 +41,33 @@ test('Productos: imagen, código con ceros iniciales, seguimiento, coste e IVA p
  assert.equal(p.imageData,null);assert.equal(p.barcode,null);assert.equal(p.trackStock,true);
 });
 
+test('Cuadro de mando e informes usan ventas, costes, agenda y centro reales',async()=>{
+ const {dashboardData,reportData}=require('../dist/routes/business');
+ const gym=await db.gym.create({data:{name:'TP '+randomUUID(),brand:'TRAINERS_POINT'}}),cobosu=await db.gym.create({data:{name:'Cobosu '+randomUUID(),brand:'COBOSU'}});
+ const client=await db.client.create({data:{firstName:'Ana',lastName:'Mando',email:randomUUID()+'@example.com',phone:'600000000',status:'ACTIVO',brand:'TRAINERS_POINT',gymId:gym.id}});
+ const service=await db.service.create({data:{name:'Bono rentabilidad',price:60,durationMin:60,color:'#123456'}});
+ const product=await inventory.saveProduct(gym.id,{name:'Batido rentable',price:12.1,costPrice:6,taxRate:21,stock:5},undefined,{id:'admin',name:'Dirección',role:'ADMIN'});
+ await inventory.sell(gym.id,{id:'admin',name:'Dirección',role:'ADMIN'},{requestKey:randomUUID(),clientId:null,paymentMethod:'TARJETA',lines:[{productId:product.id,quantity:2}]});
+ await db.sale.create({data:{gymKey:gym.id,clientId:client.id,status:'COMPLETADA',subtotal:60,taxAmount:0,totalAmount:60,soldAt:new Date('2031-05-10T10:00:00Z'),lines:{create:{type:'SERVICIO',serviceId:service.id,description:'Bono',quantity:1,unitPrice:60,taxRate:0,lineSubtotal:60,taxAmount:0,lineTotal:60}}}});
+ await db.sale.updateMany({where:{gymKey:gym.id,soldAt:{not:new Date('2031-05-10T10:00:00Z')}},data:{soldAt:new Date('2031-05-11T10:00:00Z')}});
+ await db.booking.createMany({data:[
+  {id:randomUUID(),clientId:client.id,serviceId:service.id,startTime:new Date('2031-05-12T09:00:00Z'),endTime:new Date('2031-05-12T10:00:00Z'),calendarGymId:gym.id,status:'COMPLETADA',attendance:'ASISTIO'},
+  {id:randomUUID(),clientId:client.id,serviceId:service.id,startTime:new Date('2031-05-13T09:00:00Z'),endTime:new Date('2031-05-13T10:00:00Z'),calendarGymId:gym.id,status:'COMPLETADA',attendance:'NO_ASISTIO'},
+  {id:randomUUID(),clientId:client.id,serviceId:service.id,startTime:new Date('2031-05-14T09:00:00Z'),endTime:new Date('2031-05-14T10:00:00Z'),calendarGymId:gym.id,status:'CANCELADA',attendance:'CANCELADA'},
+ ]});
+ const params=new URLSearchParams({from:'2031-05-01',to:'2031-05-31'}),dashboard=await dashboardData(gym.id,params,db);
+ assert.equal(dashboard.revenue.services,60);assert.equal(dashboard.revenue.products,24.2);assert.equal(dashboard.revenue.productProfit,8);
+ assert.equal(dashboard.occupancy.completed,1);assert.equal(dashboard.occupancy.cancelled,1);assert.equal(dashboard.occupancy.noShow,1);
+ assert.equal(dashboard.brandComparison.find(row=>row.brand==='TRAINERS_POINT').activeClients,1);
+ const report=await reportData(gym.id,new URLSearchParams({type:'inventory',from:'2031-05-01',to:'2031-05-31'}),db);
+ assert.equal(report.rows.length,1);assert.equal(report.rows[0][0],'Batido rentable');assert.equal(report.rows[0][2],3);assert.equal(report.rows[0][4],18);
+ await db.cashSession.create({data:{gymKey:gym.id,businessDate:'2031-05-20',openedAt:new Date('2031-05-20T08:00:00Z'),openedBy:'admin',openedByName:'Dirección',openingAmount:100,requestKey:randomUUID(),closedAt:new Date('2031-05-20T20:00:00Z'),closedBy:'admin',closedByName:'Dirección',countedAmount:115,expectedAmount:115,difference:0,summary:{collections:{EFECTIVO:0,TARJETA:0,BIZUM:0},cashIn:15,cashOut:0,expectedCash:115},movements:{create:{requestKey:randomUUID(),direction:'IN',category:'CHANGE',amount:15,reason:'Añadir cambio',actorId:'admin',actorName:'Dirección'}}}});
+ const cashReport=await reportData(gym.id,new URLSearchParams({type:'cash',from:'2031-05-01',to:'2031-05-31'}),db);
+ assert.equal(cashReport.rows.length,2);assert.equal(cashReport.rows[0][0],'Caja');assert.equal(cashReport.rows[1][0],'Movimiento');assert.equal(cashReport.rows[1][9],15);
+ const audits=await db.auditLog.findMany({where:{entityId:product.id}});assert.ok(audits.some(event=>event.action==='PRODUCT_STOCK_ADJUSTED'));
+ assert.equal(await db.sale.count({where:{gymKey:cobosu.id}}),0);
+});
+
 test('IVA incluido: venta conserva PVP, desglose e historial aunque después cambien coste e impuestos del producto',async()=>{
  const gym=randomUUID();let p=await inventory.saveProduct(gym,{name:'Producto 21%',price:9.68,stock:5,costPrice:6,taxRate:21});
  const sale=await inventory.sell(gym,'reception',{requestKey:randomUUID(),clientId:null,paymentMethod:'TARJETA',lines:[{productId:p.id,quantity:2}]});

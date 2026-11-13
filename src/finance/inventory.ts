@@ -11,6 +11,9 @@ import { financeTransaction } from './transaction';
 import { productPricing } from './product-pricing';
 import { validProductImage } from '../validation/product-image';
 import { accessibleClient, saleScope } from '../network/scope';
+import { recordAudit } from '../audit/log';
+type FinanceActor = string | Pick<Identity, 'id' | 'name' | 'role' | 'username'>;
+const actorId = (actor: FinanceActor) => typeof actor === 'string' ? actor : actor.id;
 const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: productMoney,
   costPrice: productMoney.optional(), taxRate: z.number().min(0).max(100).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6).optional(),
@@ -46,7 +49,7 @@ export class Inventory {
   async products(gym: string) {
     return (await this.db.product.findMany({ where: { gymKey: gym }, orderBy: { name: 'asc' } })).map(p => ({ ...p, pricing: productPricing(p.unitPrice,p.costPrice,p.taxRate) }));
   }
-  async saveProduct(gym: string, raw: unknown, id?: string) {
+  async saveProduct(gym: string, raw: unknown, id?: string, actor: FinanceActor = 'system') {
     const v = productInput.parse(raw);
     return this.transaction(gym, async (tx) => {
       const old = id ? await tx.product.findFirst({ where: { id, gymKey: gym } }) : null;
@@ -64,18 +67,21 @@ export class Inventory {
       const difference = v.stock - (old?.stock || 0);
       if (difference)
         await tx.stockMovement.create({ data: { productId: product.id, type: old ? 'AJUSTE' : 'ENTRADA', quantity: difference, reference: 'Inventario', notes: old ? 'Ajuste manual de existencias' : 'Stock inicial' } });
+      await recordAudit(tx, { gymKey: gym, actor, action: difference ? 'PRODUCT_STOCK_ADJUSTED' : old ? 'PRODUCT_UPDATED' : 'PRODUCT_CREATED', entityType: 'Product', entityId: product.id, detail: `${old ? 'Producto actualizado' : 'Producto creado'}: ${product.name}.${difference ? ` Stock ${difference > 0 ? '+' : ''}${difference}; total ${product.stock}.` : ''}`, metadata: { stockBefore: old?.stock ?? 0, stockAfter: product.stock, difference } });
       return product;
     });
   }
-  async removeProduct(gym: string, id: string) {
+  async removeProduct(gym: string, id: string, actor: FinanceActor = 'system') {
     return this.transaction(gym, async (tx) => {
       const p = await tx.product.findFirst({ where: { id, gymKey: gym } });
       if (!p)
         throw new ApiError(404, 'Producto desconocido.');
-      return tx.product.update({ where: { id }, data: { isActive: false, revision: { increment: 1 } } });
+      const product = await tx.product.update({ where: { id }, data: { isActive: false, revision: { increment: 1 } } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'PRODUCT_DISABLED', entityType: 'Product', entityId: id, detail: `Producto desactivado: ${product.name}.` });
+      return product;
     });
   }
-  async sell(gym: string, actor: string, raw: unknown) {
+  async sell(gym: string, actor: FinanceActor, raw: unknown) {
     const v = saleInput.parse(raw);
     if (!v.clientId && v.paymentMode === 'PENDING')
       throw new ApiError(400, 'Las ventas de paso deben pagarse al confirmar.');
@@ -110,14 +116,15 @@ export class Inventory {
         throw new ApiError(400, 'El importe de la venta supera el máximo permitido.');
       const cashSessionId = await cashSessionFor(tx, gym);
       const taxCents = lines.reduce((sum,line) => sum + Math.round(line.taxAmount*100),0);
-      const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actor, clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: (total-taxCents) / 100, taxAmount: taxCents / 100, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actor, method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
+      const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actorId(actor), clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: (total-taxCents) / 100, taxAmount: taxCents / 100, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actorId(actor), method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
       for (const l of v.lines)
         await tx.product.update({ where: { id: l.productId }, data: { stock: { decrement: l.quantity }, revision: { increment: 1 } } });
       await tx.stockMovement.createMany({ data: v.lines.map(l => ({ productId: l.productId, type: 'VENTA' as const, quantity: -l.quantity, reference: sale.id })) });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'SALE_COMPLETED', entityType: 'Sale', entityId: sale.id, requestKey: v.requestKey, detail: `Venta registrada por ${(total / 100).toFixed(2)} € (${v.paymentMode === 'PAID' ? v.paymentMethod : 'pago pendiente'}).`, metadata: { total: total / 100, paymentMode: v.paymentMode, paymentMethod: v.paymentMethod, clientId: v.clientId } });
       return saleBalance(sale);
     });
   }
-  async reverse(gym: string, id: string, raw: unknown, cancel = false, actor = "system") {
+  async reverse(gym: string, id: string, raw: unknown, cancel = false, actor: FinanceActor = "system") {
     const requested = cancel ? null : returnInput.parse(raw);
     return this.transaction(gym, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
@@ -147,7 +154,9 @@ export class Inventory {
       }
       const cashSessionId = await cashSessionFor(tx, gym);
       const lines = await tx.saleLine.findMany({ where: { saleId: id } });
-      return saleBalance(await tx.sale.update({ where: { id }, data: { returnHistory: [...(Array.isArray(sale.returnHistory) ? sale.returnHistory : []), { cashSessionId, at: new Date().toISOString(), actor, reason: cancel ? 'Anulación de venta' : requested!.reason, requestKey: requested?.requestKey || null, lines: items }], ...(!cancel ? { returnKeys: { push: requested!.requestKey } } : {}), status: cancel ? 'CANCELADA' : lines.every(l => l.returnedQuantity === Number(l.quantity)) ? 'REEMBOLSADA' : 'COMPLETADA' }, include: { lines: true, payments: true } }));
+      const updated = await tx.sale.update({ where: { id }, data: { returnHistory: [...(Array.isArray(sale.returnHistory) ? sale.returnHistory : []), { cashSessionId, at: new Date().toISOString(), actor: actorId(actor), reason: cancel ? 'Anulación de venta' : requested!.reason, requestKey: requested?.requestKey || null, lines: items }], ...(!cancel ? { returnKeys: { push: requested!.requestKey } } : {}), status: cancel ? 'CANCELADA' : lines.every(l => l.returnedQuantity === Number(l.quantity)) ? 'REEMBOLSADA' : 'COMPLETADA' }, include: { lines: true, payments: true } });
+      await recordAudit(tx, { gymKey: gym, actor, action: cancel ? 'SALE_CANCELLED' : 'SALE_RETURNED', entityType: 'Sale', entityId: id, requestKey: requested?.requestKey, detail: cancel ? 'Venta anulada y existencias regularizadas.' : `Devolución registrada: ${requested!.reason}.`, metadata: { lines: items } });
+      return saleBalance(updated);
     });
   }
   private salesFilters(q: URLSearchParams) {
@@ -168,7 +177,7 @@ export class Inventory {
     const rows = await this.db.sale.findMany({ where: { ...where, AND: [q.get('client') && q.get('client') !== 'walkin' ? await saleScope(this.db,gym) : {gymKey:gym}] }, include: { client: { select: { firstName: true, lastName: true } }, lines: true, payments: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ soldAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize + 1 });
     return { sales: rows.slice(0, pageSize).map(saleBalance), pagination: { page, pageSize, hasPrevious: page > 1, hasNext: rows.length > pageSize } };
   }
-  async pay(gym: string, actor: string, id: string, raw: unknown) {
+  async pay(gym: string, actor: FinanceActor, id: string, raw: unknown) {
     const v = paymentInput.parse(raw);
     return this.transaction(gym, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "Sale" WHERE id=${id}::uuid FOR UPDATE`;
@@ -186,16 +195,17 @@ export class Inventory {
       if (cents(v.amount) > cents(saleBalance(sale).outstandingAmount))
         throw new ApiError(409, 'El pago supera el importe pendiente. Actualiza el saldo.');
       const cashSessionId = await cashSessionFor(tx, gym, v.paidAt ? new Date(v.paidAt) : new Date());
-      await tx.payment.create({ data: { cashSessionId, saleId: id, requestKey: v.requestKey, actorAccountId: actor, method: v.method, status: 'PAGADO', amount: v.amount, paidAt: v.paidAt ? new Date(v.paidAt) : new Date(), note: v.note } });
+      const payment = await tx.payment.create({ data: { cashSessionId, saleId: id, requestKey: v.requestKey, actorAccountId: actorId(actor), method: v.method, status: 'PAGADO', amount: v.amount, paidAt: v.paidAt ? new Date(v.paidAt) : new Date(), note: v.note } });
       const updated = await tx.sale.update({ where: { id }, data: { paymentTracking: true }, include: { lines: true, payments: true } });
       const balance = saleBalance(updated);
       await tx.clientServicePackage.updateMany({ where: { saleId: id }, data: { paymentStatus: balance.outstandingAmount === 0 ? 'PAGADO' : 'PENDIENTE', paymentMethod: v.method } });
       if (balance.outstandingAmount === 0)
         await tx.booking.updateMany({ where: { OR: [{ package: { saleId: id } }, { saleId: id }] }, data: { paymentPending: false } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'PAYMENT_REGISTERED', entityType: 'Payment', entityId: payment.id, requestKey: v.requestKey, detail: `Cobro de ${v.amount.toFixed(2)} € por ${v.method}.`, metadata: { saleId: id, amount: v.amount, method: v.method, outstanding: balance.outstandingAmount } });
       return balance;
     });
   }
-  async verifyPaid(gym: string, actor: string, id: string, raw: unknown) {
+  async verifyPaid(gym: string, actor: FinanceActor, id: string, raw: unknown) {
     const v = paymentInput.parse(raw);
     if (!v.paidAt || !v.note)
       throw new ApiError(400, 'Indica la fecha del cobro y cómo se ha comprobado el pago antiguo.');
@@ -214,16 +224,17 @@ export class Inventory {
         throw new ApiError(409, 'Esta venta ya está verificada o no admite esta confirmación. Actualiza el historial.');
       if (cents(v.amount) !== cents(saleBalance(sale).netAmount))
         throw new ApiError(409, 'El importe de la venta ha cambiado. Actualiza antes de verificar.');
-      await tx.payment.create({ data: { saleId: id, requestKey: v.requestKey, actorAccountId: actor, historicalVerification: true, method: v.method, status: 'PAGADO', amount: v.amount, paidAt: new Date(v.paidAt!), note: v.note } });
+      const payment = await tx.payment.create({ data: { saleId: id, requestKey: v.requestKey, actorAccountId: actorId(actor), historicalVerification: true, method: v.method, status: 'PAGADO', amount: v.amount, paidAt: new Date(v.paidAt!), note: v.note } });
       const updated = await tx.sale.update({ where: { id }, data: { paymentTracking: true }, include: { lines: true, payments: true } });
       const balance = saleBalance(updated);
       await tx.clientServicePackage.updateMany({ where: { saleId: id }, data: { paymentStatus: balance.outstandingAmount === 0 ? 'PAGADO' : 'PENDIENTE', paymentMethod: v.method } });
       if (balance.outstandingAmount === 0)
         await tx.booking.updateMany({ where: { OR: [{ package: { saleId: id } }, { saleId: id }] }, data: { paymentPending: false } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'PAYMENT_VERIFIED', entityType: 'Payment', entityId: payment.id, requestKey: v.requestKey, detail: `Pago histórico verificado por ${v.amount.toFixed(2)} € (${v.method}).`, metadata: { saleId: id, amount: v.amount, method: v.method } });
       return balance;
     });
   }
-  async refund(gym: string, actor: string, id: string, raw: unknown) {
+  async refund(gym: string, actor: FinanceActor, id: string, raw: unknown) {
     const v = paymentInput.parse(raw);
     if (!v.note)
       throw new ApiError(400, 'Indica el motivo de la devolución del dinero.');
@@ -241,7 +252,8 @@ export class Inventory {
       if (cents(v.amount) > cents(saleBalance(sale).refundDue))
         throw new ApiError(409, 'El importe supera el dinero pendiente de devolver.');
       const cashSessionId = await cashSessionFor(tx, gym, v.paidAt ? new Date(v.paidAt) : new Date());
-      await tx.payment.create({ data: { cashSessionId, saleId: id, requestKey: v.requestKey, actorAccountId: actor, kind: 'REFUND', method: v.method, status: 'PAGADO', amount: v.amount, paidAt: v.paidAt ? new Date(v.paidAt) : new Date(), note: v.note } });
+      const payment = await tx.payment.create({ data: { cashSessionId, saleId: id, requestKey: v.requestKey, actorAccountId: actorId(actor), kind: 'REFUND', method: v.method, status: 'PAGADO', amount: v.amount, paidAt: v.paidAt ? new Date(v.paidAt) : new Date(), note: v.note } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'PAYMENT_REFUNDED', entityType: 'Payment', entityId: payment.id, requestKey: v.requestKey, detail: `Devolución de ${v.amount.toFixed(2)} € por ${v.method}. ${v.note}`, metadata: { saleId: id, amount: v.amount, method: v.method } });
       return saleBalance(await tx.sale.findUniqueOrThrow({ where: { id }, include: { lines: true, payments: true } }));
     });
   }
@@ -341,10 +353,11 @@ export class Inventory {
               notes: `Pedido recibido y repuesto en mostrador por ${actor.name || actor.id}`
             }
           });
+          await recordAudit(tx, { gymKey: gym, actor, action: 'PRODUCT_STOCK_ADJUSTED', entityType: 'Product', entityId: existing.productId, detail: `Reposición recibida: +${qtyToAdd} unidades de ${existing.product.name}.`, metadata: { difference: qtyToAdd, source: 'RESTOCK_REQUEST', restockRequestId: existing.id } });
         }
       }
 
-      return (tx as any).restockRequest.update({
+      const updated = await (tx as any).restockRequest.update({
         where: { id },
         data,
         include: {
@@ -359,6 +372,8 @@ export class Inventory {
           }
         }
       });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'RESTOCK_REQUEST_UPDATED', entityType: 'RestockRequest', entityId: existing.id, detail: `Solicitud de reposición actualizada a ${updated.status}.`, metadata: { status: updated.status, quantity: updated.quantity } });
+      return updated;
     });
   }
   async removeRestockRequest(gym: string, id: string) {

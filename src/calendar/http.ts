@@ -191,7 +191,7 @@ export function server(
             if (!admin) throw new ApiError(403, "Solo administración puede restablecer contraseñas.");
             const userId = decodeURIComponent(resetMatch[1]);
             const raw = await body(req).catch(() => ({}));
-            const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined);
+            const result = await access.adminResetPassword(gym, userId, raw?.password, identity.id !== "bootstrap" ? bearer : undefined, identity);
             send(res, 200, result);
             return;
           }

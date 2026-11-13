@@ -84,6 +84,13 @@ function appendBookingHistory(old: Booking, b: Booking, actorId: string) {
 export class Store {
   constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
 
+  private async audit(db: PoolClient, gym: string, actorId: string, action: string, entityType: string, entityId: string, detail: string, metadata: Record<string, unknown> = {}) {
+    if (!this.clientsDb) return;
+    const user = (await db.query('SELECT username,role FROM calendar.users WHERE id=$1', [actorId])).rows[0];
+    await db.query(`INSERT INTO "AuditLog" (id,"actorId",action,"entityType","entityId",metadata,"occurredAt")
+      VALUES($1::uuid,NULL,$2,$3,$4,$5::jsonb,now())`, [randomUUID(), action, entityType, entityId, JSON.stringify({ gymKey: gym, actorId, actorName: user?.username || actorId || 'Sistema', actorRole: user?.role || 'SYSTEM', detail, ...metadata })]);
+  }
+
   private async externalConfig(gym: string, raw: unknown) {
     const staff = await sharedStaff(this.pool);
     const leaves = (await this.pool.query("SELECT data FROM calendar.shared_leaves ORDER BY id")).rows.map(row=>row.data);
@@ -166,6 +173,7 @@ export class Store {
   }
   async migrate() {
     await this.pool.query(migration);
+    await this.pool.query(sharedStaffMigration);
     await this.pool.query(accessMigration);
     if (this.clientsDb) {
       await this.clientsDb.$executeRawUnsafe('ALTER TABLE "Gym" ADD COLUMN IF NOT EXISTS "schedule" JSONB;').catch(() => {});
@@ -454,6 +462,7 @@ export class Store {
       }
       const syncedById = new Map(syncedSiblings.map(s => [s.id, s]));
       const effectiveBookings = bookings.map(o => ({ ...(syncedById.get(o.id) || o), centerId: (syncedById.get(o.id) || o).centerId || gym }));
+      if (b.status !== "CANCELLED") await this.assertNetworkAvailable(db, gym, b);
       assertAvailable(b, effectiveBookings, c);
       for (const sib of syncedSiblings) {
         assertAvailable(sib, effectiveBookings.map(o => (o.id === b.id ? b : o)), c);
@@ -494,6 +503,9 @@ export class Store {
           gym,
           c,
         ]);
+      await this.audit(db, gym, actorId, !old ? 'BOOKING_CREATED' : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? 'BOOKING_CANCELLED' : 'BOOKING_UPDATED', 'Booking', b.id,
+        !old ? `Reserva creada para ${b.date}, ${b.start}–${b.end}.` : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? `Reserva cancelada del ${old.date}, ${old.start}–${old.end}.` : `Reserva modificada: ${old.date} ${old.start} → ${b.date} ${b.start}.`,
+        { clientId: b.clientId, serviceId: b.serviceId, employeeId: b.employeeId, previousStatus: old?.status || null, status: b.status });
       return b;
     });
   }
@@ -535,6 +547,7 @@ export class Store {
       b.status="CANCELLED"; b.version++;
       await this.syncPackageBooking(db,gym,b,c);
       await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.id,b]);
+      await this.audit(db, gym, actor.id, 'BOOKING_CANCELLED', 'Booking', b.id, `Reserva cancelada y convertida en recuperación pendiente para ${b.date}, ${b.start}–${b.end}.`, { clientId: b.clientId, serviceId: b.serviceId, recoveryId: credit.id, exception: credit.exception });
       return credit;
     });
   }
