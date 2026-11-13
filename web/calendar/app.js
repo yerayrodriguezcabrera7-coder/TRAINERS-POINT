@@ -10,6 +10,11 @@ const todayKey = () => C.dateKey(new Date());
 const dateFormats = new Map();
 const prettyDate = (key, options) => { const id=JSON.stringify(options); if(!dateFormats.has(id))dateFormats.set(id,new Intl.DateTimeFormat('es-ES',options)); return dateFormats.get(id).format(C.parseDate(key)); };
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const colorInk = color => {
+  const hex = /^#[0-9a-f]{6}$/i.test(color || '') ? color.slice(1) : '317b9b';
+  const [r, g, b] = [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 > 155 ? '#181512' : '#ffffff';
+};
 const uid = () => globalThis.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const state = { date: todayKey(), view: window.innerWidth < 760 ? 'day' : 'week', employee: 'all', service: 'all', editing: null };
 const isSunday = date => C.parseDate(date).getDay() === 0;
@@ -395,22 +400,6 @@ function renderTimeGrid(dates, bookings, employees) {
           html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${isParking ? 'Crear reserva sin asignar en domingo' : open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
         }
         const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
-        const placed = C.layoutEvents(dayColBookings);
-        placed.forEach(({ event: b, lane, count }) => {
-          const startMin = C.minutes(b.start);
-          const endMin = C.minutes(b.end);
-          const top = startMin * 1.4;
-          const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
-          const width = 100 / count;
-          const left = lane * width;
-          const color = lookup('services', b.serviceId).color || '#317b9b';
-          const soft = `${color}18`;
-          const clientName = lookup('clients', b.clientId).name;
-          const serviceName = lookup('services', b.serviceId).name;
-          const roomName = lookup('rooms', b.roomId).name;
-          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)} · ${escapeHTML(roomName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
-        });
-        if (d.date === todayKey()) html += '<div class="now-line" aria-hidden="true"></div>';
         if (isParking) {
           html += '<div class="sunday-parking-list">';
           if (!dayColBookings.length) {
@@ -421,7 +410,8 @@ function renderTimeGrid(dates, bookings, employees) {
               const serviceObj = lookup('services', b.serviceId);
               const dur = Math.max(15, C.minutes(b.end) - C.minutes(b.start));
               const isDraggable = canDragBooking(b);
-              html += `<button class="event sunday-parking-card ${b.status} unassigned" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:#b86b00;--event-soft:#b86b0018" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceObj.name)}<br>Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+              const color = serviceObj.color || '#317b9b';
+              html += `<button class="event sunday-parking-card ${b.status} unassigned" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceObj.name)}<br>Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
             });
           }
           html += '</div>';
@@ -434,12 +424,11 @@ function renderTimeGrid(dates, bookings, employees) {
             const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
             const width = 100 / count;
             const left = lane * width;
-            const color = lookup('employees', b.employeeId).color || '#7b858d';
-            const soft = `${color}18`;
+            const color = lookup('services', b.serviceId).color || '#317b9b';
             const clientName = lookup('clients', b.clientId).name;
             const serviceName = lookup('services', b.serviceId).name;
             const isDraggable = canDragBooking(b);
-            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-soft:${soft}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
           });
         }
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
@@ -466,7 +455,7 @@ function renderMonth(bookings) {
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
       const color = b.employeeId === COBOSU_ID ? '#dc2626' : (lookup('services', b.serviceId).color || '#317b9b');
       const isDraggable = canDragBooking(b);
-      return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
