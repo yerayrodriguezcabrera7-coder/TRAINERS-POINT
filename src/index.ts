@@ -19,6 +19,7 @@ import { clientsRoutes } from './routes/clients';
 import { financeRoutes } from './routes/finance';
 import { packagesRoutes } from './routes/packages';
 import { servicesRoutes } from './routes/services';
+import { businessRoutes } from './routes/business';
 import { runtimeConfig } from "./runtime-config";
 import { configuredProvider } from "./reminders/provider";
 import { ReminderWorker } from "./reminders/worker";
@@ -48,7 +49,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, hasTrustedOrigin };
   if (await authorize(request, response, url, context))
     return;
-  for (const route of [trainingPlansRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
+  for (const route of [trainingPlansRoutes, businessRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
     if (await route(request, response, url, context))
       return;
   if (calendarHandler) {
