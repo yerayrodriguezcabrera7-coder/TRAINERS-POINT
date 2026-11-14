@@ -123,7 +123,10 @@ export class ApiClient {
   }
   getClients() { return this.request<{ clients: unknown[] }>("/api/clients"); }
   getClientDetail(clientId: string) { return this.request(`/api/clients/${encodeURIComponent(clientId)}/progress`); }
-  getTrainingPlans(clientId: string) { return this.request(`/api/clients/${encodeURIComponent(clientId)}/training-plans`); }
+  getClientProfile(clientId: string) { return this.request<any>(`/api/clients/${encodeURIComponent(clientId)}/progress`); }
+  getPackages(clientId: string) { return this.request<any[]>(`/api/clients/${encodeURIComponent(clientId)}/service-packages`); }
+  getMeasurements(clientId: string) { return this.request<any[]>(`/api/clients/${encodeURIComponent(clientId)}/measurements`); }
+  getTrainingPlans(clientId: string) { return this.request<any[]>(`/api/clients/${encodeURIComponent(clientId)}/training-plans`); }
   saveTrainingPlan(clientId: string, plan: unknown) {
     return this.request(`/api/clients/${encodeURIComponent(clientId)}/training-plans`, { method: "POST", body: JSON.stringify(plan) });
   }

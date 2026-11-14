@@ -7,6 +7,7 @@ import { Identity } from "../../shared/types";
 import { LoginScreen } from "./screens/LoginScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { StaffScreen } from "./screens/StaffScreen";
+import ClientHomeScreen from "./screens/ClientHomeScreen";
 import { apiBaseUrl } from "../../shared/config";
 import { mobileCognito } from "../../shared/cognito";
 
@@ -34,7 +35,8 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       {currentUser ? (
-        currentUser.role === "CLIENT" ? <HomeScreen api={api} user={currentUser} onLogout={handleLogout} /> :
+        currentUser.role === "CLIENT" ? <ClientHomeScreen key={currentUser.id} api={api} user={currentUser} onLogout={handleLogout} /> :
+        currentUser.role === "TRAINER" ? <HomeScreen key={currentUser.id} api={api} user={currentUser} onLogout={handleLogout} /> :
         <StaffScreen key={currentUser.id} api={api} user={currentUser} onLogout={handleLogout} />
       ) : (
         <LoginScreen key={loginKey} api={api} onLoginSuccess={setCurrentUser} onBack={() => { void handleLogout(); onBack(); }} />
