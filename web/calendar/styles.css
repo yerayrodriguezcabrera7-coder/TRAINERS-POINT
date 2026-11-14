@@ -908,3 +908,7 @@ body > main.main-content {
     align-items: stretch;
   }
 }
+/* Client search: mantener resultados visibles mientras se escribe */
+.client-picker-field:focus-within .client-results { display: flex !important; }
+/* Atajos de teclado: hint visual */
+.kbd-hint { font-size: 10px; color: #8a9ba3; margin-left: 6px; }
