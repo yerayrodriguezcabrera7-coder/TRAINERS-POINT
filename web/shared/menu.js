@@ -120,6 +120,7 @@
         RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
+      };
       // If user has custom page permissions, use them; otherwise use role defaults
       const allowed = me.role === 'ADMIN' ? null : (Array.isArray(me.pagePermissions) ? me.pagePermissions : allowedByRole[me.role]);
       if (allowed !== null) {

@@ -245,8 +245,6 @@
     $('field-category').value = 'TRAINING';
     $('field-color').value = ['#317b9b','#b85c38','#63805b','#885b9c','#a67a18'][services.length % 5];
     $('field-modality').value = 'INDIVIDUAL';
-    $('field-type').value = 'SESION_INDIVIDUAL';
-    $('field-trainingCount').value = '1';
     $('field-durationMin').value = '60';
     $('field-price').value = '';
     $('field-validityWeeks').value = '4';
@@ -254,7 +252,6 @@
     $('field-isActive').value = 'true';
     $('field-description').value = '';
     $('field-conditions').value = '';
-    $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
     dialog.showModal();
   }
 
@@ -271,8 +268,6 @@
     $('field-category').value = service.category || 'TRAINING';
     $('field-color').value = service.color || '#317b9b';
     $('field-modality').value = service.modality || 'INDIVIDUAL';
-    $('field-type').value = 'SESION_INDIVIDUAL';
-    $('field-trainingCount').value = '1';
     $('field-price').value = service.price != null ? Number(service.price).toFixed(2) : '';
     $('field-durationMin').value = service.durationMin || 60;
     $('field-validityWeeks').value = String(service.validityWeeks || 4);
@@ -280,7 +275,6 @@
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
     $('field-conditions').value = service.conditions || '';
-    $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
     dialog.showModal();
   }
 
