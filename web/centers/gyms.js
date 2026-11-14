@@ -393,7 +393,8 @@ async function deleteGym(gym, button) {
     document.querySelector("#active-count").textContent = gyms.length;
     document.querySelector("#client-count").textContent = totalClients;
   } catch (err) {
-    window.alert(err.message);
+    const errorEl = document.getElementById('gym-create-error');
+    if (errorEl) { errorEl.textContent = err.message; errorEl.hidden = false; }
     button.disabled = false;
   }
 }

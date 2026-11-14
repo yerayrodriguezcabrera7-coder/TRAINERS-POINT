@@ -52,7 +52,6 @@
         error => {
           // Si el usuario deniega el permiso o no hay señal GPS en interiores,
           // se resuelve null para no bloquear el derecho legal de registrar la jornada.
-          console.warn('Ubicación puntual no disponible:', error.message);
           resolve(null);
         },
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }

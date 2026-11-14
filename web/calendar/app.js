@@ -1926,4 +1926,4 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'm' && !e.ctrlKey && !e.metaKey) { state.view='month';state.date=todayKey();render(true); return; }
   }
 });
-})().catch(e=>console.error('No se pudo iniciar el calendario',e));
+})().catch(() => { /* The page shows connection errors. */ });

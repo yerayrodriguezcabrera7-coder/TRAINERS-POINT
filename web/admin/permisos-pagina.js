@@ -233,7 +233,7 @@
         copyBtn?.addEventListener('click', () => {
           const sourceUserId = copySelect?.value;
           if (!sourceUserId) {
-            alert('Selecciona primero un usuario del menú desplegable para copiar sus permisos.');
+            showToast('Selecciona primero un usuario del menú desplegable para copiar sus permisos.', true);
             copySelect?.focus();
             return;
           }
