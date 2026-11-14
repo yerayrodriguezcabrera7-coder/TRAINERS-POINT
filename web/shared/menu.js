@@ -27,6 +27,7 @@
     ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Clientes','people','/clientes'],
     ['Servicios','list','/servicios'],
+    ['Packs','bag','/packs.html'],
     ['Tienda TPV','bag','/tienda.html'],
     ['Productos','bag','/productos.html'],
     ['Caja','cash','/caja.html'],
@@ -48,6 +49,7 @@
     if (path === '/usuarios.html') return '/usuarios';
     if (['/gyms.html','/gimnasios.html'].includes(path)) return '/gimnasios';
     if (['/services.html', '/servicios.html'].includes(path)) return '/servicios';
+    if (['/packs.html', '/packs'].includes(path)) return '/packs.html';
     if (['/professionals.html', '/profesionales.html'].includes(path)) return '/profesionales';
     if (['/fichajes', '/fichaje'].includes(path)) return '/fichajes.html';
     if (['/tienda.html', '/tienda'].includes(path)) return '/tienda.html';
@@ -61,7 +63,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
+  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -115,10 +117,9 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
-      };
       // If user has custom page permissions, use them; otherwise use role defaults
       const allowed = me.role === 'ADMIN' ? null : (Array.isArray(me.pagePermissions) ? me.pagePermissions : allowedByRole[me.role]);
       if (allowed !== null) {

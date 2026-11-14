@@ -124,6 +124,7 @@ export class Store {
         conditions: true,
         category: true,
         color: true,
+        serviceId: true,
       },
     });
     const [clients, services] = await Promise.all([clientsQuery, servicesQuery]);
@@ -157,6 +158,7 @@ export class Store {
         conditions: service.conditions,
         category: service.category,
         color: service.color,
+        serviceId: service.serviceId || null,
       }));
     }
     const allCenters = await this.centers();

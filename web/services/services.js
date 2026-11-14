@@ -103,8 +103,6 @@
       if (activeFilter === 'inactive' && service.isActive) return false;
       if (activeFilter === 'INDIVIDUAL' && service.modality !== 'INDIVIDUAL') return false;
       if (activeFilter === 'DUAL' && service.modality !== 'DUAL') return false;
-      if (activeFilter === 'PACK' && service.type !== 'PACK') return false;
-      if (activeFilter === 'SESION_INDIVIDUAL' && service.type !== 'SESION_INDIVIDUAL') return false;
 
       // Filtro por buscador
       if (searchQuery) {
@@ -114,7 +112,6 @@
           service.description,
           service.conditions,
           service.modality,
-          service.type,
           service.category === "CABIN" ? "cabina" : "entrenamiento",
         ].filter(Boolean).join(' ').toLowerCase();
 
@@ -137,7 +134,7 @@
         <div class="services-empty">
           <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
           <h3>No se encontraron servicios</h3>
-          <p>${services.length ? 'Ningún servicio coincide con la búsqueda o el filtro seleccionado.' : 'Aún no hay servicios dados de alta en la base de datos.'}</p>
+          <p>${services.length ? 'Ningún servicio coincide con la búsqueda o el filtro seleccionado.' : 'Aún no hay servicios dados de alta. Los tipos de sesión (Individual, Dual…) se definen aquí.'}</p>
         </div>
       `;
       return;
@@ -145,10 +142,8 @@
 
     grid.innerHTML = filtered.map(service => {
       const priceNum = Number(service.price) || 0;
-      const count = Number(service.trainingCount) || 1;
-      const pricePerSession = count > 1 ? (priceNum / count) : null;
       const isDual = service.modality === 'DUAL';
-      const isPack = service.type === 'PACK';
+      const color = /^#[0-9a-f]{6}$/i.test(service.color) ? service.color : '#317b9b';
 
       return `
         <article class="service-card ${service.isActive ? '' : 'is-inactive'}" data-id="${esc(service.id)}">
@@ -161,41 +156,39 @@
                 ${isDual ? 'Dual (2 personas)' : 'Individual'}
               </span>
               <span class="badge-pill badge-type">
-                ${isPack ? 'Pack de sesiones' : 'Sesión única'}
+                Sesión única
               </span>
             </div>
           </div>
 
-          <h3 class="service-name"><span class="service-color-dot" style="background:${/^#[0-9a-f]{6}$/i.test(service.color) ? service.color : "#317b9b"}" aria-hidden="true"></span>${esc(service.name)}</h3><p class="service-category">${service.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
+          <h3 class="service-name"><span class="service-color-dot" style="background:${color}" aria-hidden="true"></span>${esc(service.name)}</h3><p class="service-category">${service.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
           <p class="service-description">${esc(service.description || 'Sin descripción detallada.')}</p>
 
           <div class="service-price-box">
             <div>
-              <span class="spec-label">Precio total</span>
+              <span class="spec-label">Precio por sesión</span>
               <div class="price-main">${eur.format(priceNum)}</div>
             </div>
             <div class="price-subtitle">
-              ${pricePerSession ? `${eur.format(pricePerSession)} / sesión` : `${service.durationMin} min / sesión`}
+              ${service.durationMin} min / sesión
             </div>
           </div>
 
           <div class="service-specs">
             <div class="spec-item">
               <span class="spec-label">Duración</span>
-              <span class="spec-value">⏱ ${service.durationMin} min / sesión</span>
+              <span class="spec-value">⏱ ${service.durationMin} min</span>
             </div>
             <div class="spec-item">
-              <span class="spec-label">Sesiones</span>
-              <span class="spec-value">🏋️ ${count} ${count === 1 ? 'sesión' : 'sesiones'}</span>
+              <span class="spec-label">Color en calendario</span>
+              <span class="spec-value"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1);"></span>${service.color}</span>
             </div>
-            <div class="spec-item">
-              <span class="spec-label">Validez / Duración</span>
-              <span class="spec-value spec-duration-4weeks">📅 ${service.validityWeeks || 4} semanas</span>
-            </div>
+            ${service.recommendedWeeklyFrequency ? `
             <div class="spec-item">
               <span class="spec-label">Frecuencia rec.</span>
-              <span class="spec-value">🔄 ${service.recommendedWeeklyFrequency ? `${service.recommendedWeeklyFrequency} días / sem` : 'Flexible'}</span>
+              <span class="spec-value">🔄 ${service.recommendedWeeklyFrequency} días / sem</span>
             </div>
+            ` : ''}
           </div>
 
           ${service.conditions ? `
@@ -242,69 +235,12 @@
     formError.hidden = false;
   }
 
-  // Cálculo automático del precio por sesión en vivo
-  function updateCalculatedPrice() {
-    const calcPanel = $('calculated-rate-panel');
-    const priceDisplay = $('calc-session-price');
-    const unitDisplay = $('calc-session-unit');
-    const formulaDisplay = $('calc-formula');
-    if (!calcPanel || !priceDisplay || !formulaDisplay) return;
-
-    const priceRaw = $('field-price')?.value?.trim();
-    const countRaw = $('field-trainingCount')?.value?.trim();
-    const type = $('field-type')?.value;
-    const modality = $('field-modality')?.value;
-
-    if (!priceRaw && !countRaw) {
-      calcPanel.classList.remove('has-warning');
-      priceDisplay.textContent = '—';
-      if (unitDisplay) unitDisplay.textContent = '/ sesión';
-      formulaDisplay.textContent = 'Introduce precio total y número de sesiones para calcular el desglose.';
-      return;
-    }
-
-    const price = Number(priceRaw);
-    const count = Number(countRaw);
-
-    if (isNaN(price) || price < 0) {
-      calcPanel.classList.add('has-warning');
-      priceDisplay.textContent = 'Error';
-      if (unitDisplay) unitDisplay.textContent = '';
-      formulaDisplay.textContent = 'El precio total no puede ser negativo.';
-      return;
-    }
-
-    if (isNaN(count) || !Number.isInteger(count) || count < 1) {
-      calcPanel.classList.add('has-warning');
-      priceDisplay.textContent = 'Error';
-      if (unitDisplay) unitDisplay.textContent = '';
-      formulaDisplay.textContent = 'El número de sesiones debe ser un entero mayor o igual a 1.';
-      return;
-    }
-
-    calcPanel.classList.remove('has-warning');
-    const pricePerSession = price / count;
-    priceDisplay.textContent = eur.format(pricePerSession);
-    if (unitDisplay) unitDisplay.textContent = '/ sesión';
-
-    const isDual = modality === 'DUAL';
-    const isPack = type === 'PACK' || count > 1;
-
-    if (isPack && count > 1) {
-      const dualPart = isDual ? ` (${eur.format(pricePerSession / 2)} por persona / sesión)` : '';
-      formulaDisplay.textContent = `${eur.format(price)} total ÷ ${count} sesiones = ${eur.format(pricePerSession)} por sesión${dualPart}`;
-    } else {
-      const dualPart = isDual ? ` (${eur.format(price / 2)} por persona)` : '';
-      formulaDisplay.textContent = `${eur.format(price)} por sesión única${dualPart}`;
-    }
-  }
-
   function openCreateDialog() {
     form.reset();
     clearValidationErrors();
     $('service-id').value = '';
     $('dialog-title').textContent = 'Nuevo servicio';
-    $('dialog-subtitle').textContent = 'Introduce las características y tarifa del servicio.';
+    $('dialog-subtitle').textContent = 'Define un tipo de sesión (Individual, Dual, Cabina…) con su color en el calendario.';
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
     $('field-color').value = ['#317b9b','#b85c38','#63805b','#885b9c','#a67a18'][services.length % 5];
@@ -319,7 +255,6 @@
     $('field-description').value = '';
     $('field-conditions').value = '';
     $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
-    updateCalculatedPrice();
     dialog.showModal();
   }
 
@@ -331,13 +266,13 @@
     clearValidationErrors();
     $('service-id').value = service.id;
     $('dialog-title').textContent = 'Editar servicio';
-    $('dialog-subtitle').textContent = `Modifica las características y tarifa de «${service.name}».`;
+    $('dialog-subtitle').textContent = `Modifica las características de «${service.name}».`;
     $('field-name').value = service.name || '';
     $('field-category').value = service.category || 'TRAINING';
     $('field-color').value = service.color || '#317b9b';
     $('field-modality').value = service.modality || 'INDIVIDUAL';
-    $('field-type').value = service.type || 'SESION_INDIVIDUAL';
-    $('field-trainingCount').value = service.trainingCount ?? (service.type === 'PACK' ? 10 : 1);
+    $('field-type').value = 'SESION_INDIVIDUAL';
+    $('field-trainingCount').value = '1';
     $('field-price').value = service.price != null ? Number(service.price).toFixed(2) : '';
     $('field-durationMin').value = service.durationMin || 60;
     $('field-validityWeeks').value = String(service.validityWeeks || 4);
@@ -345,14 +280,7 @@
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
     $('field-conditions').value = service.conditions || '';
-
-    if ($('field-type').value === 'SESION_INDIVIDUAL') {
-      $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
-    } else {
-      $('hint-trainingCount').textContent = 'Número total de sesiones incluidas en el bono/pack.';
-    }
-
-    updateCalculatedPrice();
+    $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
     dialog.showModal();
   }
 
@@ -374,27 +302,6 @@
     $('open-service-create')?.addEventListener('click', openCreateDialog);
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
-
-    // Adaptar sugerencia de sesiones según tipo
-    $('field-type')?.addEventListener('change', (e) => {
-      const type = e.target.value;
-      const countInput = $('field-trainingCount');
-      if (type === 'SESION_INDIVIDUAL') {
-        countInput.value = '1';
-        $('hint-trainingCount').textContent = '1 sesión para entrenamiento individual.';
-      } else {
-        if (countInput.value === '1' || !countInput.value) countInput.value = '10';
-        $('hint-trainingCount').textContent = 'Número total de sesiones incluidas en el bono/pack.';
-      }
-      updateCalculatedPrice();
-    });
-
-    // Auto-cálculo en tiempo real
-    $('field-price')?.addEventListener('input', updateCalculatedPrice);
-    $('field-price')?.addEventListener('change', updateCalculatedPrice);
-    $('field-trainingCount')?.addEventListener('input', updateCalculatedPrice);
-    $('field-trainingCount')?.addEventListener('change', updateCalculatedPrice);
-    $('field-modality')?.addEventListener('change', updateCalculatedPrice);
 
     // Limpiar estado de error al escribir en cualquier campo
     form?.querySelectorAll('input, select, textarea').forEach(field => {
@@ -432,42 +339,13 @@
         return setFieldError('field-modality', 'Selecciona una modalidad válida (Individual o Dual).');
       }
 
-      // 3. Tipo de servicio
-      const type = $('field-type').value;
-      if (type !== 'SESION_INDIVIDUAL' && type !== 'PACK') {
-        return setFieldError('field-type', 'Selecciona un tipo de servicio válido (Sesión individual o Pack).');
+      // 3. Color
+      const color = $('field-color').value;
+      if (!/^#[0-9a-f]{6}$/i.test(color)) {
+        return setFieldError('field-color', 'Selecciona un color válido.');
       }
 
-      // 4. Número de sesiones
-      const countRaw = $('field-trainingCount').value.trim();
-      if (!countRaw) {
-        return setFieldError('field-trainingCount', 'Indica el número de sesiones del servicio.');
-      }
-      const trainingCount = Number(countRaw);
-      if (!Number.isInteger(trainingCount) || trainingCount < 1 || trainingCount > 500) {
-        return setFieldError('field-trainingCount', 'El número de sesiones debe ser un entero entre 1 y 500.');
-      }
-      if (type === 'SESION_INDIVIDUAL' && trainingCount !== 1) {
-        return setFieldError('field-trainingCount', 'Una sesión individual debe tener exactamente 1 sesión. Selecciona «Pack de sesiones» si incluye varias.');
-      }
-      if (type === 'PACK' && trainingCount < 2) {
-        return setFieldError('field-trainingCount', 'Un pack o bono de sesiones debe incluir al menos 2 sesiones.');
-      }
-
-      // 5. Precio total
-      const priceRaw = $('field-price').value.trim();
-      if (!priceRaw) {
-        return setFieldError('field-price', 'El precio total del servicio es obligatorio.');
-      }
-      const price = Number(priceRaw);
-      if (!Number.isFinite(price) || price < 0) {
-        return setFieldError('field-price', 'El precio total no puede ser negativo.');
-      }
-      if (price > 99999999.99) {
-        return setFieldError('field-price', 'El precio total no puede superar los 99.999.999,99 €.');
-      }
-
-      // 6. Duración por sesión
+      // 4. Duración por sesión
       const durRaw = $('field-durationMin').value.trim();
       if (!durRaw) {
         return setFieldError('field-durationMin', 'La duración de cada sesión es obligatoria.');
@@ -477,14 +355,27 @@
         return setFieldError('field-durationMin', 'La duración debe ser un entero entre 5 y 720 minutos.');
       }
 
-      // 7. Validez editable en semanas completas.
+      // 5. Precio por sesión
+      const priceRaw = $('field-price').value.trim();
+      if (!priceRaw) {
+        return setFieldError('field-price', 'El precio por sesión es obligatorio.');
+      }
+      const price = Number(priceRaw);
+      if (!Number.isFinite(price) || price < 0) {
+        return setFieldError('field-price', 'El precio no puede ser negativo.');
+      }
+      if (price > 99999999.99) {
+        return setFieldError('field-price', 'El precio no puede superar los 99.999.999,99 €.');
+      }
+
+      // 6. Validez
       const weeksRaw = $('field-validityWeeks').value.trim();
       const validityWeeks = Number(weeksRaw);
       if (!Number.isSafeInteger(validityWeeks) || validityWeeks < 1 || validityWeeks > 5200) {
         return setFieldError('field-validityWeeks', 'Indica una validez entre 1 y 5200 semanas.');
       }
 
-      // 8. Frecuencia semanal recomendada (opcional)
+      // 7. Frecuencia semanal recomendada (opcional)
       const freqRaw = $('field-frequency').value.trim();
       let recommendedWeeklyFrequency = null;
       if (freqRaw) {
@@ -494,19 +385,19 @@
         }
       }
 
-      // 9. Descripción (opcional)
+      // 8. Descripción (opcional)
       const description = $('field-description').value.trim();
       if (description.length > 2000) {
         return setFieldError('field-description', 'La descripción no puede tener más de 2000 caracteres.');
       }
 
-      // 10. Condiciones (opcional)
+      // 9. Condiciones (opcional)
       const conditions = $('field-conditions').value.trim();
       if (conditions.length > 5000) {
         return setFieldError('field-conditions', 'Las condiciones no pueden tener más de 5000 caracteres.');
       }
 
-      // 11. Estado del servicio
+      // 10. Estado del servicio
       const isActive = $('field-isActive').value === 'true';
 
       const submitBtn = $('submit-dialog');
@@ -517,13 +408,13 @@
         name,
         description: description || null,
         modality,
-        type,
-        trainingCount,
+        type: 'SESION_INDIVIDUAL',
+        trainingCount: 1,
         price,
         durationMin,
         validityWeeks,
         category: $('field-category').value,
-        color: $('field-color').value,
+        color,
         recommendedWeeklyFrequency,
         conditions: conditions || null,
         isActive,

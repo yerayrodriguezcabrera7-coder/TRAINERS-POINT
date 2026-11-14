@@ -384,6 +384,7 @@ model Service {
   recommendedWeeklyFrequency Int?
   conditions                 String?
   isActive                   Boolean                @default(true)
+  serviceId                  String?                @db.Uuid
   createdAt                  DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt                  DateTime               @updatedAt @db.Timestamptz(3)
   bookings                   Booking[]
@@ -392,6 +393,8 @@ model Service {
 
   @@index([isActive, name])
   @@index([modality, type])
+  @@index([type])
+  @@index([serviceId])
 }
 
 model ClientServicePackage {

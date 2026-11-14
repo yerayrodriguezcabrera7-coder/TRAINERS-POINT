@@ -8,6 +8,7 @@
     { key: 'pendientes.html', label: 'Pendientes de asignación' },
     { key: 'clientes', label: 'Clientes' },
     { key: 'servicios', label: 'Servicios' },
+    { key: 'packs.html', label: 'Packs / Bonos' },
     { key: 'profesionales', label: 'Profesionales' },
     { key: 'fichajes.html', label: 'Fichajes' },
     { key: 'ausencias.html', label: 'Ausencias del equipo' },
@@ -33,7 +34,7 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+    RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     CLIENT: ['mis-reservas.html'],
   };
@@ -52,7 +53,7 @@
     {
       id: 'reception_full',
       label: 'Recepción completa',
-      pages: ['caja.html', 'servicios', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+      pages: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     },
     {
       id: 'clock_only',

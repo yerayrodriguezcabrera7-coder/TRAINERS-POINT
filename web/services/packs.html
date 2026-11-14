@@ -1,0 +1,206 @@
+<!DOCTYPE html><html lang="es"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111111">
+    <title>Packs / Bonos | Trainers Point</title><script src="/polling.js" defer></script>
+    <link rel="stylesheet" href="/clients.css">
+    <link rel="stylesheet" href="/services.css">
+    <link rel="stylesheet" href="/menu.css">
+    <script src="/runtime.js" defer=""></script>
+    <script src="/packs.js" defer=""></script>
+    <script src="/menu.js" defer=""></script>
+  <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script></head>
+  <body>
+    <div class="app-shell">
+      <aside data-app-menu="" aria-label="Navegación principal"></aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Packs</strong></div>
+          <div class="topbar-right">
+            <div class="profile-avatar" aria-hidden="true">TP</div>
+          </div>
+        </header>
+
+        <section class="page-content">
+          <header class="page-heading">
+            <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
+            <div class="page-heading-copy">
+              <p class="eyebrow">CENTRO · PACKS / BONOS</p>
+              <h1>Packs <span id="heading-count" class="heading-count"></span></h1>
+              <p class="page-description">Configura los bonos y paquetes de sesiones disponibles. Cada pack se vincula a un Servicio (Individual, Dual…) para heredar su color y datos en el calendario.</p>
+            </div>
+            <button class="button button-primary" id="open-pack-create" type="button">
+              <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              Nuevo pack
+            </button>
+          </header>
+
+          <!-- Panel de catálogo -->
+          <section class="client-panel" aria-labelledby="packs-panel-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="packs-panel-title">Catálogo de packs</h2>
+                <p>Bonos de sesiones disponibles para la venta.</p>
+              </div>
+              <span class="results-count" id="results-count"></span>
+            </div>
+
+            <!-- Chips de filtro -->
+            <div class="client-filter-chips" role="group" aria-label="Filtrar packs">
+              <button class="filter-chip active" type="button" data-filter="all" aria-pressed="true">Todos</button>
+              <button class="filter-chip" type="button" data-filter="active" aria-pressed="false">Activos</button>
+              <button class="filter-chip" type="button" data-filter="inactive" aria-pressed="false">Inactivos</button>
+              <button class="filter-chip" type="button" data-filter="INDIVIDUAL" aria-pressed="false">Individual</button>
+              <button class="filter-chip" type="button" data-filter="DUAL" aria-pressed="false">Dual</button>
+            </div>
+
+            <!-- Toolbar con buscador y botón de refresco -->
+            <div class="toolbar">
+              <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
+                <label class="sr-only" for="pack-search">Buscar pack</label>
+                <input id="pack-search" type="search" placeholder="Buscar por nombre o servicio vinculado…" autocomplete="off">
+                <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+              </div>
+              <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar catálogo" title="Actualizar catálogo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"></path></svg></button>
+            </div>
+
+            <!-- Listado de tarjetas de packs -->
+            <div id="packs-grid" class="services-list" aria-live="polite">
+              <div class="services-empty">
+                <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></div>
+                <h3>Cargando packs…</h3>
+                <p>Conectando con la base de datos de Trainers Point.</p>
+              </div>
+            </div>
+
+            <div class="table-footer">
+              <span id="table-summary">—</span>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <!-- Modal Dialog para crear y editar pack -->
+    <dialog id="pack-dialog" class="client-dialog service-dialog" aria-labelledby="dialog-title">
+      <form id="pack-form" novalidate="">
+        <input type="hidden" name="id" id="pack-id">
+
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow" id="dialog-eyebrow">CATÁLOGO DE PACKS</p>
+            <h2 id="dialog-title">Nuevo pack</h2>
+            <p id="dialog-subtitle">Define un bono de sesiones vinculado a un servicio existente.</p>
+          </div>
+          <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+        </div>
+
+        <div class="form-grid">
+          <label class="form-field form-field-wide">
+            <span>Nombre del pack <b>*</b></span>
+            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 Sesiones">
+          </label>
+
+          <label class="form-field">
+            <span>Servicio vinculado <b>*</b></span>
+            <select name="serviceId" id="field-service" required>
+              <option value="">— Selecciona un servicio —</option>
+            </select>
+            <span class="field-hint">El pack hereda el color y la modalidad del servicio al que se vincula.</span>
+          </label>
+
+          <label class="form-field"><span>Categoría</span><select id="field-category" name="category"><option value="TRAINING">Entrenamiento</option><option value="CABIN">Cabina</option></select></label>
+          <label class="form-field">
+            <span>Modalidad <b>*</b></span>
+            <select name="modality" id="field-modality" required="">
+              <option value="INDIVIDUAL">Individual (1 persona)</option>
+              <option value="DUAL">Dual (2 personas / pareja)</option>
+            </select>
+            <span class="field-hint">Coincide con el servicio vinculado por defecto.</span>
+          </label>
+
+          <label class="form-field">
+            <span>Número de sesiones <b>*</b></span>
+            <input name="trainingCount" id="field-trainingCount" type="number" min="2" max="500" step="1" required="" value="10">
+            <span class="field-hint">Total de sesiones incluidas en el bono.</span>
+          </label>
+
+          <label class="form-field">
+            <span>Precio total (€) <b>*</b></span>
+            <input name="price" id="field-price" type="number" min="0" max="99999999.99" step="0.01" required="" placeholder="0,00">
+            <span class="field-hint" id="hint-price">Importe total del bono/pack.</span>
+          </label>
+
+          <!-- Cálculo automático del precio por sesión -->
+          <div class="form-field form-field-wide calculated-rate-panel" id="calculated-rate-panel" aria-live="polite">
+            <div class="calc-panel-inner">
+              <div class="calc-label-col">
+                <span class="calc-badge">⚡ CÁLCULO AUTOMÁTICO</span>
+                <span class="calc-label-title">Precio por sesión</span>
+              </div>
+              <div class="calc-display-col">
+                <div class="calc-figure-wrap">
+                  <strong class="calc-figure" id="calc-session-price">—</strong>
+                  <span class="calc-unit">/ sesión</span>
+                </div>
+                <span class="calc-formula" id="calc-formula">Introduce precio total y número de sesiones para calcular el desglose.</span>
+              </div>
+            </div>
+          </div>
+
+          <label class="form-field">
+            <span>Duración por sesión (minutos) <b>*</b></span>
+            <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
+            <span class="field-hint">Minutos de reserva en calendario.</span>
+          </label>
+
+          <label class="form-field">
+            <span>Estado del pack <b>*</b></span>
+            <select name="isActive" id="field-isActive" required="">
+              <option value="true">Activo (visible para contratación y reservas)</option>
+              <option value="false">Inactivo (desactivado temporalmente)</option>
+            </select>
+            <span class="field-hint">Controla si está disponible para la venta.</span>
+          </label>
+
+          <label class="form-field">
+            <span>Validez / Duración <b>*</b></span>
+            <div class="validity-input-wrap">
+              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4" required="">
+              <span class="validity-badge">semanas</span>
+            </div>
+            <span class="field-hint">4 semanas por defecto.</span>
+          </label>
+
+          <label class="form-field">
+            <span>Frecuencia semanal recomendada (días/sem)</span>
+            <input name="recommendedWeeklyFrequency" id="field-frequency" type="number" min="1" max="14" step="1" placeholder="Ej. 2 (opcional)">
+            <span class="field-hint">Días recomendados por semana.</span>
+          </label>
+
+          <label class="form-field form-field-wide">
+            <span>Descripción del pack</span>
+            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe las características de este bono…"></textarea>
+          </label>
+
+          <label class="form-field form-field-wide">
+            <span>Condiciones y políticas</span>
+            <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación…"></textarea>
+          </label>
+        </div>
+
+        <p class="form-error" id="form-error" role="alert" hidden=""></p>
+
+        <div class="dialog-actions">
+          <button class="button button-outline" id="cancel-dialog" type="button">Cancelar</button>
+          <button class="button button-primary" id="submit-dialog" type="submit">Guardar pack</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Toast de notificaciones -->
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden=""></div>
+
+</body></html>
