@@ -5,6 +5,7 @@ import { Pool,PoolClient } from "pg";
 import { accessMigration, type Identity } from "./access";
 import { sharedStaffMigration, sharedStaff, saveStaff, saveSharedLeave, networkLock } from "./shared-staff";
 import { clientScope } from "../network/scope";
+import { queryCache } from "../cache/query-cache";
 import {
 ApiError,
 Booking,
@@ -192,15 +193,30 @@ export class Store {
       await this.pool.query("INSERT INTO calendar.shared_leaves(id,data) VALUES($1,$2) ON CONFLICT(id) DO NOTHING",[leave.id,leave]);
   }
   async listGyms() {
-    return (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
+    const cached = queryCache.get<Array<{
+      id: string;
+      name: string;
+      maxBookingsPerHour: number | null;
+    }>>('gyms:list');
+    if (cached) return cached;
+
+    const result = (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
       .map((row) => ({
         id: row.id as string,
         name: (row.name || row.id) as string,
         maxBookingsPerHour: row.config?.maxBookingsPerHour != null ? Number(row.config.maxBookingsPerHour) : null,
       }));
+    queryCache.set('gyms:list', result);
+    return result;
   }
   async gymExists(gym: string) {
-    return Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
+    const cacheKey = `gym:exists:${gym}`;
+    const cached = queryCache.get<boolean>(cacheKey);
+    if (cached !== undefined) return cached;
+
+    const exists = Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
+    queryCache.set(cacheKey, exists);
+    return exists;
   }
   async createGym(name: string, templateGym: string) {
     const id = `${name.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "gimnasio"}-${randomUUID().slice(0, 8)}`;
@@ -252,6 +268,8 @@ export class Store {
         bookings,
         Number(rows[0].revision),
       );
+      // Clear cache after modifications
+      queryCache.clear();
       await db.query(
         "UPDATE calendar.gyms SET revision=revision+1 WHERE id=$1",
         [gym],
@@ -265,7 +283,13 @@ export class Store {
       db.release();
     }
   }
-  async centers() {
+  async centers(): Promise<any[]> {
+    const cacheKey = `centers:${this.clientsDb ? 'prisma' : 'raw'}`;
+    const cached = queryCache.get<any>(cacheKey);
+    if (cached) return cached;
+
+    let result: any;
+
     if (this.clientsDb) {
       try {
         const rows = await this.clientsDb.$queryRaw<Array<{
@@ -277,13 +301,17 @@ export class Store {
           maxBookingsPerHour: number | null;
           schedule: unknown;
         }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour", "schedule" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
-        return rows.map((r) => {
+        result = rows.map((r) => {
           const parsedSchedule = Array.isArray(r.schedule) ? week.safeParse(r.schedule) : null;
           return {
-            ...r,
+            id: r.id,
+            name: r.name,
+            address: r.address || '',
+            city: r.city || '',
+            province: r.province || '',
             maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
             schedule: parsedSchedule?.success ? parsedSchedule.data : null,
-          };
+          } as any;
         });
       } catch {
         try {
@@ -295,24 +323,36 @@ export class Store {
             province: string | null;
             maxBookingsPerHour: number | null;
           }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
-          return rows.map((r) => ({
-            ...r,
+          result = rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            address: r.address || '',
+            city: r.city || '',
+            province: r.province || '',
             maxBookingsPerHour: r.maxBookingsPerHour != null ? Number(r.maxBookingsPerHour) : null,
             schedule: null,
-          }));
+          }) as any);
         } catch {
-          return this.clientsDb.gym.findMany({
+          result = await this.clientsDb.gym.findMany({
             where: { isActive: true },
             select: { id: true, name: true, address: true, city: true, province: true },
             orderBy: { name: "asc" },
-          }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null, schedule: null })));
+          }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null, schedule: null }) as any));
         }
       }
+    } else {
+      result = (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null})).map(g => g as any);
     }
-    return (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null}));
+
+    queryCache.set(cacheKey, result);
+    return result;
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
+    const cacheKey = `state:${gym}`;
+    const cached = queryCache.get<any>(cacheKey);
+    if (cached) return cached;
+
     const { rows } = await this.pool.query(
       `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings WHERE gym_id=g.id),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
       [gym],
@@ -325,13 +365,15 @@ export class Store {
     ]);
     const centersById = new Map(centers.map(center => [center.id, center]));
     const packagesByBooking = new Map(packageResult.rows.map(pkg => [pkg.id, pkg]));
-    return {
+    const result = {
       gymId:gym, centers, packagesEnabled:!!this.clientsDb,
       ...config,
       bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&(b.packageId?linked.paymentStatus!=='PAGADO':linked.paymentPending)}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };
+    queryCache.set(cacheKey, result);
+    return result;
   }
   // The mirror and calendar JSON are written on the same PostgreSQL connection/transaction.
   private async syncPackageBooking(db:PoolClient,gym:string,b:Booking,c:Config){
