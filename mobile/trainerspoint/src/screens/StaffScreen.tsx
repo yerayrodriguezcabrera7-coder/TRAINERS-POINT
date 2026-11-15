@@ -1316,7 +1316,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxHeight: "85%",
     backgroundColor: "#fff",
-    borderRadius: "24% 24% 0 0",
+    borderRadius: 24,
     overflow: "hidden",
   },
   modalBody: {
