@@ -5,7 +5,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -237,7 +236,7 @@ export function StaffScreen({
   }
 
   const [dayScrollOffset, setDayScrollOffset] = useState(0);
-  const dayScrollRef = useRef<ScrollView>(null);
+  const dayScrollRef = useRef<any>(null);
 
   // Auto-scroll to show today or selected day
   useEffect(() => {
@@ -255,8 +254,6 @@ export function StaffScreen({
 
   return (
     <View style={styles.page}>
-      <StatusBar barStyle="light-content" backgroundColor="#1d302e" />
-
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -308,7 +305,7 @@ export function StaffScreen({
               ]}
             >
               <Feather
-                name={item.icon}
+                name={item.icon as any}
                 size={18}
                 color={tab === item.value ? "#fff" : "#68796e"}
               />
@@ -503,7 +500,7 @@ export function StaffScreen({
                     selected={center === "all"}
                     onPress={() => setCenter("all")}
                   />
-                  {data?.centers.map((c) => (
+                  {data?.centers?.map((c) => (
                     <BigChip
                       key={c.id}
                       label={c.name}
