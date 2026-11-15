@@ -200,7 +200,10 @@ async function start(): Promise<void> {
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
   const stopReminders = new ReminderWorker(pool, configuredProvider()).start();
+  let closing = false;
   const close = () => {
+    if (closing) return;
+    closing = true;
     void server.close(async () => {
       await stopReminders();
       calendar.close();
