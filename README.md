@@ -1,65 +1,154 @@
 # Trainers Point
 
-Aplicación única con un solo servidor y un solo comando de arranque.
+Aplicación con servidor API, app web y app móvil.
 
 **Para localizar el código:** consulta el [mapa del proyecto y las optimizaciones](docs/estructura-y-optimizacion.md). Todas las pantallas están en `web/`, organizadas por apartado; el servidor está en `src/` y la base de datos en `prisma/`.
 
-## Requisitos
+## 📋 Requisitos
 
-- Node.js 22 o superior.
-- PostgreSQL local integrado para desarrollo.
+- Node.js 22 o superior
+- npm instalado
 
-## Instalacion
+## 🚀 Arranque rápido
 
-```sh
-npm ci
-npm run prisma:generate
+El proyecto tiene **dos servidores** que se levantan en terminales separadas.
+
+### Paso 1: Instalar dependencias
+
+```bash
+cd /Users/nozar/Documents/GitHub/DAW/Practicas/TRAINERS-POINT
+npm install
+```
+
+### Paso 2: Configurar variables de entorno
+
+```bash
+cp .env.example .env
+```
+
+> ⚠️ No compartas ni imprimas el archivo `.env`.
+
+---
+
+### Paso 3: Levantar el Backend (API) — Terminal 1
+
+```bash
 npm run dev
 ```
 
-Antes de arrancar por primera vez, copia `.env.example` a `.env` si todavía no lo tienes. En PowerShell puede usarse npm.cmd. No imprimas ni compartas .env.
+✅ **Backend corriendo en:** http://localhost:3000/
 
-`npm run dev` configura y arranca PostgreSQL local en `.calendar-dev` (puerto `55439`), aplica las migraciones del CRM y del calendario, y activa una cuenta local `admin/admin` cuando aún no hay usuarios. Tanto el CRM como el calendario usan esa base local; no se conecta a AWS. Los datos de AWS no se copian: el CRM local empieza vacío. La base y sus credenciales permanecen en `.calendar-dev/`, que no se versiona.
+Este servidor levanta:
+- Base de datos PostgreSQL local (puerto `55439`)
+- API REST del CRM y calendario
+- Recarga automática al cambiar código
 
-## Arranque
+> La base de datos se guarda en `.calendar-dev/` (no se borra entre ejecuciones).
 
-npm run dev levanta Trainers Point con recarga en:
+---
 
-http://localhost:3000/
+### Paso 4: Levantar la App Móvil (Web) — Terminal 2
 
-Ctrl+C detiene el servidor de la aplicación. PostgreSQL local permanece iniciado para conservar los datos entre ejecuciones.
+```bash
+cd mobile/trainerspoint
+npm install
+npm run export:web
+node server-static.cjs
+```
 
-## Rutas
+✅ **App móvil web corriendo en:** http://localhost:8081/
 
-- / o /index.html: Calendario.
-- /inicio.html: Inicio.
-- /fichajes.html: Fichajes.
-- /gestion.html?section=services: Servicios.
-- /clientes: Clientes.
-- /gimnasios: Gimnasios.
-- /login.html: Acceso del equipo.
-- /change-password.html: Cambio obligatorio de la contraseña inicial.
+Este servidor levanta:
+- App web estática de la app móvil
+- Proxy de API: `/api/*` → `http://localhost:3000`
 
-Al crear una cuenta, el usuario de acceso es el nombre de usuario elegido y la contraseña temporal es `Trainerspoint`. El primer inicio obliga a cambiarla. Las contraseñas se almacenan con scrypt (hash con salt aleatorio), no como texto ni cifrado reversible.
+---
 
-Crear una ficha de cliente no genera una cuenta de acceso. Si un cliente necesita acceder al calendario, su cuenta se puede crear manualmente desde la gestión de usuarios.
+### 🌐 Acceso final
 
-Todas las pantallas usan un unico menu.
+| Servicio | URL | Puerto |
+|----------|-----|--------|
+| **App web (calendario, CRM, etc.)** | http://localhost:3000/ | 3000 |
+| **App móvil (web)** | http://localhost:8081/ | 8081 |
 
-## Scripts
+La app móvil (8081) se conecta automáticamente al backend (3000) vía proxy.
 
-- npm start: compilacion y arranque unico.
-- npm run dev: desarrollo con recarga.
-- npm test: pruebas de reservas, permisos, productos, bonos, cobros, Caja y puesta en marcha.
-- npm run db:test: comprueba la conexión configurada en `DATABASE_URL`.
-- npm run prisma:generate: genera el cliente Prisma.
+---
 
-El directorio `.calendar-dev/` contiene la base local persistente y sus credenciales; no lo borres si quieres conservar los datos locales.
+## 📖 Rutas de la app
 
-## Puesta en marcha en la empresa
+| Ruta | Descripción |
+|------|-------------|
+| `/` o `/index.html` | Calendario |
+| `/inicio.html` | Inicio |
+| `/fichajes.html` | Fichajes |
+| `/gestion.html?section=services` | Servicios |
+| `/clientes` | Clientes |
+| `/gimnasios` | Gimnasios |
+| `/login.html` | Acceso del equipo |
+| `/change-password.html` | Cambio de contraseña |
 
-La [guía de puesta en marcha](docs/puesta-en-marcha.md) explica la instalación con HTTPS, la primera cuenta de administración, las copias de seguridad y una jornada de prueba con el tutor. Los cobros actuales registran dinero recibido; los cargos bancarios online necesitan un proveedor y credenciales de la empresa.
+---
 
-## Integración opcional con AWS
+## 🔑 Acceso
 
-La conexión opcional con Cognito, RDS PostgreSQL y la plantilla de API Gateway están documentadas en [deploy/aws/README.md](deploy/aws/README.md). Están desactivadas por defecto y no crean servicios de pago. Web y app conservan el servidor y la base compartidos.
+- Al crear una cuenta, el usuario es el nombre elegido y la contraseña temporal es `Trainerspoint`.
+- El primer inicio obliga a cambiarla.
+- Las contraseñas se almacenan con scrypt (hash con salt aleatorio).
+
+---
+
+## 🛠 Scripts disponibles
+
+| Comando | Descripción |
+|---------|-------------|
+| `npm run dev` | Desarrollo con recarga (backend + DB local) |
+| `npm run build` | Compilar backend (genera `dist/`) |
+| `npm start` | Producción: compila y arranca |
+| `npm test` | Ejecuta las pruebas |
+| `npm run prisma:generate` | Genera el cliente Prisma |
+| `npm run prisma:studio` | Abre Prisma Studio (base de datos visual) |
+| `npm run export:web` | Compilar app móvil web (en `mobile/trainerspoint/`) |
+| `npm run db:test` | Comprueba la conexión a la base de datos |
+| `npm run db:backup` | Copia de seguridad de la base de datos |
+| `npm run db:restore` | Restaurar desde copia de seguridad |
+
+---
+
+## 📂 Estructura
+
+```
+.
+├── src/              # Código del servidor (API)
+├── web/              # Pantallas web (HTML/CSS/JS)
+├── mobile/           # App móvil (React Native/Expo)
+│   └── trainerspoint/
+│       ├── dist/     # Web exportada
+│       └── server-static.cjs  # Servidor de la app web
+├── prisma/           # Modelo y migraciones de base de datos
+├── scripts/          # Scripts de automatización
+├── docs/             # Documentación
+├── tests/            # Pruebas
+└── .calendar-dev/    # Base de datos local (no versionada)
+```
+
+---
+
+## 💾 Base de datos
+
+La base de datos local persiste en `.calendar-dev/`. No la borres si quieres conservar los datos.
+
+Para resetearla, borra el directorio `.calendar-dev/` y vuelve a ejecutar `npm run dev`.
+
+---
+
+## ☁️ Integración con AWS (opcional)
+
+La conexión con Cognito, RDS PostgreSQL y API Gateway está documentada en [deploy/aws/README.md](deploy/aws/README.md). Está desactivada por defecto y no crea servicios de pago.
+
+---
+
+## 📚 Documentación adicional
+
+- [Guía de puesta en marcha](docs/puesta-en-marcha.md) — instalación con HTTPS, copias de seguridad, jornada de prueba.
+- [Estructura y optimizaciones](docs/estructura-y-optimizacion.md) — mapa del proyecto.
