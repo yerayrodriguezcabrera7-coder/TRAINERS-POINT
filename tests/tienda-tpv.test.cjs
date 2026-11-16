@@ -508,6 +508,282 @@ test('Tienda TPV: compatibilidad con pistola lectora de códigos de barras y ges
   dom.window.close();
 });
 
+test('Tienda TPV & Ficha: cobro cruzado de bono con productos de la tienda', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+
+  // 1. Verificación estática HTML
+  assert.ok(html.includes('id="btn-tpv-add-bono"'), 'Debe tener botón para añadir bono en TPV');
+  assert.ok(html.includes('id="tpv-bono-dialog"'), 'Debe tener diálogo modal de bono');
+  assert.ok(html.includes('id="tpv-bono-service-select"'), 'Debe tener selector de servicio/bono');
+
+  const profileHtml = fs.readFileSync('web/clients/client-profile.html', 'utf8');
+  assert.ok(profileHtml.includes('id="bono-product-select"'), 'Ficha cliente debe tener selector de productos de tienda en bono');
+  assert.ok(profileHtml.includes('id="btn-bono-add-product"'), 'Ficha cliente debe tener botón de añadir producto a bono');
+
+  // 2. Simulación JSDOM en TPV
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true },
+    { id: 'p2', name: 'Barrita Proteína', unitPrice: 2.50, stock: 10, isActive: true }
+  ];
+  const mockClients = [{ id: 'cl-1', firstName: 'Elena', lastName: 'Navarro', name: 'Elena Navarro' }];
+  const mockServices = [
+    { id: 'srv-1', name: 'Bono 10 Sesiones PT', type: 'PACK', sessionsBought: 10, price: 250.00 }
+  ];
+
+  let bonoPurchasedBody = null;
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') {
+      return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    }
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: mockClients }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: mockServices }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path.startsWith('clients/cl-1/service-packages') && opts.method === 'POST') {
+      bonoPurchasedBody = JSON.parse(opts.body);
+      return {
+        ok: true,
+        json: async () => ({
+          servicePackage: {
+            id: 'pkg-1',
+            saleId: 'sale-combo-1',
+            serviceId: bonoPurchasedBody.serviceId,
+            sessionsBought: bonoPurchasedBody.sessionsBought,
+            totalAmount: bonoPurchasedBody.totalAmount
+          }
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Seleccionar cliente registrado
+  doc.getElementById('buyer-opt-client').click();
+  doc.getElementById('client-select').value = 'cl-1';
+  doc.getElementById('client-select').dispatchEvent(new w.Event('change'));
+
+  // Añadir 1 producto de tienda (Agua mineral: 1,50 €)
+  const cardAgua = doc.querySelector('.tpv-product-card[data-product-id="p1"]');
+  cardAgua.click();
+  await new Promise(r => setTimeout(r, 30));
+
+  // Abrir diálogo de bono y añadir Bono 10 sesiones (250,00 €)
+  doc.getElementById('btn-tpv-add-bono').click();
+  assert.equal(doc.getElementById('tpv-bono-dialog').open, true);
+
+  const bonoSelect = doc.getElementById('tpv-bono-service-select');
+  bonoSelect.value = 'srv-1';
+  bonoSelect.dispatchEvent(new w.Event('change'));
+  assert.equal(doc.getElementById('tpv-bono-price-input').value, '250.00');
+
+  // Enviar modal de bono
+  doc.getElementById('tpv-bono-form').dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true }));
+
+  // Comprobar que en el ticket aparecen tanto el producto como el bono
+  const ticketItems = doc.querySelectorAll('.tpv-item-row');
+  assert.equal(ticketItems.length, 2, 'Deben existir 2 filas en el ticket: producto + bono');
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('251,50'), 'Total debe ser 251,50 € (250 € bono + 1,50 € agua)');
+
+  // Confirmar cobro conjunto de bono + producto
+  doc.getElementById('pay-btn-card').click();
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que se llamó a service-packages con los productos incluidos en el mismo cobro
+  assert.ok(bonoPurchasedBody, 'Debe haberse procesado la compra del bono');
+  assert.equal(bonoPurchasedBody.serviceId, 'srv-1');
+  assert.equal(bonoPurchasedBody.sessionsBought, 10);
+  assert.equal(bonoPurchasedBody.paymentMethod, 'TARJETA');
+  assert.ok(Array.isArray(bonoPurchasedBody.products), 'Debe incluir los productos en el mismo cobro');
+  assert.equal(bonoPurchasedBody.products.length, 1);
+  assert.equal(bonoPurchasedBody.products[0].productId, 'p1');
+  assert.equal(bonoPurchasedBody.products[0].quantity, 1);
+
+  dom.window.close();
+});
+
+test('Tienda TPV: detección de deudas pendientes al comprar un producto y cobro simultáneo', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [{ id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }];
+  const mockClients = [{ id: 'cl-deuda', firstName: 'Marcos', lastName: 'Ruiz', name: 'Marcos Ruiz' }];
+  const mockDebts = { 'cl-deuda': 45.00 }; // 45 € de deuda pendiente
+
+  let debtPayCall = null;
+  let saleCreated = null;
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: mockClients }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: mockDebts }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      saleCreated = JSON.parse(opts.body);
+      return { ok: true, json: async () => ({ id: 'sale-1', totalAmount: 1.50, lines: [{ quantity: 1, unitPrice: 1.5, description: 'Agua mineral 500ml' }] }) };
+    }
+    if (path.startsWith('inventory/clients/cl-deuda/pay-debt') && opts.method === 'POST') {
+      debtPayCall = JSON.parse(opts.body);
+      mockDebts['cl-deuda'] = 0; // Se salda la deuda
+      return { ok: true, json: async () => ({ success: true, paidAmount: 45.00, remainingDebt: 0 }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // 1. Seleccionar cliente con deuda
+  doc.getElementById('buyer-opt-client').click();
+  doc.getElementById('client-select').value = 'cl-deuda';
+  doc.getElementById('client-select').dispatchEvent(new w.Event('change'));
+  await new Promise(r => setTimeout(r, 30));
+
+  // 2. Comprobar que aparece el aviso de deuda pendiente de 45,00 €
+  const alertBox = doc.getElementById('tpv-debt-alert-box');
+  assert.equal(alertBox.hidden, false, 'El banner de deuda pendiente debe ser visible');
+  assert.ok(doc.getElementById('tpv-debt-amount-text').textContent.includes('45,00'), 'Debe mostrar 45,00 €');
+
+  // 3. Añadir agua (1,50 €) al carrito
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  // 4. Pulsar botón "Cobrar deuda ahora (+45,00 €)"
+  doc.getElementById('btn-tpv-collect-debt').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  // Comprobar que el total del ticket ahora es 46,50 € (1,50 € agua + 45 € deuda)
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('46,50'));
+  assert.ok(doc.getElementById('ticket-items').textContent.includes('Cobro de deuda pendiente'));
+
+  // 5. Confirmar cobro en efectivo
+  doc.getElementById('pay-btn-cash').click();
+  doc.getElementById('cash-tendered').value = '50.00';
+  doc.getElementById('cash-tendered').dispatchEvent(new w.Event('input'));
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que se registró la venta y se saldó la deuda
+  assert.ok(saleCreated, 'La venta de productos debe haberse registrado');
+  assert.ok(debtPayCall, 'Debe haberse llamado a pay-debt para saldar la deuda');
+  assert.equal(debtPayCall.amount, 45.00);
+  assert.equal(debtPayCall.method, 'EFECTIVO');
+
+  dom.window.close();
+});
+
+test("Tienda TPV: botón rápido de incidencia 'Se ha ido sin pagar' registra la venta como deuda en la ficha", async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  assert.ok(html.includes('id="btn-unpaid-incident"'), 'Debe tener botón de incidencia Se ha ido sin pagar');
+
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Barrita Proteína', unitPrice: 2.50, stock: 10, isActive: true }
+  ];
+  const mockClients = [{ id: 'cl-huidizo', firstName: 'Rubén', lastName: 'Sánchez', name: 'Rubén Sánchez' }];
+
+  let saleRecorded = null;
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: mockClients }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      saleRecorded = JSON.parse(opts.body);
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-unpaid-1',
+          status: 'COMPLETADA',
+          totalAmount: 2.50,
+          paymentTracking: true,
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 2.50, description: 'Barrita Proteína' }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Seleccionar cliente registrado
+  doc.getElementById('buyer-opt-client').click();
+  doc.getElementById('client-select').value = 'cl-huidizo';
+  doc.getElementById('client-select').dispatchEvent(new w.Event('change'));
+
+  // Añadir barrita al carrito (2,50 €)
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  // Pulsar botón "🏃‍♂️ Se ha ido sin pagar"
+  const unpaidBtn = doc.getElementById('btn-unpaid-incident');
+  assert.equal(unpaidBtn.disabled, false);
+  unpaidBtn.click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Comprobar que se envió a la API con paymentMode: 'PENDING' vinculado al clientId
+  assert.ok(saleRecorded, 'Debe haberse enviado la venta al backend');
+  assert.equal(saleRecorded.paymentMode, 'PENDING', 'Debe registrarse como PENDING (deuda pendiente)');
+  assert.equal(saleRecorded.clientId, 'cl-huidizo', 'Debe estar asignada a la ficha del cliente');
+  assert.equal(saleRecorded.lines.length, 1);
+  assert.equal(saleRecorded.lines[0].productId, 'p1');
+
+  // El carrito debe haber quedado resuelto/vaciado
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('0'));
+
+  dom.window.close();
+});
+
+
 test('Tienda TPV: gestión de tickets múltiples (en espera), pestañas/nubes laterales y cambio entre clientes', async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
 
@@ -682,5 +958,3 @@ test('Tienda TPV: gestión de tickets múltiples (en espera), pestañas/nubes la
 
   dom.window.close();
 });
-
-

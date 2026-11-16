@@ -82,6 +82,7 @@
                 <button id="view-mode-list" class="tpv-view-btn" type="button" title="Vista en listado" aria-pressed="false">☰ Listado</button>
               </div>
               <button id="btn-barcode-mode" class="outline-button tpv-btn-barcode" type="button" title="Lector de código de barras activo. Pulsa para teclear un código manualmente o gestionar el EAN.">🔫 Lector EAN</button>
+              <button id="btn-tpv-add-bono" class="outline-button tpv-btn-add-bono" type="button" title="Añadir bono o pack de sesiones al ticket">🎫 Añadir Bono</button>
               <button id="btn-catalog-restock" class="outline-button" type="button" title="Anotar producto que falta para pedir">📝 Anotar falta</button>
               <button id="btn-refresh-products" class="outline-button" type="button">Actualizar</button>
             </div>
@@ -144,6 +145,20 @@
               <div id="client-select-wrap" class="tpv-client-search-wrap" hidden="">
                 <input id="client-search" type="search" placeholder="Buscar cliente por nombre o teléfono…">
                 <select id="client-select" aria-label="Seleccionar cliente"></select>
+              </div>
+
+              <!-- Aviso de deuda pendiente del cliente -->
+              <div id="tpv-debt-alert-box" class="tpv-debt-alert-box" hidden="">
+                <div class="tpv-debt-alert-content">
+                  <span class="tpv-debt-alert-icon">⚠️</span>
+                  <div class="tpv-debt-alert-text">
+                    <strong>Deuda pendiente: <span id="tpv-debt-amount-text">0,00 €</span></strong>
+                    <p>Este cliente tiene compras o bonos pendientes de abono en su ficha.</p>
+                  </div>
+                </div>
+                <button type="button" id="btn-tpv-collect-debt" class="tpv-btn-collect-debt">
+                  💳 Cobrar deuda ahora (+<span id="btn-tpv-collect-debt-val">0,00 €</span>)
+                </button>
               </div>
             </div>
 
@@ -218,6 +233,13 @@
             <button id="btn-confirm-sale" class="tpv-checkout-btn" type="button" disabled="">
               Confirmar venta y cobrar (0,00 €)
             </button>
+
+            <!-- Acciones secundarias e incidencias -->
+            <div class="tpv-ticket-secondary-actions">
+              <button id="btn-unpaid-incident" class="tpv-btn-unpaid" type="button" title="El cliente se ha marchado sin abonar el importe. Deja la venta registrada como deuda en su ficha.">
+                🏃‍♂️ Se ha ido sin pagar
+              </button>
+            </div>
           </div>
         </div>
         </section>
@@ -719,6 +741,39 @@
       <footer class="dialog-actions">
         <button type="button" id="btn-cancel-rename-dialog">Cancelar</button>
         <button type="submit" id="btn-save-rename-ticket" class="primary">Guardar nombre</button>
+      </footer>
+    </form>
+  </dialog>
+  <!-- MODAL: AÑADIR BONO AL TICKET DEL TPV -->
+  <dialog id="tpv-bono-dialog" class="tpv-modal" aria-labelledby="tpv-bono-title">
+    <form id="tpv-bono-form">
+      <header class="dialog-heading">
+        <h2 id="tpv-bono-title">🎫 Añadir bono / sesiones al ticket</h2>
+        <button type="button" id="btn-close-tpv-bono-dialog" aria-label="Cerrar">×</button>
+      </header>
+
+      <div class="form-grid">
+        <label class="full">
+          Servicio o Bono
+          <select id="tpv-bono-service-select" required>
+            <option value="">Selecciona un bono o pack…</option>
+          </select>
+        </label>
+
+        <label>
+          Sesiones incluidas
+          <input id="tpv-bono-sessions-input" type="number" min="1" max="500" value="10" required>
+        </label>
+
+        <label>
+          Importe del bono (€)
+          <input id="tpv-bono-price-input" type="number" step="0.01" min="0" value="0.00" required>
+        </label>
+      </div>
+
+      <footer class="dialog-actions">
+        <button type="button" id="btn-cancel-tpv-bono-dialog">Cancelar</button>
+        <button type="submit" id="btn-submit-tpv-bono" class="primary">➕ Añadir al ticket</button>
       </footer>
     </form>
   </dialog>

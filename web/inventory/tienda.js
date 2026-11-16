@@ -41,12 +41,16 @@
       paymentMethod: 'EFECTIVO',
       paymentMode: 'PAID',
       cashTendered: '',
+      bono: null,
+      includeDebt: false,
       createdAt: Date.now()
     };
   }
 
   let tickets = [];
   let activeTicketId = null;
+  let clientDebtsCache = {};
+  let servicesList = [];
 
   function getActiveTicket() {
     let t = tickets.find(item => item.id === activeTicketId);
@@ -72,6 +76,8 @@
         paymentMethod: t.paymentMethod,
         paymentMode: t.paymentMode,
         cashTendered: t.cashTendered,
+        bono: t.bono,
+        includeDebt: t.includeDebt,
         createdAt: t.createdAt
       }));
       localStorage.setItem('tpv_multi_tickets', JSON.stringify({ activeTicketId, tickets: serializable }));
@@ -86,7 +92,9 @@
       if (Array.isArray(data.tickets) && data.tickets.length > 0) {
         tickets = data.tickets.map(t => ({
           ...t,
-          cart: new Map(t.cart || [])
+          cart: new Map(t.cart || []),
+          bono: t.bono || null,
+          includeDebt: !!t.includeDebt
         }));
         activeTicketId = data.activeTicketId && tickets.some(t => t.id === data.activeTicketId)
           ? data.activeTicketId
@@ -144,6 +152,8 @@
       $('current-ticket-title').textContent = t.name;
       $('current-ticket-title').title = t.name;
     }
+
+    updateClientDebtUI();
   }
 
   function switchToTicket(targetId) {
@@ -220,7 +230,7 @@
     const list = $('ticket-clouds-list');
     if (!list) return;
 
-    const waitingTickets = tickets.filter(t => t.id !== activeTicketId && t.cart.size > 0);
+    const waitingTickets = tickets.filter(t => t.id !== activeTicketId && (t.cart.size > 0 || t.bono || (t.includeDebt && t.clientId && clientDebtsCache[t.clientId])));
     const badge = $('badge-waiting-tickets');
     if (badge) {
       badge.textContent = `${waitingTickets.length} en espera`;
@@ -235,6 +245,14 @@
         const p = products.find(item => item.id === pId);
         units += qty;
         if (p) total += Number(p.unitPrice) * qty;
+      }
+      if (t.bono) {
+        units += 1;
+        total += Number(t.bono.price || 0);
+      }
+      if (t.includeDebt && t.clientId && clientDebtsCache[t.clientId]) {
+        units += 1;
+        total += Number(clientDebtsCache[t.clientId] || 0);
       }
 
       const statusIcon = isActive ? '🟢' : (units > 0 ? '⏳' : '⚪');
@@ -487,15 +505,20 @@
       }
       $('btn-quick-new-product').hidden = !(me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) && me.pagePermissions.includes('productos.html')));
 
-      const [prodRes, manageRes, restockRes] = await Promise.all([
+      const [prodRes, manageRes, restockRes, debtsRes, servicesRes, packsRes] = await Promise.all([
         api('inventory/products'),
         api('manage'),
-        api('inventory/restock').catch(() => ({ requests: [] }))
+        api('inventory/restock').catch(() => ({ requests: [] })),
+        api('inventory/debts').catch(() => ({ debts: {} })),
+        api('services').catch(() => ({ services: [] })),
+        api('services/packs').catch(() => ({ packages: [] }))
       ]);
 
       products = prodRes.products || [];
       clients = manageRes.clients || [];
       restockRequests = restockRes.requests || [];
+      clientDebtsCache = debtsRes.debts || {};
+      servicesList = [...(servicesRes.services || []), ...(packsRes.packages || [])];
 
       renderClientOptions();
       await refreshCashSession();
@@ -504,6 +527,7 @@
       renderCatalog();
       renderCart();
       renderTicketClouds();
+      updateClientDebtUI();
       updateDispatchedTab();
       renderRestockSection();
 
@@ -524,6 +548,45 @@
       updateBalanceUI();
       updateDispatchedTab();
     } catch (_) {}
+  }
+
+  async function refreshClientDebts() {
+    try {
+      const res = await api('inventory/debts');
+      clientDebtsCache = res.debts || {};
+      updateClientDebtUI();
+    } catch (_) {}
+  }
+
+  function updateClientDebtUI() {
+    const cur = getActiveTicket();
+    const alertBox = $('tpv-debt-alert-box');
+    if (!alertBox) return;
+
+    if (buyerKind !== 'client' || !cur.clientId) {
+      alertBox.hidden = true;
+      cur.includeDebt = false;
+      return;
+    }
+
+    const debt = Number(clientDebtsCache[cur.clientId] || 0);
+    if (debt > 0) {
+      alertBox.hidden = false;
+      if ($('tpv-debt-amount-text')) $('tpv-debt-amount-text').textContent = eur(debt);
+      const btn = $('btn-tpv-collect-debt');
+      if (btn) {
+        if (cur.includeDebt) {
+          btn.textContent = '✓ Deuda incluida en el ticket';
+          btn.classList.add('is-included');
+        } else {
+          btn.innerHTML = `💳 Cobrar deuda ahora (+<span id="btn-tpv-collect-debt-val">${eur(debt)}</span>)`;
+          btn.classList.remove('is-included');
+        }
+      }
+    } else {
+      alertBox.hidden = true;
+      cur.includeDebt = false;
+    }
   }
 
   function updateCashStatusUI() {
@@ -691,10 +754,14 @@
 
   function renderCart() {
     const list = $('ticket-items');
+    const cur = getActiveTicket();
     let totalUnits = 0;
     let totalPrice = 0;
 
-    if (cart.size === 0) {
+    const hasBono = !!cur.bono;
+    const hasDebt = !!(cur.includeDebt && cur.clientId && clientDebtsCache[cur.clientId] > 0);
+
+    if (cart.size === 0 && !hasBono && !hasDebt) {
       list.innerHTML = `
         <div class="tpv-ticket-empty">
           <p>El ticket está vacío.</p>
@@ -706,6 +773,7 @@
       $('ticket-total-price').textContent = eur(0);
       $('btn-confirm-sale').disabled = true;
       $('btn-confirm-sale').textContent = 'Confirmar venta y cobrar (0,00 €)';
+      if ($('btn-unpaid-incident')) $('btn-unpaid-incident').disabled = true;
       updateCashCalculator();
       return;
     }
@@ -738,10 +806,45 @@
       `);
     }
 
+    // Fila de bono en ticket
+    if (hasBono) {
+      totalUnits += 1;
+      totalPrice += Number(cur.bono.price || 0);
+      rows.push(`
+        <div class="tpv-item-row is-bono" id="tpv-bono-cart-row">
+          <div class="tpv-item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:#f3f0fb;border-radius:6px">🎫</div>
+          <div class="tpv-item-info">
+            <div class="tpv-item-name" style="color:#583394;font-weight:700">Bono: ${esc(cur.bono.serviceName)} (${cur.bono.sessions} ses.)</div>
+            <div class="tpv-item-unit-price">${eur(cur.bono.price)} · Pack de sesiones</div>
+          </div>
+          <div class="tpv-item-subtotal" style="color:#583394">${eur(cur.bono.price)}</div>
+          <button class="tpv-item-del" id="btn-del-bono-item" type="button" title="Eliminar bono del ticket">✕</button>
+        </div>
+      `);
+    }
+
+    // Fila de deuda pendiente en ticket
+    if (hasDebt) {
+      const debtAmount = Number(clientDebtsCache[cur.clientId] || 0);
+      totalUnits += 1;
+      totalPrice += debtAmount;
+      rows.push(`
+        <div class="tpv-item-row is-debt" id="tpv-debt-cart-row">
+          <div class="tpv-item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:#feeed1;border-radius:6px">⚠️</div>
+          <div class="tpv-item-info">
+            <div class="tpv-item-name" style="color:#8c4c00;font-weight:700">Cobro de deuda pendiente</div>
+            <div class="tpv-item-unit-price">Saldo anterior a regularizar</div>
+          </div>
+          <div class="tpv-item-subtotal" style="color:#8c4c00">${eur(debtAmount)}</div>
+          <button class="tpv-item-del" id="btn-del-debt-item" type="button" title="Quitar cobro de deuda">✕</button>
+        </div>
+      `);
+    }
+
     list.innerHTML = rows.join('');
 
     // Stepper event listeners
-    list.querySelectorAll('.tpv-item-row').forEach(row => {
+    list.querySelectorAll('.tpv-item-row[data-id]').forEach(row => {
       const id = row.dataset.id;
       row.querySelector('.btn-minus').onclick = () => addToCart(id, -1);
       row.querySelector('.btn-plus').onclick = () => addToCart(id, 1);
@@ -754,12 +857,32 @@
       };
     });
 
+    if ($('btn-del-bono-item')) {
+      $('btn-del-bono-item').onclick = () => {
+        cur.bono = null;
+        renderCart();
+        renderTicketClouds();
+        saveTicketsToStorage();
+      };
+    }
+
+    if ($('btn-del-debt-item')) {
+      $('btn-del-debt-item').onclick = () => {
+        cur.includeDebt = false;
+        updateClientDebtUI();
+        renderCart();
+        renderTicketClouds();
+        saveTicketsToStorage();
+      };
+    }
+
     $('ticket-count').textContent = `(${totalUnits})`;
     $('ticket-total-units').textContent = `${totalUnits} uds`;
     $('ticket-total-price').textContent = eur(totalPrice);
 
     $('btn-confirm-sale').disabled = false;
     $('btn-confirm-sale').textContent = `Confirmar venta y cobrar (${eur(totalPrice)})`;
+    if ($('btn-unpaid-incident')) $('btn-unpaid-incident').disabled = cart.size === 0;
 
     updateCashCalculator();
   }
@@ -769,6 +892,14 @@
     for (const [pId, qty] of cart.entries()) {
       const p = products.find(item => item.id === pId);
       if (p) total += Number(p.unitPrice) * qty;
+    }
+    const cur = getActiveTicket();
+    if (cur && cur.bono) {
+      total += Number(cur.bono.price || 0);
+    }
+    if (cur && cur.includeDebt && cur.clientId) {
+      const debt = Number(clientDebtsCache[cur.clientId] || 0);
+      total += debt;
     }
     return total;
   }
@@ -798,6 +929,12 @@
     $('payment-mode-select').value = 'PAID';
     $('payment-mode-select').querySelector('[value=PENDING]').disabled = true;
     paymentMode = 'PAID';
+    const cur = getActiveTicket();
+    cur.clientId = null;
+    cur.clientName = '';
+    cur.includeDebt = false;
+    updateClientDebtUI();
+    renderCart();
     syncActiveTicketFromUI();
     renderTicketClouds();
   };
@@ -818,6 +955,8 @@
         if ($('current-ticket-title')) $('current-ticket-title').textContent = cur.name;
       }
     }
+    updateClientDebtUI();
+    renderCart();
     syncActiveTicketFromUI();
     renderTicketClouds();
   };
@@ -834,10 +973,36 @@
         cur.name = `👤 ${cur.clientName.split(' — ')[0].trim()}`;
         if ($('current-ticket-title')) $('current-ticket-title').textContent = cur.name;
       }
+    } else {
+      cur.clientId = null;
+      cur.clientName = '';
+      cur.includeDebt = false;
     }
+    updateClientDebtUI();
+    renderCart();
     syncActiveTicketFromUI();
     renderTicketClouds();
   };
+
+  if ($('btn-tpv-collect-debt')) {
+    $('btn-tpv-collect-debt').onclick = () => {
+      const cur = getActiveTicket();
+      if (!cur.clientId) return;
+      const debt = Number(clientDebtsCache[cur.clientId] || 0);
+      if (debt <= 0) return;
+
+      cur.includeDebt = !cur.includeDebt;
+      updateClientDebtUI();
+      renderCart();
+      renderTicketClouds();
+      saveTicketsToStorage();
+      if (cur.includeDebt) {
+        showNotice(`Deuda de ${eur(debt)} añadida al ticket de cobro.`);
+      } else {
+        showNotice('Deuda retirada del ticket de cobro.');
+      }
+    };
+  }
 
   $('payment-mode-select').onchange = e => {
     paymentMode = e.target.value;
@@ -1142,9 +1307,161 @@
     $('rename-ticket-dialog').close();
   };
 
+  // --- GESTIÓN DE BONOS EN TPV ---
+  function renderTpvBonoSelect() {
+    const sel = $('tpv-bono-service-select');
+    if (!sel) return;
+    if (servicesList.length === 0) {
+      sel.innerHTML = '<option value="">No hay bonos o packs disponibles</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Selecciona un bono o pack…</option>' +
+      servicesList.map(s => {
+        const isPack = s.type === 'PACK';
+        const sessions = s.sessionsBought || s.defaultSessions || 10;
+        const price = s.price || s.totalAmount || (s.pricePerSession ? Number(s.pricePerSession) * sessions : 50);
+        return `<option value="${esc(s.id)}" data-sessions="${sessions}" data-price="${price}" data-name="${esc(s.name)}">${esc(s.name)}${isPack ? ' (Pack)' : ''} — ${eur(price)}</option>`;
+      }).join('');
+  }
+
+  if ($('btn-tpv-add-bono')) {
+    $('btn-tpv-add-bono').onclick = () => {
+      renderTpvBonoSelect();
+      $('tpv-bono-dialog').showModal();
+    };
+  }
+
+  if ($('tpv-bono-service-select')) {
+    $('tpv-bono-service-select').onchange = () => {
+      const opt = $('tpv-bono-service-select').selectedOptions?.[0];
+      if (opt && opt.value) {
+        $('tpv-bono-sessions-input').value = opt.dataset.sessions || '10';
+        $('tpv-bono-price-input').value = Number(opt.dataset.price || 0).toFixed(2);
+      }
+    };
+  }
+
+  if ($('btn-close-tpv-bono-dialog')) $('btn-close-tpv-bono-dialog').onclick = () => $('tpv-bono-dialog').close();
+  if ($('btn-cancel-tpv-bono-dialog')) $('btn-cancel-tpv-bono-dialog').onclick = () => $('tpv-bono-dialog').close();
+
+  if ($('tpv-bono-form')) {
+    $('tpv-bono-form').onsubmit = (e) => {
+      e.preventDefault();
+      const opt = $('tpv-bono-service-select').selectedOptions?.[0];
+      if (!opt || !opt.value) {
+        showNotice('Selecciona un bono o pack.', true);
+        return;
+      }
+      const serviceId = opt.value;
+      const serviceName = opt.dataset.name || opt.textContent.split(' — ')[0].trim();
+      const sessions = parseInt($('tpv-bono-sessions-input').value, 10) || 1;
+      const price = parseFloat($('tpv-bono-price-input').value || 0);
+
+      const cur = getActiveTicket();
+      cur.bono = { serviceId, serviceName, sessions, price };
+      $('tpv-bono-dialog').close();
+      renderCart();
+      renderTicketClouds();
+      saveTicketsToStorage();
+      showNotice(`Bono "${serviceName}" (${sessions} ses.) añadido al ticket (${eur(price)}).`);
+    };
+  }
+
+  // --- BOTÓN INCIDENCIA: "SE HA IDO SIN PAGAR" ---
+  if ($('btn-unpaid-incident')) {
+    $('btn-unpaid-incident').onclick = async () => {
+      const cur = getActiveTicket();
+      if (cart.size === 0) {
+        showNotice('El ticket está vacío. Añade productos para registrar la venta pendiente.', true);
+        return;
+      }
+      if (buyerKind !== 'client' || !$('client-select').value) {
+        $('buyer-opt-client').click();
+        showNotice('⚠️ Para registrar una deuda debes seleccionar la ficha del cliente registrado.', true);
+        $('client-select').focus();
+        return;
+      }
+
+      const clientId = $('client-select').value;
+      const clientName = cur.clientName || 'Cliente';
+      const total = getCartTotal();
+
+      if (!confirm(`¿Registrar esta venta de ${eur(total)} como DEUDA PENDIENTE en la ficha de ${clientName}?\n\nMotivo de incidencia: El cliente se ha marchado sin abonar.`)) {
+        return;
+      }
+
+      const btn = $('btn-unpaid-incident');
+      btn.disabled = true;
+
+      try {
+        const lines = [];
+        for (const [productId, quantity] of cart.entries()) {
+          const p = products.find(item => item.id === productId);
+          lines.push({
+            productId,
+            quantity,
+            expectedUnitPrice: Number(p?.unitPrice || 0)
+          });
+        }
+
+        const requestKey = crypto.randomUUID();
+        const sale = await api('inventory/sales', 'POST', {
+          requestKey,
+          paymentMode: 'PENDING',
+          paymentMethod: 'EFECTIVO',
+          clientId,
+          lines
+        });
+
+        // Update backend data
+        const prodRes = await api('inventory/products');
+        products = prodRes.products || [];
+        renderCatalog();
+        await refreshCashSession();
+        await refreshClientDebts();
+
+        // Reset ticket or advance to next waiting ticket
+        const completedTicketId = activeTicketId;
+        if (tickets.length > 1) {
+          tickets = tickets.filter(t => t.id !== completedTicketId);
+          activeTicketId = tickets[0].id;
+          syncActiveTicketToUI();
+          renderCart();
+          showNotice(`⚠️ Incidencia: ${eur(sale.totalAmount)} anotados como DEUDA en la ficha de "${clientName}" (Se ha ido sin pagar). Reanudando "${getActiveTicket().name}".`);
+        } else {
+          cart.clear();
+          $('cash-tendered').value = '';
+          const curReset = getActiveTicket();
+          curReset.name = 'Ticket 1';
+          curReset.buyerKind = 'walkin';
+          curReset.clientId = null;
+          curReset.clientName = '';
+          curReset.cashTendered = '';
+          curReset.bono = null;
+          curReset.includeDebt = false;
+          syncActiveTicketToUI();
+          renderCart();
+          showNotice(`⚠️ Incidencia: ${eur(sale.totalAmount)} anotados como DEUDA PENDIENTE en la ficha de "${clientName}" (Se ha ido sin pagar).`);
+        }
+        renderTicketClouds();
+        saveTicketsToStorage();
+
+      } catch (err) {
+        showNotice(err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+
   // --- 6. CONFIRMAR VENTA ---
   $('btn-confirm-sale').onclick = async () => {
-    if (cart.size === 0) return;
+    const cur = getActiveTicket();
+    const hasProducts = cart.size > 0;
+    const hasBono = !!cur.bono;
+    const hasDebt = !!(cur.includeDebt && cur.clientId && clientDebtsCache[cur.clientId] > 0);
+
+    if (!hasProducts && !hasBono && !hasDebt) return;
 
     const btn = $('btn-confirm-sale');
     const errEl = $('sale-form-error');
@@ -1155,8 +1472,8 @@
       const isClient = buyerKind === 'client';
       const clientId = isClient ? $('client-select').value : null;
 
-      if (isClient && !clientId) {
-        throw new Error('Has seleccionado cliente registrado. Elige un cliente de la lista.');
+      if ((hasBono || hasDebt || paymentMode === 'PENDING') && (!isClient || !clientId)) {
+        throw new Error('Para cobrar un bono, saldar deuda o dejar a deber, selecciona un cliente registrado.');
       }
 
       const total = getCartTotal();
@@ -1166,27 +1483,91 @@
         throw new Error('El importe en efectivo entregado no cubre el total de la venta.');
       }
 
-      const lines = [];
-      for (const [productId, quantity] of cart.entries()) {
-        const p = products.find(item => item.id === productId);
-        lines.push({
-          productId,
-          quantity,
-          expectedUnitPrice: Number(p?.unitPrice || 0)
+      let completedSaleData = null;
+
+      // 1. Cobro cruzado de Bono + Productos
+      if (hasBono) {
+        const prodList = [];
+        for (const [productId, quantity] of cart.entries()) {
+          prodList.push({ productId, quantity });
+        }
+        const bonoRes = await api(`clients/${encodeURIComponent(clientId)}/service-packages`, 'POST', {
+          requestKey: crypto.randomUUID(),
+          serviceId: cur.bono.serviceId,
+          sessionsBought: cur.bono.sessions,
+          totalAmount: cur.bono.price,
+          paymentMethod,
+          paymentStatus: 'PAGADO',
+          products: prodList.length > 0 ? prodList : undefined
         });
+
+        completedSaleData = {
+          id: bonoRes.servicePackage?.saleId || 'BONO-' + Date.now(),
+          soldAt: new Date().toISOString(),
+          totalAmount: total,
+          paymentMethod,
+          lines: [
+            { quantity: 1, description: `Bono · ${cur.bono.serviceName} · ${cur.bono.sessions} ses.`, unitPrice: cur.bono.price, lineTotal: cur.bono.price },
+            ...prodList.map(p => {
+              const item = products.find(x => x.id === p.productId);
+              return { quantity: p.quantity, description: item ? item.name : 'Producto', unitPrice: item ? item.unitPrice : 0, lineTotal: (item ? item.unitPrice : 0) * p.quantity };
+            })
+          ]
+        };
+      } else if (hasProducts) {
+        // 2. Venta de productos
+        const lines = [];
+        for (const [productId, quantity] of cart.entries()) {
+          const p = products.find(item => item.id === productId);
+          lines.push({
+            productId,
+            quantity,
+            expectedUnitPrice: Number(p?.unitPrice || 0)
+          });
+        }
+
+        const requestKey = crypto.randomUUID();
+        const sale = await api('inventory/sales', 'POST', {
+          requestKey,
+          paymentMode,
+          paymentMethod,
+          clientId,
+          lines
+        });
+        completedSaleData = sale;
       }
 
-      const requestKey = crypto.randomUUID();
-      const sale = await api('inventory/sales', 'POST', {
-        requestKey,
-        paymentMode,
-        paymentMethod,
-        clientId,
-        lines
-      });
+      // 3. Regularización de deuda pendiente en el mismo cobro
+      if (hasDebt) {
+        const debtAmount = Number(clientDebtsCache[clientId]);
+        await api(`inventory/clients/${encodeURIComponent(clientId)}/pay-debt`, 'POST', {
+          method: paymentMethod,
+          amount: debtAmount,
+          note: 'Cobro de deuda en TPV mostrador'
+        });
+
+        if (!completedSaleData) {
+          completedSaleData = {
+            id: 'DEUDA-' + Date.now(),
+            soldAt: new Date().toISOString(),
+            totalAmount: debtAmount,
+            paymentMethod,
+            lines: [{ quantity: 1, description: 'Cobro de saldo / deuda pendiente anterior', unitPrice: debtAmount, lineTotal: debtAmount }]
+          };
+        } else {
+          completedSaleData.lines.push({
+            quantity: 1,
+            description: 'Cobro de saldo / deuda pendiente anterior',
+            unitPrice: debtAmount,
+            lineTotal: debtAmount
+          });
+          completedSaleData.totalAmount = total;
+        }
+      }
 
       lastCompletedSale = {
-        ...sale,
+        ...completedSaleData,
+        totalAmount: total,
         tendered: paymentMethod === 'EFECTIVO' && tendered >= total ? tendered : total,
         change: paymentMethod === 'EFECTIVO' && tendered >= total ? tendered - total : 0,
         buyerName: isClient ? ($('client-select').options[$('client-select').selectedIndex]?.text || 'Cliente') : 'Persona de paso'
@@ -1199,20 +1580,21 @@
         activeTicketId = tickets[0].id;
         syncActiveTicketToUI();
         renderCart();
-        showNotice(`Venta completada por ${eur(sale.totalAmount)}. Reanudando "${getActiveTicket().name}".`);
+        showNotice(`Venta completada por ${eur(total)}. Reanudando "${getActiveTicket().name}".`);
       } else {
         cart.clear();
         $('cash-tendered').value = '';
-        const cur = getActiveTicket();
-        cur.name = 'Ticket 1';
-        cur.buyerKind = 'walkin';
-        cur.clientId = null;
-        cur.clientName = '';
-        cur.cashTendered = '';
-        cur.items = [];
+        const curReset = getActiveTicket();
+        curReset.name = 'Ticket 1';
+        curReset.buyerKind = 'walkin';
+        curReset.clientId = null;
+        curReset.clientName = '';
+        curReset.cashTendered = '';
+        curReset.bono = null;
+        curReset.includeDebt = false;
         syncActiveTicketToUI();
         renderCart();
-        showNotice(`Venta completada por ${eur(sale.totalAmount)}.`);
+        showNotice(`Venta completada por ${eur(total)}.`);
       }
       renderTicketClouds();
       saveTicketsToStorage();
@@ -1222,6 +1604,7 @@
       products = prodRes.products || [];
       renderCatalog();
       await refreshCashSession();
+      await refreshClientDebts();
 
       // Open receipt dialog
       openReceiptDialog(lastCompletedSale);

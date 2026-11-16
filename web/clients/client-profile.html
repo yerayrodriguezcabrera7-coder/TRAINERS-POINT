@@ -314,6 +314,18 @@
             </div>
           </div>
 
+          <!-- 6b. Añadir productos de la tienda al cobro -->
+          <div class="bono-choice-section bono-store-section" style="margin-top:12px">
+            <span class="bono-field-title">🛍️ Añadir productos de la tienda en este cobro (Opcional)</span>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <select id="bono-product-select" style="flex:1;padding:8px;border-radius:6px;border:1px solid #dcdcdc;font-size:13px">
+                <option value="">Selecciona un producto de la tienda…</option>
+              </select>
+              <button type="button" id="btn-bono-add-product" class="profile-secondary-button" style="white-space:nowrap;padding:6px 12px">➕ Añadir</button>
+            </div>
+            <div id="bono-selected-products-list" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+          </div>
+
           <!-- 7. Optional Notes -->
           <label class="bono-label-full bono-notes">
             <span>Notas</span>

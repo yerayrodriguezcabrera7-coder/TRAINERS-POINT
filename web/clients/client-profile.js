@@ -970,6 +970,87 @@ function selectBonoCard(serviceId) {
   updateBonoCalculation();
 }
 
+let bonoAvailableProducts = [];
+let bonoSelectedProducts = new Map();
+
+async function loadBonoStoreProducts() {
+  if (bonoAvailableProducts.length > 0) return;
+  try {
+    const res = await fetch("/api/inventory/products");
+    if (res.ok) {
+      const data = await res.json();
+      bonoAvailableProducts = (data.products || []).filter((p) => p.isActive && p.stock > 0);
+      const sel = document.querySelector("#bono-product-select");
+      if (sel) {
+        sel.innerHTML =
+          '<option value="">Selecciona un producto de la tienda…</option>' +
+          bonoAvailableProducts
+            .map(
+              (p) =>
+                `<option value="${p.id}">${p.name} — ${new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(p.unitPrice)} (${p.stock} disp.)</option>`
+            )
+            .join("");
+      }
+    }
+  } catch (_) {}
+}
+
+function renderBonoSelectedProducts() {
+  const container = document.querySelector("#bono-selected-products-list");
+  if (!container) return;
+  if (bonoSelectedProducts.size === 0) {
+    container.innerHTML = "";
+    updateBonoCalculation();
+    return;
+  }
+  let html = "";
+  for (const [pId, qty] of bonoSelectedProducts.entries()) {
+    const p = bonoAvailableProducts.find((item) => item.id === pId);
+    if (!p) continue;
+    const lineTotal = Number(p.unitPrice) * qty;
+    html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;background:#f8f9fa;padding:6px 10px;border-radius:6px;border:1px solid #e9ecef;font-size:12px">
+        <span style="font-weight:600">${p.name}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" class="btn-bono-prod-minus" data-id="${p.id}" style="padding:1px 6px;cursor:pointer">−</button>
+          <span>${qty} ud</span>
+          <button type="button" class="btn-bono-prod-plus" data-id="${p.id}" style="padding:1px 6px;cursor:pointer" ${qty >= p.stock ? "disabled" : ""}>＋</button>
+          <strong style="margin-left:6px">${new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(lineTotal)}</strong>
+          <button type="button" class="btn-bono-prod-del" data-id="${p.id}" style="border:none;background:none;color:#dc3545;cursor:pointer;margin-left:4px">✕</button>
+        </div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll(".btn-bono-prod-minus").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      const cur = bonoSelectedProducts.get(id) || 1;
+      if (cur <= 1) bonoSelectedProducts.delete(id);
+      else bonoSelectedProducts.set(id, cur - 1);
+      renderBonoSelectedProducts();
+    };
+  });
+  container.querySelectorAll(".btn-bono-prod-plus").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      const p = bonoAvailableProducts.find((item) => item.id === id);
+      const cur = bonoSelectedProducts.get(id) || 1;
+      if (p && cur < p.stock) bonoSelectedProducts.set(id, cur + 1);
+      renderBonoSelectedProducts();
+    };
+  });
+  container.querySelectorAll(".btn-bono-prod-del").forEach((btn) => {
+    btn.onclick = () => {
+      bonoSelectedProducts.delete(btn.dataset.id);
+      renderBonoSelectedProducts();
+    };
+  });
+
+  updateBonoCalculation();
+}
+
 function updateBonoCalculation() {
   const selected = activeServicesList.find(service => service.id === bonoServiceSelect?.value);
   for (const id of ["bono-validity-preview", "ticket-validity"]) { const el = document.getElementById(id); if (el) el.textContent = selected ? `${selected.validityWeeks || 4} semanas de validez` : "Según servicio"; }
@@ -1001,7 +1082,18 @@ function updateBonoCalculation() {
       }
       if (ticketModalityBadge) ticketModalityBadge.textContent = service.modality === "DUAL" ? "Dúo / Pareja" : "Individual";
       if (ticketDurationBadge) ticketDurationBadge.textContent = `${service.durationMin || 60} min / sesión`;
-      if (ticketTotalPrice) ticketTotalPrice.textContent = currencyText(total);
+      let productsExtra = 0;
+      for (const [pId, qty] of bonoSelectedProducts.entries()) {
+        const p = bonoAvailableProducts.find((item) => item.id === pId);
+        if (p) productsExtra += Number(p.unitPrice) * qty;
+      }
+      if (ticketTotalPrice) {
+        if (productsExtra > 0) {
+          ticketTotalPrice.textContent = `${currencyText(total + productsExtra)} (${currencyText(total)} + ${currencyText(productsExtra)} tienda)`;
+        } else {
+          ticketTotalPrice.textContent = currencyText(total);
+        }
+      }
       if (ticketUnitRate) {
         const rate = sessions > 0 ? (total / sessions).toFixed(2) : "0.00";
         ticketUnitRate.textContent = `${rate} €/sesión · ${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`;
@@ -1037,6 +1129,10 @@ function openAddBonoModal() {
   });
   if (bonoPaymentStatus) bonoPaymentStatus.value = "PAGADO";
 
+  bonoSelectedProducts.clear();
+  renderBonoSelectedProducts();
+  void loadBonoStoreProducts();
+
   if (progress?.client) {
     const fullName = `${progress.client.firstName} ${progress.client.lastName}`.trim();
     const titleEl = document.querySelector("#add-bono-title");
@@ -1049,6 +1145,19 @@ function openAddBonoModal() {
   }
   addBonoDialog.showModal();
 }
+
+// Add store product button handler in bono dialog
+document.querySelector("#btn-bono-add-product")?.addEventListener("click", () => {
+  const sel = document.querySelector("#bono-product-select");
+  if (!sel || !sel.value) return;
+  const pId = sel.value;
+  const p = bonoAvailableProducts.find((item) => item.id === pId);
+  const cur = bonoSelectedProducts.get(pId) || 0;
+  if (p && cur < p.stock) {
+    bonoSelectedProducts.set(pId, cur + 1);
+    renderBonoSelectedProducts();
+  }
+});
 
 // Stepper click handler
 addBonoDialog?.addEventListener("click", (event) => {
@@ -1118,13 +1227,16 @@ if (addBonoForm) {
 
     addBonoForm.dataset.requestKey ||= crypto.randomUUID();
     const payload = {
-      requestKey:addBonoForm.dataset.requestKey,
+      requestKey: addBonoForm.dataset.requestKey,
       serviceId: bonoServiceSelect.value,
       sessionsBought: Number(bonoSessionsInput.value),
       totalAmount: Number(bonoAmountInput.value),
       paymentMethod: bonoPaymentMethod.value,
       paymentStatus: bonoPaymentStatus.value,
       notes: bonoNotesInput?.value.trim() || undefined,
+      ...(bonoSelectedProducts.size > 0 ? {
+        products: Array.from(bonoSelectedProducts.entries()).map(([productId, quantity]) => ({ productId, quantity }))
+      } : {})
     };
 
     try {

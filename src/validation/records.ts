@@ -520,6 +520,7 @@ export function parseServicePackageInput(
       paymentMethod: PaymentMethod;
       paymentStatus: PaymentStatus;
       notes?: string;
+      products?: Array<{ productId: string; quantity: number }>;
     }
   | string {
   if (!isRecord(value)) {
@@ -548,6 +549,16 @@ export function parseServicePackageInput(
   }
   if (notes.length > 1000) return "Las notas deben tener como máximo 1000 caracteres.";
 
+  let products: Array<{ productId: string; quantity: number }> | undefined = undefined;
+  if (Array.isArray(value.products) && value.products.length > 0) {
+    products = [];
+    for (const item of value.products) {
+      if (isRecord(item) && typeof item.productId === "string" && isUuid(item.productId) && Number.isInteger(Number(item.quantity)) && Number(item.quantity) > 0) {
+        products.push({ productId: item.productId, quantity: Number(item.quantity) });
+      }
+    }
+  }
+
   return {
     serviceId,
     sessionsBought,
@@ -555,5 +566,6 @@ export function parseServicePackageInput(
     paymentMethod: paymentMethod as PaymentMethod,
     paymentStatus: paymentStatus as PaymentStatus,
     ...(notes ? { notes } : {}),
+    ...(products && products.length > 0 ? { products } : {}),
   };
 }

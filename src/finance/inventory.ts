@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Identity } from '../calendar/access';
 import { ApiError } from '../calendar/model';
@@ -12,6 +12,7 @@ import { productPricing } from './product-pricing';
 import { validProductImage } from '../validation/product-image';
 import { accessibleClient, saleScope } from '../network/scope';
 import { recordAudit } from '../audit/log';
+import { Packages } from './packages';
 type FinanceActor = string | Pick<Identity, 'id' | 'name' | 'role' | 'username'>;
 const actorId = (actor: FinanceActor) => typeof actor === 'string' ? actor : actor.id;
 const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
@@ -297,6 +298,99 @@ export class Inventory {
     });
   }
   async debtSummary(gym: string) { return clientDebts(this.db, gym); }
+  async payClientDebt(gym: string, actor: FinanceActor, clientId: string, raw: unknown) {
+    const v = z.object({
+      amount: money.optional(),
+      method: paymentMethod.default('EFECTIVO'),
+      note: z.string().trim().max(1000).default('Cobro de deuda pendiente'),
+      requestKey: z.string().uuid().optional()
+    }).parse(raw);
+
+    return this.transaction(gym, async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Client" WHERE id=${clientId}::uuid FOR UPDATE`;
+      const client = await accessibleClient(tx, gym, clientId);
+      if (!client) throw new ApiError(404, 'Cliente desconocido en este centro.');
+
+      // Bill any unbilled packages with pending payment
+      const unbilled = await tx.clientServicePackage.findMany({
+        where: { clientId, saleId: null, paymentStatus: { in: ['PENDIENTE', 'FALLIDO'] } }
+      });
+      for (const pkg of unbilled) {
+        await new Packages(this.db as any).billing(gym, pkg.id, actorId(actor));
+      }
+
+      // Fetch all sales for this client with payment tracking or payments
+      const sales = await tx.sale.findMany({
+        where: { clientId, gymKey: gym, status: 'COMPLETADA' },
+        include: { lines: true, payments: true },
+        orderBy: { soldAt: 'asc' }
+      });
+
+      const debtSales = sales.map(saleBalance).filter(s => s.outstandingAmount > 0);
+      const totalDebt = debtSales.reduce((acc, s) => acc + s.outstandingAmount, 0);
+      if (totalDebt <= 0) {
+        return { success: true, clientId, paidAmount: 0, remainingDebt: 0, settledSales: 0 };
+      }
+
+      let toPay = v.amount !== undefined ? Math.min(v.amount, totalDebt) : totalDebt;
+      let actuallyPaid = 0;
+      let settledSales = 0;
+      const cashSessionId = await cashSessionFor(tx, gym);
+
+      for (const sale of debtSales) {
+        if (toPay <= 0) break;
+        const payForThisSale = Math.min(sale.outstandingAmount, toPay);
+        const pKey = randomUUID();
+        const payment = await tx.payment.create({
+          data: {
+            cashSessionId,
+            saleId: sale.id,
+            requestKey: pKey,
+            actorAccountId: actorId(actor),
+            method: v.method,
+            status: 'PAGADO',
+            amount: payForThisSale,
+            paidAt: new Date(),
+            note: v.note
+          }
+        });
+        await tx.sale.update({ where: { id: sale.id }, data: { paymentTracking: true } });
+        const updatedSale = await tx.sale.findUniqueOrThrow({ where: { id: sale.id }, include: { lines: true, payments: true } });
+        const bal = saleBalance(updatedSale);
+        if (bal.outstandingAmount === 0) {
+          settledSales++;
+          await tx.clientServicePackage.updateMany({
+            where: { saleId: sale.id },
+            data: { paymentStatus: 'PAGADO', paymentMethod: v.method }
+          });
+          await tx.booking.updateMany({
+            where: { OR: [{ package: { saleId: sale.id } }, { saleId: sale.id }] },
+            data: { paymentPending: false }
+          });
+        }
+        await recordAudit(tx, {
+          gymKey: gym,
+          actor,
+          action: 'PAYMENT_REGISTERED',
+          entityType: 'Payment',
+          entityId: payment.id,
+          requestKey: pKey,
+          detail: `Cobro de deuda de ${payForThisSale.toFixed(2)} € por ${v.method}.`,
+          metadata: { saleId: sale.id, amount: payForThisSale, method: v.method, clientId }
+        });
+        actuallyPaid += payForThisSale;
+        toPay -= payForThisSale;
+      }
+
+      return {
+        success: true,
+        clientId,
+        paidAmount: actuallyPaid,
+        remainingDebt: Math.max(0, totalDebt - actuallyPaid),
+        settledSales
+      };
+    });
+  }
   async restockRequests(gym: string, status?: string) {
     const where: any = { gymKey: gym };
     if (status && status !== 'ALL') where.status = status;

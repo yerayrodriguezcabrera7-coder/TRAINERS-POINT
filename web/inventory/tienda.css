@@ -1409,3 +1409,108 @@
   height: 18px;
 }
 
+/* --- DEUDAS PENDIENTES & COBRO CRUZADO --- */
+.tpv-debt-alert-box {
+  background: #fff8eb;
+  border: 1px solid #fbd89a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  animation: tpvFadeIn 0.25s ease-out;
+}
+.tpv-debt-alert-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.tpv-debt-alert-icon {
+  font-size: 18px;
+  line-height: 1.2;
+}
+.tpv-debt-alert-text strong {
+  display: block;
+  font-size: 13px;
+  color: #8c4c00;
+}
+.tpv-debt-alert-text p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #6d4b1a;
+}
+.tpv-btn-collect-debt {
+  background: #fdf1d6;
+  color: #8c4c00;
+  border: 1px solid #d4a04d;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.tpv-btn-collect-debt:hover {
+  background: #e8c688;
+  color: #5c3000;
+}
+.tpv-btn-collect-debt.is-included {
+  background: #e3f5ec;
+  color: #1e5c3c;
+  border-color: #72c499;
+}
+
+/* Incidencia: Se ha ido sin pagar */
+.tpv-ticket-secondary-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.tpv-btn-unpaid {
+  flex: 1;
+  background: #fff0f0;
+  color: #b02a2a;
+  border: 1px solid #f5c2c2;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.tpv-btn-unpaid:hover {
+  background: #ffe3e3;
+  color: #8e1c1c;
+  border-color: #e09999;
+}
+
+/* Bono en ticket del TPV */
+.tpv-btn-add-bono {
+  background: #f3f0fb;
+  color: #583394;
+  border-color: #d1c4e9;
+  font-weight: 600;
+}
+.tpv-btn-add-bono:hover {
+  background: #ede7f6;
+  border-color: #b39ddb;
+}
+.tpv-item-row.is-bono {
+  background: #fbf9ff;
+  border-left: 3px solid #7c4dff;
+}
+.tpv-item-row.is-debt {
+  background: #fffdf5;
+  border-left: 3px solid #f59f00;
+}
+
+

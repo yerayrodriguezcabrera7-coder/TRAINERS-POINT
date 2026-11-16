@@ -48,11 +48,17 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
       const barcodeUpdate = url.pathname.match(/^\/api\/inventory\/products\/([0-9a-f-]+)\/barcode$/i);
       const restock = url.pathname.match(/^\/api\/inventory\/restock(?:\/([0-9a-f-]+))?$/i);
       const payment = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/payments$/i);
+      const clientDebtPay = url.pathname.match(/^\/api\/inventory\/clients\/([0-9a-f-]+)\/pay-debt$/i);
+      const debtsSummary = url.pathname === '/api/inventory/debts';
       const receiptAction = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(refunds|verify-payment)$/i);
       const reversal = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
-      const action = request.method === 'GET' ? 'read' : restock ? 'restock' : barcodeUpdate ? 'barcode' : url.pathname === '/api/inventory/sales' || payment || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin';
+      const action = request.method === 'GET' ? 'read' : restock ? 'restock' : barcodeUpdate ? 'barcode' : url.pathname === '/api/inventory/sales' || payment || clientDebtPay || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin';
       inventoryPermission(actor, action);
-      if (barcodeUpdate && (request.method === 'PATCH' || request.method === 'PUT'))
+      if (debtsSummary && request.method === 'GET')
+        sendJson(response, 200, { debts: await inventory.debtSummary(gym) });
+      else if (clientDebtPay && request.method === 'POST')
+        sendJson(response, 200, await inventory.payClientDebt(gym, actor!, clientDebtPay[1], await readJsonBody(request)));
+      else if (barcodeUpdate && (request.method === 'PATCH' || request.method === 'PUT'))
         sendJson(response, 200, { product: await inventory.updateProductBarcode(gym, barcodeUpdate[1], (await readJsonBody(request) as any)?.barcode ?? null, actor!) });
       else if (restock && request.method === 'GET' && !restock[1])
         sendJson(response, 200, { requests: await inventory.restockRequests(gym, url.searchParams.get('status') || undefined) });
