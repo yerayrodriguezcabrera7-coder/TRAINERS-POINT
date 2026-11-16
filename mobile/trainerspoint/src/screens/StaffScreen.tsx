@@ -106,6 +106,7 @@ export function StaffScreen({
   const [pendingSubTab, setPendingSubTab] = useState<"asignacion" | "reprogramacion">("asignacion");
   const [pendingPackages, setPendingPackages] = useState<any[]>([]);
   const [recoveries, setRecoveries] = useState<any[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
 
   // Assignment modal states
   const [assignedBooking, setAssignedBooking] = useState<Booking | null>(null);
@@ -168,6 +169,7 @@ export function StaffScreen({
   // Cargar datos de bonos pendientes y recuperaciones
   useEffect(() => {
     if (!office) return;
+    setPendingLoading(true);
     let cancelled = false;
     async function fetchPendingData() {
       try {
@@ -180,10 +182,18 @@ export function StaffScreen({
           setRecoveries(recs);
         }
       } catch { /* silent */ }
+      finally {
+        if (!cancelled) setPendingLoading(false);
+      }
     }
     fetchPendingData();
     return () => { cancelled = true; };
   }, [api, office]);
+
+  // Resetear sub-tab al cambiar pestaña principal
+  useEffect(() => {
+    if (tab === "pending") setPendingSubTab("asignacion");
+  }, [tab]);
 
   // ── Data helpers ─────────────────────────────────────────────────────────
 
@@ -191,9 +201,9 @@ export function StaffScreen({
   const bookings = data?.bookings || [];
 
   const clientName = (booking: Booking) =>
-    clients.find((c) => c.id === booking.clientId)?.name || "Cliente";
+    (booking as any).clientName || clients.find((c) => c.id === booking.clientId)?.name || "Cliente";
   const serviceName = (booking: Booking) =>
-    data?.services.find((s) => s.id === booking.serviceId)?.name || "Servicio";
+    (booking as any).serviceName || data?.services.find((s) => s.id === booking.serviceId)?.name || "Servicio";
   const employeeName = (booking: Booking) =>
     data?.employees.find((p) => p.id === booking.employeeId)?.name ||
     "Pendiente de asignar";
@@ -246,13 +256,19 @@ export function StaffScreen({
     }
     setIsAssigning(true);
     try {
-      const updated: Booking = await api.assignBooking?.({
-        bookingId: assignedBooking.id,
-        employeeId: assignForm.employeeId,
-        date: assignForm.date,
-        start: assignForm.start,
-        roomId: assignForm.roomId,
-      }) ?? assignedBooking;
+      const updated: Booking = await api.assignBooking(
+        assignedBooking.id,
+        {
+          employeeId: assignForm.employeeId || undefined,
+          date: assignForm.date,
+          start: assignForm.start,
+          roomId: assignForm.roomId,
+          // Must include all required fields — the server rewrite (normalize) overwrites the full booking.
+          clientId: assignedBooking.clientId,
+          serviceId: assignedBooking.serviceId,
+          status: assignedBooking.status,
+        }
+      );
       await load(true);
       resetAssignForm();
       setAssignedBooking(null);
@@ -728,7 +744,7 @@ export function StaffScreen({
 
             {pendingSubTab === "asignacion" && (
               <>
-                {loading ? (
+                {pendingLoading ? (
                   <ActivityIndicator
                     accessibilityLabel="Cargando bonos pendientes"
                     color="#ed691d"
@@ -739,60 +755,89 @@ export function StaffScreen({
                     No hay bonos pendientes de organización.
                   </Text>
                 ) : (
-                  pendingPackages.map((pkg: any) => (
-                    <Pressable
-                      key={pkg.id}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        if (pkg.bookingId) {
-                          const b = bookings.find((b) => b.id === pkg.bookingId);
-                          if (b) openAssignModal(b);
-                        }
-                      }}
-                      style={styles.bookingCard}
-                    >
-                      <View
-                        style={[
-                          styles.colorBar,
-                          { backgroundColor: "#ed691d" },
-                        ]}
-                      />
-                      <View style={styles.cardContent}>
-                        <View style={styles.cardLeft}>
-                          <Text style={styles.clientName}>
-                            {pkg.clientName || "Cliente"}
-                          </Text>
-                          <Text style={styles.serviceName}>
-                            {pkg.serviceName || "Servicio"}
-                          </Text>
-                          <Text style={styles.timeRange}>
-                            Bono · {pkg.remainingSessions ?? "?"} restantes
-                          </Text>
-                          {pkg.expiresAt && (
-                            <Text style={styles.centerText}>
-                              Vence: {new Date(pkg.expiresAt).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}
+                  pendingPackages.map((pkg: any) => {
+                    const client = clients.find((c) => c.id === pkg.clientId);
+                    return (
+                      <Pressable
+                        key={pkg.packageId}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          if (pkg.bookingId) {
+                            const b = bookings.find((b) => b.id === pkg.bookingId);
+                            if (b) openAssignModal(b);
+                          } else {
+                            // No booking yet: open assign modal with client/service info for creating a new booking
+                            setAssignForm({
+                              employeeId: "",
+                              date: localDay(),
+                              start: "",
+                              roomId: "",
+                            });
+                            // Store the pending package context so the modal knows it's a new booking
+                            setAssignedBooking({
+                              id: "__pkg__" + pkg.packageId,
+                              clientId: pkg.clientId || "",
+                              clientName: pkg.clientName || client?.name || "Cliente",
+                              employeeId: null,
+                              serviceId: pkg.serviceId || "",
+                              serviceName: pkg.serviceName || "Servicio",
+                              date: localDay(),
+                              start: "",
+                              end: "",
+                              status: "PENDING",
+                              roomId: null,
+                              centerId: null,
+                              centerName: null,
+                              centerAddress: null,
+                              needsReschedule: false,
+                            } as any);
+                          }
+                        }}
+                        style={styles.bookingCard}
+                      >
+                        <View
+                          style={[
+                            styles.colorBar,
+                            { backgroundColor: "#ed691d" },
+                          ]}
+                        />
+                        <View style={styles.cardContent}>
+                          <View style={styles.cardLeft}>
+                            <Text style={styles.clientName}>
+                              {pkg.clientName || client?.name || "Cliente"}
                             </Text>
-                          )}
-                        </View>
-                        <View style={styles.cardRight}>
-                          <View style={[styles.urgencyBadge, { backgroundColor: "#fff0ec", borderColor: "#f0ddd0" }]}>
-                            <Text style={{ color: "#9b5b12", fontSize: 11, fontWeight: "700" }}>
-                              ⏳ Por organizar
+                            <Text style={styles.serviceName}>
+                              {pkg.serviceName || "Servicio"}
                             </Text>
+                            <Text style={styles.timeRange}>
+                              Bono · {pkg.sessionsToSchedule ?? "?"} restantes
+                            </Text>
+                            {pkg.expiresAt && (
+                              <Text style={styles.centerText}>
+                                Vence: {new Date(pkg.expiresAt).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}
+                              </Text>
+                            )}
+                          </View>
+                          <View style={styles.cardRight}>
+                            <View style={[styles.urgencyBadge, { backgroundColor: "#fff0ec", borderColor: "#f0ddd0" }]}>
+                              <Text style={{ color: "#9b5b12", fontSize: 11, fontWeight: "700" }}>
+                                ⏳ Por organizar
+                              </Text>
+                            </View>
                           </View>
                         </View>
-                      </View>
-                    </Pressable>
-                  ))
+                      </Pressable>
+                    );
+                  })
                 )}
               </>
             )}
 
             {pendingSubTab === "reprogramacion" && (
               <>
-                {loading ? (
+                {pendingLoading ? (
                   <ActivityIndicator
-                    accessibilityLabel="Cargando reprogramaciones"
+                    accessibilityLabel="Cargando recuperaciones"
                     color="#ed691d"
                     size="large"
                   />
@@ -801,51 +846,80 @@ export function StaffScreen({
                     No hay recuperaciones pendientes.
                   </Text>
                 ) : (
-                  recoveries.map((rec: any) => (
-                    <Pressable
-                      key={rec.id}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        if (rec.bookingId) {
-                          const b = bookings.find((b) => b.id === rec.bookingId);
-                          if (b) openAssignModal(b);
-                        }
-                      }}
-                      style={styles.bookingCard}
-                    >
-                      <View
-                        style={[
-                          styles.colorBar,
-                          { backgroundColor: "#a12d23" },
-                        ]}
-                      />
-                      <View style={styles.cardContent}>
-                        <View style={styles.cardLeft}>
-                          <Text style={styles.clientName}>
-                            {rec.clientName || "Cliente"}
-                          </Text>
-                          <Text style={styles.serviceName}>
-                            {rec.serviceName || "Servicio"}
-                          </Text>
-                          <Text style={styles.timeRange}>
-                            {rec.date || "Fecha pendiente"} · {rec.start || "Hora pendiente"}
-                          </Text>
-                          {rec.reason && (
-                            <Text style={styles.centerText}>
-                              Motivo: {rec.reason}
+                  recoveries.map((rec: any) => {
+                    const client = clients.find((c) => c.id === rec.clientId);
+                    const service = data?.services.find((s) => s.id === rec.serviceId);
+                    return (
+                      <Pressable
+                        key={rec.id}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          // Recreaciones: create a virtual booking for the assign modal
+                          setAssignForm({
+                            employeeId: rec.employeeId || "",
+                            date: rec.date || localDay(),
+                            start: rec.start || "",
+                            roomId: "",
+                          });
+                          setAssignedBooking({
+                            id: "__rec__" + rec.id,
+                            clientId: rec.clientId || "",
+                            clientName: rec.clientName || client?.name || "Cliente",
+                            employeeId: rec.employeeId || null,
+                            serviceId: rec.serviceId || "",
+                            serviceName: rec.serviceName || service?.name || "Servicio",
+                            date: rec.date || localDay(),
+                            start: rec.start || "",
+                            end: "",
+                            status: "PENDING",
+                            roomId: null,
+                            centerId: null,
+                            centerName: null,
+                            centerAddress: null,
+                            needsReschedule: true,
+                          } as any);
+                        }}
+                        style={styles.bookingCard}
+                      >
+                        <View
+                          style={[
+                            styles.colorBar,
+                            { backgroundColor: "#a12d23" },
+                          ]}
+                        />
+                        <View style={styles.cardContent}>
+                          <View style={styles.cardLeft}>
+                            <Text style={styles.clientName}>
+                              {rec.clientName || client?.name || "Cliente"}
                             </Text>
-                          )}
-                        </View>
-                        <View style={styles.cardRight}>
-                          <View style={[styles.urgencyBadge, { backgroundColor: "#fde8e8", borderColor: "#f0c4c4" }]}>
-                            <Text style={{ color: "#a12d23", fontSize: 11, fontWeight: "700" }}>
-                              🔴 Recuperar
+                            <Text style={styles.serviceName}>
+                              {rec.serviceName || service?.name || "Servicio"}
                             </Text>
+                            <Text style={styles.timeRange}>
+                              {rec.date ? new Date(rec.date + "T12:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" }) : "Fecha pendiente"} · {rec.start || "Hora pendiente"}
+                            </Text>
+                            {rec.reason && (
+                              <Text style={styles.centerText}>
+                                Motivo: {rec.reason}
+                              </Text>
+                            )}
+                            <View style={[styles.urgencyBadge, { backgroundColor: "#f3e8ff", borderColor: "#d4b8fe" }, { marginTop: 4 }]}>
+                              <Text style={{ color: "#6b21a8", fontSize: 10, fontWeight: "700" }}>
+                                {rec.status === "PENDING" ? "⏳ Pendiente" : rec.status === "RESCHEDULE_PENDING" ? "🔄 Re-programando" : rec.status === "COMPLETED" ? "✅ Completada" : rec.status === "FORFEITED" ? "❌ Caducada" : rec.status || "Pendiente"}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.cardRight}>
+                            <View style={[styles.urgencyBadge, { backgroundColor: "#fde8e8", borderColor: "#f0c4c4" }]}>
+                              <Text style={{ color: "#a12d23", fontSize: 11, fontWeight: "700" }}>
+                                🔴 Recuperar
+                              </Text>
+                            </View>
                           </View>
                         </View>
-                      </View>
-                    </Pressable>
-                  ))
+                      </Pressable>
+                    );
+                  })
                 )}
               </>
             )}

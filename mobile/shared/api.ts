@@ -132,7 +132,13 @@ export class ApiClient {
   }
   // Query available slots
   getSlots(query: { date: string; employeeId: string; serviceId: string; roomId: string; centerId?: string; excludeId?: string }) {
-    const params = new URLSearchParams(query as unknown as Record<string, string>);
+    const params = new URLSearchParams();
+    params.set("date", query.date);
+    params.set("employeeId", query.employeeId);
+    params.set("serviceId", query.serviceId);
+    params.set("roomId", query.roomId);
+    if (query.centerId) params.set("centerId", query.centerId);
+    if (query.excludeId) params.set("excludeId", query.excludeId);
     return this.request<Array<{ start: string; end: string }>>(`/api/slots?${params}`);
   }
   // Get pending packages (to contract/schedule)
