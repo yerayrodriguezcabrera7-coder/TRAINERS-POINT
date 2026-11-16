@@ -25,6 +25,50 @@
   let lastCompletedSale = null;
   let restockRequests = [];
   let selectedRestockStatus = 'PENDIENTE';
+  let viewMode = 'grid'; // 'grid' | 'list'
+
+  function renderProductImage(imageData, name, isThumb = false) {
+    if (imageData && (typeof imageData === 'string' && (/^data:image\/(png|jpeg|webp);base64,/i.test(imageData) || /^https?:\/\//i.test(imageData) || /^\//.test(imageData)))) {
+      return `<img class="${isThumb ? 'tpv-item-thumb-img' : 'tpv-product-img'}" src="${esc(imageData)}" alt="${esc(name)}" loading="lazy">`;
+    }
+    return `
+      <div class="${isThumb ? 'tpv-item-thumb-placeholder' : 'tpv-product-placeholder'}" role="img" aria-label="Sin imagen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="3"></rect>
+          <circle cx="8" cy="8" r="1.5"></circle>
+          <path d="m4 17 5-5 4 4 3-3 5 6"></path>
+        </svg>
+      </div>
+    `;
+  }
+
+  function updateViewModeUI() {
+    const gridEl = $('products-grid');
+    const btnGrid = $('view-mode-grid');
+    const btnList = $('view-mode-list');
+    if (!gridEl) return;
+    if (viewMode === 'list') {
+      gridEl.classList.add('is-list-view');
+      btnList?.classList.add('active');
+      btnList?.setAttribute('aria-pressed', 'true');
+      btnGrid?.classList.remove('active');
+      btnGrid?.setAttribute('aria-pressed', 'false');
+    } else {
+      gridEl.classList.remove('is-list-view');
+      btnGrid?.classList.add('active');
+      btnGrid?.setAttribute('aria-pressed', 'true');
+      btnList?.classList.remove('active');
+      btnList?.setAttribute('aria-pressed', 'false');
+    }
+  }
+
+  function initViewMode() {
+    const saved = localStorage.getItem('tpv_catalog_view_mode');
+    if (saved === 'list' || saved === 'grid') {
+      viewMode = saved;
+    }
+    updateViewModeUI();
+  }
 
   async function api(path, method = 'GET', body) {
     const res = await fetch('/api/' + path, {
@@ -68,6 +112,7 @@
 
       renderClientOptions();
       await refreshCashSession();
+      initViewMode();
       renderCatalog();
       renderCart();
       updateDispatchedTab();
@@ -164,13 +209,16 @@
       return `
         <article class="tpv-product-card ${isOut || isAnterior ? 'out-of-stock' : ''}" data-product-id="${esc(p.id)}">
           ${inCartBadge}
-          <div>
-            <div class="tpv-product-title">${esc(p.name)}</div>
-            <div class="tpv-product-desc">${esc(p.description || '')}</div>
+          <div class="tpv-product-image-container">
+            ${renderProductImage(p.imageData, p.name)}
+          </div>
+          <div class="tpv-product-body">
+            <div class="tpv-product-title" title="${esc(p.name)}">${esc(p.name)}</div>
+            <div class="tpv-product-desc" title="${esc(p.description || '')}">${esc(p.description || '')}</div>
           </div>
           <div class="tpv-product-footer">
             <span class="tpv-product-price">${eur(p.unitPrice)}</span>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+            <div class="tpv-product-badges">
               ${stockBadge}
               ${restockActionBadge}
             </div>
@@ -265,6 +313,9 @@
 
       rows.push(`
         <div class="tpv-item-row" data-id="${esc(p.id)}">
+          <div class="tpv-item-thumb">
+            ${renderProductImage(p.imageData, p.name, true)}
+          </div>
           <div class="tpv-item-info">
             <div class="tpv-item-name" title="${esc(p.name)}">${esc(p.name)}</div>
             <div class="tpv-item-unit-price">${eur(p.unitPrice)} / ud</div>
@@ -420,6 +471,19 @@
       }
       updateCashCalculator();
     };
+  });
+
+  // View mode toggle (Tarjetas / Listado)
+  $('view-mode-grid')?.addEventListener('click', () => {
+    viewMode = 'grid';
+    localStorage.setItem('tpv_catalog_view_mode', 'grid');
+    updateViewModeUI();
+  });
+
+  $('view-mode-list')?.addEventListener('click', () => {
+    viewMode = 'list';
+    localStorage.setItem('tpv_catalog_view_mode', 'list');
+    updateViewModeUI();
   });
 
   // Category filter pills
@@ -603,7 +667,14 @@
         const remainingStock = prod ? `${prod.stock} uds` : '—';
         return `
           <tr>
-            <td><strong>${esc(item.name)}</strong></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="tpv-item-thumb" style="width:34px;height:34px;flex-shrink:0">
+                  ${renderProductImage(prod?.imageData, item.name, true)}
+                </div>
+                <strong>${esc(item.name)}</strong>
+              </div>
+            </td>
             <td><strong style="color:var(--ink)">${item.units} uds</strong></td>
             <td>${eur(item.unitPrice)}</td>
             <td><strong>${eur(item.revenue)}</strong></td>
@@ -1033,15 +1104,22 @@
       let stockDisplay = '—';
 
       if (isLinked) {
-        const prod = r.product;
+        const prod = r.product || products.find(p => p.id === r.productId);
         const isCurrent = prod && prod.isActive;
         const badgeTag = isCurrent
           ? '<span style="font-size:10px;font-weight:700;color:#1e6338;background:#ebf7ee;border:1px solid #bce6c6;padding:1px 5px;border-radius:4px">Existe en tienda</span>'
           : '<span style="font-size:10px;font-weight:700;color:#49545c;background:#f0f2f3;border:1px solid #d2d8dc;padding:1px 5px;border-radius:4px">Existió antes (Descatalogado)</span>';
 
         prodName = `
-          <div><strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#6b767d">(${eur(prod?.unitPrice || 0)})</span></div>
-          <div style="margin-top:2px">${badgeTag}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="tpv-item-thumb" style="width:34px;height:34px;flex-shrink:0">
+              ${renderProductImage(prod?.imageData, r.productName, true)}
+            </div>
+            <div>
+              <div><strong>${esc(r.productName)}</strong> <span style="font-size:11px;color:#6b767d">(${eur(prod?.unitPrice || 0)})</span></div>
+              <div style="margin-top:2px">${badgeTag}</div>
+            </div>
+          </div>
         `;
 
         const currentStock = prod ? Number(prod.stock) : 0;
@@ -1052,8 +1130,15 @@
           : `<span style="font-weight:600">${currentStock} uds</span>`;
       } else {
         prodName = `
-          <div><strong>${esc(r.productName)}</strong></div>
-          <div style="margin-top:2px"><span style="font-size:10px;font-weight:700;color:#9c4c00;background:#fef5ea;border:1px solid #f9dab1;padding:1px 5px;border-radius:4px">Artículo nuevo</span></div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="tpv-item-thumb" style="width:34px;height:34px;flex-shrink:0">
+              ${renderProductImage(null, r.productName, true)}
+            </div>
+            <div>
+              <div><strong>${esc(r.productName)}</strong></div>
+              <div style="margin-top:2px"><span style="font-size:10px;font-weight:700;color:#9c4c00;background:#fef5ea;border:1px solid #f9dab1;padding:1px 5px;border-radius:4px">Artículo nuevo</span></div>
+            </div>
+          </div>
         `;
       }
 
