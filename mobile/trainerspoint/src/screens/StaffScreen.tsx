@@ -102,6 +102,21 @@ export function StaffScreen({
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
 
+  // Pending sub-tab states
+  const [pendingSubTab, setPendingSubTab] = useState<"asignacion" | "reprogramacion">("asignacion");
+  const [pendingPackages, setPendingPackages] = useState<any[]>([]);
+  const [recoveries, setRecoveries] = useState<any[]>([]);
+
+  // Assignment modal states
+  const [assignedBooking, setAssignedBooking] = useState<Booking | null>(null);
+  const [assignForm, setAssignForm] = useState({
+    employeeId: "",
+    date: localDay(),
+    start: "",
+    roomId: "",
+  });
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const active = useRef(true);
   const inFlight = useRef(false);
 
@@ -150,6 +165,26 @@ export function StaffScreen({
     };
   }, [load]);
 
+  // Cargar datos de bonos pendientes y recuperaciones
+  useEffect(() => {
+    if (!office) return;
+    let cancelled = false;
+    async function fetchPendingData() {
+      try {
+        const [packages, recs] = await Promise.all([
+          api.getPendingPackages?.() ?? [],
+          api.getRecoveries?.() ?? [],
+        ]);
+        if (!cancelled) {
+          setPendingPackages(packages);
+          setRecoveries(recs);
+        }
+      } catch { /* silent */ }
+    }
+    fetchPendingData();
+    return () => { cancelled = true; };
+  }, [api, office]);
+
   // ── Data helpers ─────────────────────────────────────────────────────────
 
   const clients = data?.clients || [];
@@ -196,6 +231,50 @@ export function StaffScreen({
         .toLocaleLowerCase("es")
         .includes(term)
   );
+
+  // ── Assignment helpers ─────────────────────────────────────────────────
+
+  function resetAssignForm() {
+    setAssignForm({ employeeId: "", date: localDay(), start: "", roomId: "" });
+  }
+
+  async function handleAssign() {
+    if (!assignedBooking) return;
+    if (!assignForm.employeeId || !assignForm.date || !assignForm.start || !assignForm.roomId) {
+      setError("Completa todos los campos para asignar la reserva.");
+      return;
+    }
+    setIsAssigning(true);
+    try {
+      const updated: Booking = await api.assignBooking?.({
+        bookingId: assignedBooking.id,
+        employeeId: assignForm.employeeId,
+        date: assignForm.date,
+        start: assignForm.start,
+        roomId: assignForm.roomId,
+      }) ?? assignedBooking;
+      await load(true);
+      resetAssignForm();
+      setAssignedBooking(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "No se pudo asignar la reserva."
+      );
+    } finally {
+      setIsAssigning(false);
+    }
+  }
+
+  function openAssignModal(booking: Booking) {
+    setAssignForm({
+      employeeId: booking.employeeId ?? "",
+      date: booking.date,
+      start: booking.start,
+      roomId: booking.roomId,
+    });
+    setAssignedBooking(booking);
+    setSelected(null);
+  }
 
   // ── Tab bar ──────────────────────────────────────────────────────────────
 
@@ -627,80 +706,222 @@ export function StaffScreen({
               </View>
             </View>
 
-            {loading ? (
-              <ActivityIndicator
-                accessibilityLabel="Cargando pendientes"
-                color="#ed691d"
-                size="large"
-              />
-            ) : pending.length === 0 ? (
-              <Text style={styles.empty}>
-                No hay reservas pendientes con estos filtros.
-              </Text>
-            ) : (
-              visible.map((booking) => (
-                <Pressable
-                  key={booking.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Ver reserva de ${clientName(booking)}`}
-                  onPress={() => setSelected(booking)}
-                  style={styles.bookingCard}
-                >
-                  <View
-                    style={[
-                      styles.colorBar,
-                      { backgroundColor: serviceColor(booking) },
-                    ]}
+            {/* Sub-tabs */}
+            <View style={styles.pendingSubTabs}>
+              <Pressable
+                style={[styles.subTab, pendingSubTab === "asignacion" && styles.subTabActive]}
+                onPress={() => setPendingSubTab("asignacion")}
+              >
+                <Text style={pendingSubTab === "asignacion" ? styles.subTabTextActive : styles.subTabText}>
+                  Por organizar ({pendingPackages.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.subTab, pendingSubTab === "reprogramacion" && styles.subTabActive]}
+                onPress={() => setPendingSubTab("reprogramacion")}
+              >
+                <Text style={pendingSubTab === "reprogramacion" ? styles.subTabTextActive : styles.subTabText}>
+                  Reprogramar/Recuperar ({recoveries.length})
+                </Text>
+              </Pressable>
+            </View>
+
+            {pendingSubTab === "asignacion" && (
+              <>
+                {loading ? (
+                  <ActivityIndicator
+                    accessibilityLabel="Cargando bonos pendientes"
+                    color="#ed691d"
+                    size="large"
                   />
-                  <View style={styles.cardContent}>
-                    <View style={styles.cardLeft}>
-                      <Text style={styles.clientName}>
-                        {clientName(booking)}
-                      </Text>
-                      <Text style={styles.serviceName}>
-                        {serviceName(booking)}
-                      </Text>
-                      <Text style={styles.timeRange}>
-                        {booking.start} – {booking.end} · {booking.date}
-                      </Text>
-                      <Text style={styles.employeeText}>
-                        {employeeName(booking)}
-                      </Text>
-                      <Text style={styles.centerText}>
-                        {booking.centerName || "Centro pendiente de consultar"}
-                      </Text>
-                    </View>
-                    <View style={styles.cardRight}>
+                ) : pendingPackages.length === 0 ? (
+                  <Text style={styles.empty}>
+                    No hay bonos pendientes de organización.
+                  </Text>
+                ) : (
+                  pendingPackages.map((pkg: any) => (
+                    <Pressable
+                      key={pkg.id}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        if (pkg.bookingId) {
+                          const b = bookings.find((b) => b.id === pkg.bookingId);
+                          if (b) openAssignModal(b);
+                        }
+                      }}
+                      style={styles.bookingCard}
+                    >
                       <View
                         style={[
-                          styles.statusBadge,
-                          {
-                            backgroundColor:
-                              statusColors[booking.status] + "18",
-                            borderColor: statusColors[booking.status],
-                          },
+                          styles.colorBar,
+                          { backgroundColor: "#ed691d" },
                         ]}
-                      >
-                        <Text
-                          style={[
-                            styles.statusText,
-                            { color: statusColors[booking.status] },
-                          ]}
-                        >
-                          {statuses[booking.status]}
-                        </Text>
+                      />
+                      <View style={styles.cardContent}>
+                        <View style={styles.cardLeft}>
+                          <Text style={styles.clientName}>
+                            {pkg.clientName || "Cliente"}
+                          </Text>
+                          <Text style={styles.serviceName}>
+                            {pkg.serviceName || "Servicio"}
+                          </Text>
+                          <Text style={styles.timeRange}>
+                            Bono · {pkg.remainingSessions ?? "?"} restantes
+                          </Text>
+                          {pkg.expiresAt && (
+                            <Text style={styles.centerText}>
+                              Vence: {new Date(pkg.expiresAt).toLocaleDateString("es-ES", { day: "numeric", month: "long" })}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.cardRight}>
+                          <View style={[styles.urgencyBadge, { backgroundColor: "#fff0ec", borderColor: "#f0ddd0" }]}>
+                            <Text style={{ color: "#9b5b12", fontSize: 11, fontWeight: "700" }}>
+                              ⏳ Por organizar
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                      <View style={styles.warningBadge}>
-                        <Text style={styles.warningText}>
-                          {booking.needsReschedule
-                            ? "Re-programar"
-                            : "Sin asignar"}
-                        </Text>
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+
+            {pendingSubTab === "reprogramacion" && (
+              <>
+                {loading ? (
+                  <ActivityIndicator
+                    accessibilityLabel="Cargando reprogramaciones"
+                    color="#ed691d"
+                    size="large"
+                  />
+                ) : recoveries.length === 0 ? (
+                  <Text style={styles.empty}>
+                    No hay recuperaciones pendientes.
+                  </Text>
+                ) : (
+                  recoveries.map((rec: any) => (
+                    <Pressable
+                      key={rec.id}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        if (rec.bookingId) {
+                          const b = bookings.find((b) => b.id === rec.bookingId);
+                          if (b) openAssignModal(b);
+                        }
+                      }}
+                      style={styles.bookingCard}
+                    >
+                      <View
+                        style={[
+                          styles.colorBar,
+                          { backgroundColor: "#a12d23" },
+                        ]}
+                      />
+                      <View style={styles.cardContent}>
+                        <View style={styles.cardLeft}>
+                          <Text style={styles.clientName}>
+                            {rec.clientName || "Cliente"}
+                          </Text>
+                          <Text style={styles.serviceName}>
+                            {rec.serviceName || "Servicio"}
+                          </Text>
+                          <Text style={styles.timeRange}>
+                            {rec.date || "Fecha pendiente"} · {rec.start || "Hora pendiente"}
+                          </Text>
+                          {rec.reason && (
+                            <Text style={styles.centerText}>
+                              Motivo: {rec.reason}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.cardRight}>
+                          <View style={[styles.urgencyBadge, { backgroundColor: "#fde8e8", borderColor: "#f0c4c4" }]}>
+                            <Text style={{ color: "#a12d23", fontSize: 11, fontWeight: "700" }}>
+                              🔴 Recuperar
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  </View>
-                </Pressable>
-              ))
+                    </Pressable>
+                  ))
+                )}
+              </>
+            )}
+
+            {/* Also show unassigned bookings if no pending sub-tab data */}
+            {pendingSubTab === "asignacion" && pendingPackages.length === 0 && pending.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>
+                  Reservas sin asignar · {pending.length}
+                </Text>
+                {visible
+                  .filter((b) => b.needsReschedule || !b.employeeId)
+                  .map((booking) => (
+                    <Pressable
+                      key={booking.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Asignar reserva de ${clientName(booking)}`}
+                      onPress={() => openAssignModal(booking)}
+                      style={styles.bookingCard}
+                    >
+                      <View
+                        style={[
+                          styles.colorBar,
+                          { backgroundColor: serviceColor(booking) },
+                        ]}
+                      />
+                      <View style={styles.cardContent}>
+                        <View style={styles.cardLeft}>
+                          <Text style={styles.clientName}>
+                            {clientName(booking)}
+                          </Text>
+                          <Text style={styles.serviceName}>
+                            {serviceName(booking)}
+                          </Text>
+                          <Text style={styles.timeRange}>
+                            {booking.start} – {booking.end} · {booking.date}
+                          </Text>
+                          <Text style={styles.employeeText}>
+                            {employeeName(booking)}
+                          </Text>
+                          <Text style={styles.centerText}>
+                            {booking.centerName || "Centro pendiente de consultar"}
+                          </Text>
+                        </View>
+                        <View style={styles.cardRight}>
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              {
+                                backgroundColor: statusColors[booking.status] + "18",
+                                borderColor: statusColors[booking.status],
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusText,
+                                { color: statusColors[booking.status] },
+                              ]}
+                            >
+                              {statuses[booking.status]}
+                            </Text>
+                          </View>
+                          <View style={styles.warningBadge}>
+                            <Text style={styles.warningText}>
+                              {booking.needsReschedule
+                                ? "Re-programar"
+                                : "Sin asignar"}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))
+                }
+              </>
             )}
           </>
         )}
@@ -924,6 +1145,169 @@ export function StaffScreen({
                 >
                   <Text style={styles.closeBtnText}>Cerrar detalle</Text>
                 </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Assignment modal ── */}
+      <Modal
+        visible={assignedBooking !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { resetAssignForm(); setAssignedBooking(null); }}
+      >
+        <View style={styles.overlay}>
+          <View style={styles.modalPanel}>
+            {assignedBooking && (
+              <>
+                <ScrollView contentContainerStyle={styles.modalBody}>
+                  <Text style={styles.modalEyebrow}>ASIGNAR / ORGANIZAR RESERVA</Text>
+
+                  <Text style={styles.modalClient}>
+                    {clientName(assignedBooking)}
+                  </Text>
+
+                  <View style={styles.modalRow}>
+                    <View style={styles.modalInfoBlock}>
+                      <Text style={styles.modalLabel}>Servicio</Text>
+                      <Text style={styles.modalValue}>
+                        {serviceName(assignedBooking)}
+                      </Text>
+                    </View>
+                    <View style={styles.modalInfoBlock}>
+                      <Text style={styles.modalLabel}>Estado</Text>
+                      <View
+                        style={[
+                          styles.modalStatusBadge,
+                          {
+                            backgroundColor:
+                              statusColors[assignedBooking.status] + "18",
+                            borderColor: statusColors[assignedBooking.status],
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.modalStatusText,
+                            { color: statusColors[assignedBooking.status] },
+                          ]}
+                        >
+                          {statuses[assignedBooking.status]}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Worker selector */}
+                  <View style={styles.assignmentField}>
+                    <Text style={styles.assignmentLabel}>Trabajador</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      <BigChip
+                        label="Seleccionar..."
+                        selected={!assignForm.employeeId}
+                        onPress={() => setAssignForm((f) => ({ ...f, employeeId: "" }))}
+                      />
+                      {data?.employees.map((person) => (
+                        <BigChip
+                          key={person.id}
+                          label={person.name}
+                          selected={assignForm.employeeId === person.id}
+                          onPress={() => setAssignForm((f) => ({ ...f, employeeId: person.id }))}
+                        />
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Date selector */}
+                  <View style={styles.assignmentField}>
+                    <Text style={styles.assignmentLabel}>Fecha</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      {daysRange.map((d) => (
+                        <Pressable
+                          key={d.key}
+                          style={[
+                            styles.assignDayChip,
+                            assignForm.date === d.key && styles.assignDayChipSelected,
+                          ]}
+                          onPress={() => setAssignForm((f) => ({ ...f, date: d.key }))}
+                        >
+                          <Text
+                            style={[
+                              styles.assignDayChipText,
+                              assignForm.date === d.key && styles.assignDayChipTextSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {d.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  {/* Time input */}
+                  <View style={styles.assignmentField}>
+                    <Text style={styles.assignmentLabel}>Hora inicio</Text>
+                    <TextInput
+                      accessibilityLabel="Hora de inicio"
+                      placeholder="HH:mm"
+                      value={assignForm.start}
+                      onChangeText={(t) => setAssignForm((f) => ({ ...f, start: t }))}
+                      keyboardType="numeric"
+                      style={styles.assignmentInput}
+                      placeholderTextColor="#9fa89d"
+                    />
+                  </View>
+
+                  {/* Room selector */}
+                  {(data?.rooms?.length || 0) > 0 && (
+                    <View style={styles.assignmentField}>
+                      <Text style={styles.assignmentLabel}>Sala</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                        <BigChip
+                          label="Seleccionar..."
+                          selected={!assignForm.roomId}
+                          onPress={() => setAssignForm((f) => ({ ...f, roomId: "" }))}
+                        />
+                        {data?.rooms.map((room) => (
+                          <BigChip
+                            key={room.id}
+                            label={room.name}
+                            selected={assignForm.roomId === room.id}
+                            onPress={() => setAssignForm((f) => ({ ...f, roomId: room.id }))}
+                          />
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  <View style={styles.assignmentActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        resetAssignForm();
+                        setAssignedBooking(null);
+                      }}
+                      style={styles.assignCancelBtn}
+                    >
+                      <Text style={styles.assignCancelText}>Cancelar</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => void handleAssign()}
+                      disabled={isAssigning}
+                      style={[styles.assignConfirmBtn, isAssigning && styles.assignConfirmBtnDisabled]}
+                    >
+                      {isAssigning ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={styles.assignConfirmText}>Confirmar</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </ScrollView>
               </>
             )}
           </View>
@@ -1364,4 +1748,97 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   closeBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  // ── Pending sub-tabs ──
+  pendingSubTabs: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  subTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#e9ede3",
+  },
+  subTabActive: { backgroundColor: "#1d302e" },
+  subTabText: { color: "#506257", fontSize: 13, fontWeight: "600" },
+  subTabTextActive: { color: "#fff", fontSize: 13, fontWeight: "700" },
+
+  // ── Urgency badge (for packages & recoveries) ──
+  urgencyBadge: {
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  // ── Assignment modal fields ──
+  assignmentField: { gap: 8 },
+  assignmentLabel: {
+    color: "#9fa89d",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  assignmentInput: {
+    backgroundColor: "#f6f6f0",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: "#1d302e",
+    borderWidth: 1.5,
+    borderColor: "#dce2d4",
+  },
+  assignDayChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#dce2d4",
+    backgroundColor: "#fff",
+  },
+  assignDayChipSelected: {
+    backgroundColor: "#1d302e",
+    borderColor: "#1d302e",
+  },
+  assignDayChipText: {
+    color: "#506257",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  assignDayChipTextSelected: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  assignmentActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  assignCancelBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: "#dce2d4",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignCancelText: { color: "#68796e", fontSize: 15, fontWeight: "700" },
+  assignConfirmBtn: {
+    flex: 1,
+    backgroundColor: "#1d302e",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assignConfirmBtnDisabled: {
+    opacity: 0.5,
+  },
+  assignConfirmText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 });

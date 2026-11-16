@@ -1,7 +1,29 @@
 import type { Identity } from "./access";
 import { ApiError, type Booking, type Config } from "./model";
 
-type MobileState = Pick<Config, "clients" | "employees" | "services" | "rooms" | "centers"> & { bookings: Booking[] };
+type PendingPackage = {
+  packageId: string;
+  clientId: string;
+  clientName: string;
+  serviceId: string;
+  serviceName: string;
+  sessionsBought: number;
+  sessionsUsed: number;
+  sessionsScheduled: number;
+  sessionsHeld: number;
+  sessionsToSchedule: number;
+  expiresAt: string;
+  daysRemaining: number;
+  paymentPending: boolean;
+};
+
+type RecoveryItem = Record<string, unknown> & { originCenterId?: string };
+
+type MobileState = Pick<Config, "clients" | "employees" | "services" | "rooms" | "centers"> & {
+  bookings: Booking[];
+  pendingPackages?: PendingPackage[];
+  recoveries?: RecoveryItem[];
+};
 
 export function staffClientIds(state: MobileState, actor: Identity): Set<string> {
   if (actor.role === "TRAINER") {
@@ -20,6 +42,18 @@ export function mobileStaffView(state: MobileState, actor: Identity) {
   const clientIds = staffClientIds(state, actor);
   const bookings = actor.role === "TRAINER" ? state.bookings.filter(booking => booking.employeeId === actor.employeeId) : state.bookings;
   const centerIds = new Set(bookings.map(booking => booking.centerId));
+
+  // Filter pendingPackages by the actor's visible clients (trainers see only their clients' packages)
+  const filteredPendingPackages = state.pendingPackages?.filter(pkg =>
+    actor.role === "TRAINER" ? clientIds.has(pkg.clientId) : true
+  );
+
+  // Filter recoveries by the actor's visible clients (trainers see only their clients' recoveries)
+  const filteredRecoveries = state.recoveries?.filter(rec => {
+    if (actor.role !== "TRAINER") return true;
+    return clientIds.has(rec.clientId as string);
+  });
+
   return {
     bookings: bookings.map(booking => ({
       id: booking.id, clientId: booking.clientId, employeeId: booking.employeeId,
@@ -37,5 +71,7 @@ export function mobileStaffView(state: MobileState, actor: Identity) {
     rooms: state.rooms.map(room => ({ id: room.id, name: room.name })),
     centers: (state.centers || []).filter(center => actor.role !== "TRAINER" || centerIds.has(center.id))
       .map(center => ({ id: center.id, name: center.name })),
+    pendingPackages: filteredPendingPackages,
+    recoveries: filteredRecoveries,
   };
 }
