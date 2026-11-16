@@ -24,7 +24,7 @@
   const items = [
     ['Mis reservas','calendar','/mis-reservas.html'],
     ['Calendario','calendar','/index.html'],
-    ['Pendientes de asignación','calendar','/pendientes.html'],
+    ['Pendientes de asignación','calendar','/index.html#pendientes'],
     ['Clientes','people','/clientes'],
     ['Servicios','list','/servicios'],
     ['Packs','bag','/packs.html'],

@@ -912,3 +912,394 @@ body > main.main-content {
 .client-picker-field:focus-within .client-results { display: flex !important; }
 /* Atajos de teclado: hint visual */
 .kbd-hint { font-size: 10px; color: #8a9ba3; margin-left: 6px; }
+
+/* ═══════════════════════════════════════════════
+   Planning Banner (Pendientes y Recuperaciones)
+   ═══════════════════════════════════════════════ */
+.planning-banner {
+  border-radius: 12px;
+  border: 1px solid #e8c8a4;
+  background: linear-gradient(135deg, #fff8ef 0%, #fff 100%);
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(200, 120, 0, 0.08);
+}
+.planning-banner-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--tp-ink, #283238);
+  text-align: left;
+}
+.planning-banner-icon {
+  font-size: 18px;
+  color: #d97706;
+}
+#planning-banner-count {
+  font-weight: 700;
+  color: #92400e;
+  flex: 1;
+}
+.planning-banner-arrow {
+  font-size: 12px;
+  color: #92400e;
+  transition: transform 0.2s;
+}
+.planning-banner-header[aria-expanded="true"] .planning-banner-arrow {
+  transform: rotate(180deg);
+}
+.planning-banner-content {
+  border-top: 1px solid #f0e0cc;
+  padding: 0 20px 20px;
+}
+.planning-banner-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  border-bottom: 2px solid #e8c8a4;
+}
+.planning-banner-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #65747b;
+  transition: color 0.2s, border-color 0.2s;
+}
+.planning-banner-tab:hover {
+  color: #92400e;
+}
+.planning-banner-tab.active {
+  color: #92400e;
+  border-bottom-color: #d97706;
+}
+.planning-banner-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.planning-banner-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  max-width: 300px;
+}
+.planning-banner-toolbar input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--tp-line, #ded6ca);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+.planning-urgent-panel {
+  margin-bottom: 12px;
+}
+.planning-urgent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.planning-urgent-card {
+  padding: 14px;
+  border: 1px solid #e8c8a4;
+  border-top: 3px solid #ff7f0a;
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.planning-urgent-card .planning-rank {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8c4706;
+}
+.planning-urgent-card h3 {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.planning-urgent-card .planning-reason {
+  margin: 0;
+  font-size: 12px;
+  color: #8c4706;
+  font-weight: 700;
+}
+.planning-urgent-card p, .planning-urgent-card small {
+  margin: 0;
+  font-size: 12px;
+  color: var(--tp-muted, #65747b);
+  line-height: 1.4;
+}
+.planning-urgent-card button {
+  margin-top: auto;
+  min-height: 34px;
+  padding: 8px;
+  border: 1px solid #e8c8a4;
+  border-radius: 6px;
+  background: #fff8ef;
+  color: #7c3c00;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 12px;
+}
+.planning-table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.planning-table th, .planning-table td {
+  text-align: left;
+  padding: 10px 12px;
+  vertical-align: top;
+  line-height: 1.4;
+  border-bottom: 1px solid #f0ebe5;
+}
+.planning-table th {
+  font-weight: 700;
+  color: #92400e;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #faf5ee;
+}
+.planning-table small {
+  display: block;
+  margin-top: 4px;
+  color: var(--tp-muted, #65747b);
+  font-size: 11px;
+}
+.planning-table a {
+  color: #914600;
+  text-underline-offset: 3px;
+}
+.planning-table td:first-child a {
+  color: var(--tp-ink, #283238);
+  text-decoration: none;
+}
+.planning-table td:first-child a:hover {
+  color: #914600;
+  text-decoration: underline;
+}
+.planning-actions button {
+  display: block;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  background: #fff8ef;
+  color: #7c3c00;
+  border: 1px solid #e8c8a4;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+.planning-actions button:hover {
+  background: #fff0dd;
+}
+.planning-summary {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--tp-muted, #65747b);
+}
+.planning-recoveries-panel {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e8c8a4;
+}
+.planning-recoveries-panel h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: #92400e;
+}
+.planning-recoveries-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.planning-recoveries-panel th, .planning-recoveries-panel td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0ebe5;
+}
+.planning-recoveries-panel th {
+  font-weight: 700;
+  font-size: 12px;
+  color: #92400e;
+}
+.planning-banner .planning-table td:first-child a {
+  text-decoration: none;
+  color: var(--tp-ink, #283238);
+}
+.planning-banner .planning-table td:first-child a:hover {
+  color: #914600;
+  text-decoration: underline;
+}
+/* Banner editor dialog */
+#planning-editor {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  border-radius: 12px;
+  border-color: #e8c8a4;
+}
+#planning-editor form {
+  padding: 24px;
+}
+#planning-editor .editor-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+#planning-editor .editor-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--tp-ink, #283238);
+}
+#planning-editor .editor-heading button {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #65747b;
+  padding: 0 4px;
+  line-height: 1;
+}
+#planning-editor #editor-original {
+  font-size: 13px;
+  color: #65747b;
+  margin: 0 0 16px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#planning-editor .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+#planning-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+#planning-editor select, #planning-editor input {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--tp-line, #ded6ca);
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+}
+#planning-editor .outline-button {
+  padding: 8px 16px;
+  border: 1px solid var(--tp-line, #ded6ca);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+#planning-editor .outline-button:hover {
+  background: #faf5ee;
+}
+#planning-editor #editor-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+#planning-editor #editor-slots p {
+  width: 100%;
+  font-size: 13px;
+  color: #65747b;
+  margin: 0;
+}
+#planning-editor .slot-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--tp-line, #ded6ca);
+  background: #fff8ef;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+#planning-editor .slot-btn:hover {
+  background: #fff0dd;
+}
+#planning-editor #editor-error {
+  font-size: 13px;
+  color: #a72c22;
+  margin-bottom: 12px;
+}
+#planning-editor .editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+#planning-editor .editor-actions button {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--tp-line, #ded6ca);
+}
+#planning-editor .editor-actions button.danger-solid {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+#planning-editor .editor-actions button.primary {
+  background: #92400e;
+  color: #fff;
+  border-color: #92400e;
+}
+@media (max-width: 640px) {
+  .planning-urgent-list {
+    grid-template-columns: 1fr;
+  }
+  .planning-banner-header {
+    padding: 10px 14px;
+  }
+  .planning-banner-content {
+    padding: 0 14px 14px;
+  }
+  .planning-banner-tabs {
+    overflow-x: auto;
+  }
+  .planning-table {
+    font-size: 12px;
+  }
+  .planning-table th, .planning-table td {
+    padding: 8px;
+  }
+  .planning-banner-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .planning-banner-toolbar label {
+    max-width: none;
+  }
+}

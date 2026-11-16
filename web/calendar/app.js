@@ -467,7 +467,7 @@ function render(updatePeriodTitle = false) {
   if(serverMode&&currentUser?.role!=='TRAINER'&&['all','__unassigned'].includes(state.employee))employees=[...employees,{id:'__unassigned',name:'Sin asignar',color:'#b86b00',schedule:data.schedule}];
   const queues=data.bookings.filter(b=>!b.employeeId&&['pending','confirmed'].includes(b.status));
   const reschedules=data.bookings.filter(b=>b.needsReschedule);
-  $('planning-alerts').innerHTML=serverMode&&currentUser?.role!=='TRAINER'?`<a href="pendientes.html?tipo=asignacion" ${queues.length?'':'hidden'}>${queues.length} reservas pendientes de asignación →</a><a href="pendientes.html?tipo=reprogramacion" ${reschedules.length?'':'hidden'}>${reschedules.length} reservas pendientes de reprogramación →</a>`:'';
+  $('planning-banner')?.classList.toggle('has-alerts', (queues.length + reschedules.length) > 0);
   $('period-label').textContent = titleForPeriod(dates);
   $('result-count').textContent=bookings.length+' reservas';
   $('clear-filters').hidden=['employee','service'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
