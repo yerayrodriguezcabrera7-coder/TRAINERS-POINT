@@ -21,9 +21,11 @@ import { financeRoutes } from './routes/finance';
 import { packagesRoutes } from './routes/packages';
 import { servicesRoutes } from './routes/services';
 import { businessRoutes } from './routes/business';
+import { permissionsTemplatesRoutes } from './routes/permissions-templates';
 import { runtimeConfig } from "./runtime-config";
 import { configuredProvider } from "./reminders/provider";
 import { ReminderWorker } from "./reminders/worker";
+import { WeeklyPlanningReminder } from "./reminders/weekly-planning";
 import { createCognitoVerifier } from "./cloud/cognito";
 import { databaseConfig } from "./cloud/database";
 const deployment = runtimeConfig();
@@ -50,7 +52,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, url
   const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, hasTrustedOrigin };
   if (await authorize(request, response, url, context))
     return;
-  for (const route of [trainingPlansRoutes, businessRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes])
+  for (const route of [trainingPlansRoutes, businessRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes, permissionsTemplatesRoutes])
     if (await route(request, response, url, context))
       return;
   if (calendarHandler) {
@@ -210,6 +212,18 @@ async function start(): Promise<void> {
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
   const stopReminders = new ReminderWorker(pool, configuredProvider()).start();
+
+  // Weekly planning reminder cron: runs every minute, only executes on Friday 10:00-10:30 (Madrid timezone)
+  const weeklyPlanning = new WeeklyPlanningReminder(pool);
+  setInterval(async () => {
+    try {
+      const sent = await weeklyPlanning.run();
+      if (sent > 0) console.log(`Planning semanal enviado a ${sent} cliente(s).`);
+    } catch (err) {
+      console.error('Error enviando planning semanal:', err);
+    }
+  }, 60000).unref();
+
   let closing = false;
   const close = () => {
     if (closing) return;

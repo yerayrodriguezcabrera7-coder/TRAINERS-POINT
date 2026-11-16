@@ -30,6 +30,8 @@
     ['Packs','bag','/packs.html'],
     ['Tienda TPV','bag','/tienda.html'],
     ['Productos','bag','/productos.html'],
+    ['Pedidos / Albaranes','list','/pedidos.html'],
+    ['Historial de stock','history','/historial-stock.html'],
     ['Caja','cash','/caja.html'],
     ['Cuadro de mando','chart','/cuadro-mando.html'],
     ['Informes','report','/informes.html'],
@@ -121,7 +123,7 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'pedidos.html', 'historial-stock.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
       };

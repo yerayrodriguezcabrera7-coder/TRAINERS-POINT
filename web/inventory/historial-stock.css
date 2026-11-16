@@ -1,0 +1,26 @@
+#notice:empty{display:none}#notice{padding:12px;background:#f2f5f2;border-radius:8px;margin-bottom:16px}
+.movement-type{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.movement-type.ENTRADA{background:#e8f5e9;color:#2e7d32}
+.movement-type.VENTA{background:#fff3e0;color:#b66a00}
+.movement-type.DEVOLUCION{background:#e3f2fd;color:#1565c0}
+.movement-type.AJUSTE{background:#f3e5f4;color:#7b1fa2}
+.movement-type.DANO{background:#fce4ec;color:#c62828}
+.movement-type.SALIDA{background:#f0f0f0;color:#555}
+.movement-product-identity{display:flex;gap:10px;align-items:center;min-width:200px}
+.movement-product-photo{width:36px;height:36px;border-radius:8px;object-fit:contain;background:#f3f0e9;flex-shrink:0}
+.movement-product-placeholder{width:36px;height:36px;border-radius:8px;background:#f3f0e9;display:grid;place-items:center;color:#8d9692;flex-shrink:0}
+.movement-product-placeholder svg{width:18px;height:18px}
+.filter-group{display:flex;align-items:center;gap:6px}
+.filter-group select,.filter-group input[type="date"]{padding:6px 10px;border:1px solid #ced5d0;border-radius:6px;font-size:13px;background:#fff}
+.panel-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.stat-card{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.stat-card article{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 20px;padding:16px 20px;border:1px solid #e0d5c9;border-radius:14px;background:#fffaf3}
+.stat-card strong{font-size:26px;line-height:1}
+.stat-card small{grid-column:1/-1;color:#67746d;font-size:12px}
+.form-grid .full{grid-column:1/-1}
+.dialog-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.dialog-heading h2{margin:0;font-size:18px}
+.dialog-heading button{background:none;border:none;font-size:22px;cursor:pointer;color:#667}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid #e4e6e5}
+.sales-pagination{display:flex;align-items:center;justify-content:center;gap:20px;padding:16px 0}
+@media(max-width:600px){.panel-toolbar{flex-wrap:wrap}.stat-card{grid-template-columns:1fr}}
