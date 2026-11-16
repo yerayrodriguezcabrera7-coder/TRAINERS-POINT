@@ -245,7 +245,7 @@ test('Integración: servicios compartidos actualizan el calendario y conservan s
   assert.equal((await store.state(gym.id)).services.find(item => item.id === service.id).active, false);
 });
 
-test('Formulario: catálogo, cálculo automático y validez editable con cuatro semanas por defecto', () => {
+test('Formulario: catálogo de campos, validez editable con cuatro semanas por defecto', () => {
   const htmlPath = path.join(__dirname, '..', 'web', 'services', 'services.html');
   const jsPath = path.join(__dirname, '..', 'web', 'services', 'services.js');
   const cssPath = path.join(__dirname, '..', 'web', 'services', 'services.css');
@@ -254,16 +254,17 @@ test('Formulario: catálogo, cálculo automático y validez editable con cuatro 
   const js = fs.readFileSync(jsPath, 'utf8');
   const css = fs.readFileSync(cssPath, 'utf8');
 
-  // Comprobar los 11 campos requeridos en el HTML del formulario
+  // Comprobar los campos requeridos en el HTML del formulario
+  // (los servicios gestionan SESION_INDIVIDUAL: no hay selector de tipo ni campo de número de sesiones)
   const expectedFields = [
     'field-name',          // 1. Nombre del servicio
     'field-description',   // 2. Descripción
-    'field-modality',      // 3. Modalidad
-    'field-type',          // 4. Tipo de servicio
-    'field-trainingCount', // 5. Número de sesiones
-    'field-price',         // 6. Precio total
+    'field-color',         // 3. Color en calendario
+    'field-category',      // 4. Categoría (Entrenamiento / Cabina)
+    'field-modality',      // 5. Modalidad (Individual / Dual)
+    'field-price',         // 6. Precio por sesión
     'field-durationMin',   // 7. Duración por sesión
-    'field-validityWeeks', // 8. Validez (4 semanas solo)
+    'field-validityWeeks', // 8. Validez
     'field-frequency',     // 9. Frecuencia semanal recomendada
     'field-conditions',    // 10. Condiciones
     'field-isActive',      // 11. Estado
@@ -273,6 +274,10 @@ test('Formulario: catálogo, cálculo automático y validez editable con cuatro 
     assert.ok(html.includes(`id="${fieldId}"`), `El formulario HTML debe contener el campo con id="${fieldId}"`);
   }
 
+  // No debe contener campos eliminados (tipo y número de sesiones)
+  assert.ok(!html.includes('id="field-type"'), 'No debe existir el campo "type" (servicio siempre SESION_INDIVIDUAL)');
+  assert.ok(!html.includes('id="field-trainingCount"'), 'No debe existir el campo "trainingCount" (siempre 1)');
+
   const { JSDOM } = require('jsdom');
   const document = new JSDOM(html).window.document;
   const weeks = document.getElementById('field-validityWeeks');
@@ -280,63 +285,57 @@ test('Formulario: catálogo, cálculo automático y validez editable con cuatro 
   assert.ok(document.getElementById('field-color')); assert.ok(document.getElementById('field-category'));
   assert.equal(document.querySelectorAll('.stats-grid').length, 0);
 
-  // Comprobar contenedor del cálculo automático en HTML
-  assert.ok(html.includes('id="calculated-rate-panel"'), 'Debe existir el panel de cálculo automático');
-  assert.ok(html.includes('id="calc-session-price"'), 'Debe existir el elemento para mostrar el precio por sesión calculado');
-  assert.ok(html.includes('id="calc-formula"'), 'Debe existir el elemento para el desglose de la fórmula de cálculo');
+  // No debe contener panel de cálculo automático (eliminada la lógica de pack)
+  assert.ok(!html.includes('id="calculated-rate-panel"'), 'No debe existir el panel de cálculo automático');
 
-  // Comprobar estilos de cálculo y validación en CSS
-  assert.ok(css.includes('.calculated-rate-panel'), 'Debe incluir estilos para el panel de cálculo automático');
+  // Comprobar estilos de validación en CSS
   assert.ok(css.includes('.is-invalid'), 'Debe incluir estilos para el estado visual de error en los campos');
 
-  // Comprobar lógica de cálculo automático y reactividad en JS
-  assert.ok(js.includes('updateCalculatedPrice'), 'Debe existir la función de cálculo de precio por sesión');
-  assert.ok(js.includes('price / count'), 'Debe calcular el coste dividiendo precio entre sesiones');
-  assert.ok(js.includes('field-price') && js.includes('addEventListener'), 'Debe recalcular en tiempo real al cambiar el precio');
-  assert.ok(js.includes('field-trainingCount'), 'Debe recalcular en tiempo real al cambiar el número de sesiones');
-
   // Comprobar validaciones en frontend
-  assert.ok(js.includes('El precio total no puede ser negativo'), 'Debe validar precios negativos');
-  assert.ok(js.includes('El número de sesiones debe ser un entero'), 'Debe validar sesiones inválidas');
+  assert.ok(js.includes('El precio por sesión es obligatorio'), 'Debe validar precio obligatorio');
+  assert.ok(js.includes('El precio no puede ser negativo'), 'Debe validar precios negativos');
   assert.ok(js.includes('El nombre del servicio es obligatorio'), 'Debe validar servicios sin nombre');
   assert.ok(js.includes('setFieldError'), 'Debe marcar campos erróneos y alertar al usuario');
 
-  // Comprobar que en openEditDialog se cargan todos los campos y en submit se envían todos
+  // Comprobar que en openEditDialog se cargan todos los campos
   assert.ok(js.includes('openEditDialog'), 'Debe existir la función de edición de servicios');
   for (const fieldId of expectedFields) {
     assert.ok(js.includes(fieldId), `El script JS debe gestionar el campo ${fieldId}`);
   }
+  // Verificar que se usa siempre SESION_INDIVIDUAL
+  assert.ok(js.includes("'SESION_INDIVIDUAL'"), 'El tipo de servicio debe fijarse en SESION_INDIVIDUAL');
+  assert.ok(js.includes('trainingCount: 1'), 'El número de sesiones debe fijarse en 1');
 });
 
-test('Base de datos: Modificación completa posterior de todos los 11 campos de un servicio', async () => {
-  // 1. Crear servicio inicial con duración de 4 semanas
+test('Base de datos: Modificación completa posterior de todos los campos de un servicio', async () => {
+  // 1. Crear servicio inicial con duración de 60 minutos
   const service = await prisma.service.create({
     data: {
-      name: 'Servicio Inicial Ficha Completa',
+      name: 'Sesión Individual Inicial',
       description: 'Descripción inicial de prueba',
       modality: 'INDIVIDUAL',
       type: 'SESION_INDIVIDUAL',
       trainingCount: 1,
-      price: 60.00,
+      price: 30.00,
       durationMin: 60,
       validityWeeks: 4,
-      recommendedWeeklyFrequency: 1,
+      recommendedWeeklyFrequency: 2,
       conditions: 'Condición previa.',
       isActive: true,
     },
   });
   createdServiceIds.push(service.id);
 
-  // 2. Modificar posteriormente todos los campos manteniendo la regla de 4 semanas
+  // 2. Modificar posteriormente todos los campos
   const updated = await prisma.service.update({
     where: { id: service.id },
     data: {
-      name: 'Bono 20 Sesiones Dúo Avanzado',
-      description: 'Plan de 20 sesiones para parejas con seguimiento nutricional.',
+      name: 'Sesión Dúo Avanzado',
+      description: 'Plan de sesiones para parejas con seguimiento.',
       modality: 'DUAL',
-      type: 'PACK',
-      trainingCount: 20,
-      price: 750.50,
+      type: 'SESION_INDIVIDUAL',
+      trainingCount: 1,
+      price: 50.50,
       durationMin: 75,
       validityWeeks: 4,
       recommendedWeeklyFrequency: 3,
@@ -345,24 +344,20 @@ test('Base de datos: Modificación completa posterior de todos los 11 campos de 
     },
   });
 
-  // 3. Verificar que todos y cada uno de los 11 campos se actualizaron en la base de datos
-  assert.equal(updated.name, 'Bono 20 Sesiones Dúo Avanzado');
-  assert.equal(updated.description, 'Plan de 20 sesiones para parejas con seguimiento nutricional.');
+  // 3. Verificar que todos y cada uno de los campos se actualizaron en la base de datos
+  assert.equal(updated.name, 'Sesión Dúo Avanzado');
+  assert.equal(updated.description, 'Plan de sesiones para parejas con seguimiento.');
   assert.equal(updated.modality, 'DUAL');
-  assert.equal(updated.type, 'PACK');
-  assert.equal(updated.trainingCount, 20);
-  assert.equal(Number(updated.price), 750.50);
+  assert.equal(updated.type, 'SESION_INDIVIDUAL');
+  assert.equal(updated.trainingCount, 1);
+  assert.equal(Number(updated.price), 50.50);
   assert.equal(updated.durationMin, 75);
   assert.equal(updated.validityWeeks, 4);
   assert.equal(updated.recommendedWeeklyFrequency, 3);
   assert.equal(updated.conditions, 'Cancelación con 24h de antelación y reserva anticipada.');
   assert.equal(updated.isActive, false);
 
-  // 4. Comprobar cálculo de precio por sesión resultante
-  const pricePerSession = Number(updated.price) / updated.trainingCount;
-  assert.equal(Math.round(pricePerSession * 100) / 100, 37.53);
-
-  // 5. Verificar vaciado de campos opcionales (pasar a null)
+  // 4. Verificar vaciado de campos opcionales (pasar a null)
   const cleared = await prisma.service.update({
     where: { id: service.id },
     data: {
@@ -390,12 +385,12 @@ test('Backend: Verificación de reglas de validación en parseServiceInput (vali
   assert.ok(src.includes('price < 0'), 'Debe validar precios negativos');
   assert.ok(src.includes('El precio total es obligatorio, no puede ser negativo'), 'Debe emitir mensaje claro de precio no negativo');
 
-  // Validación de sesiones inválidas
+  // Validación de sesión individual (siempre trainingCount >= 1)
   assert.ok(src.includes('rawTrainingCount < 1') || src.includes('trainingCount < 1'), 'Debe validar que las sesiones sean >= 1');
   assert.ok(src.includes('El número de sesiones debe ser un entero entre 1 y 500'), 'Debe validar rango y enteros en sesiones');
 
   const { parseServiceInput } = require('../dist/validation/records');
-  const input = { name: 'Cabina', durationMin: 45, price: 100, trainingCount: 5, type: 'PACK', category: 'CABIN', color: '#123456' };
+  const input = { name: 'Sesión Individual', durationMin: 45, price: 100, trainingCount: 1, type: 'SESION_INDIVIDUAL', category: 'TRAINING', color: '#123456' };
   assert.equal(parseServiceInput(input).validityWeeks,4);
   for (const weeks of [1,2,8,52]) assert.equal(parseServiceInput({...input,validityWeeks:weeks}).validityWeeks,weeks);
   for (const weeks of [0,-1,1.5,5201]) assert.equal(typeof parseServiceInput({...input,validityWeeks:weeks}),'string');
@@ -430,13 +425,13 @@ test('Clientes y Bonos: Asignar bono a cliente vinculado a servicio dinámico ac
   });
   createdClientIds.push(client.id);
 
-  // Crear servicio dinámico tipo Pack 8 entrenamientos de 4 semanas
+  // Crear servicio tipo Sesión Individual (los bonos se gestionan en la página de packs)
   const service = await prisma.service.create({
     data: {
-      name: 'Bono 8 Sesiones Fuerza Test',
+      name: 'Sesión Individual Fuerza Test',
       modality: 'INDIVIDUAL',
-      type: 'PACK',
-      trainingCount: 8,
+      type: 'SESION_INDIVIDUAL',
+      trainingCount: 1,
       price: 320.00,
       durationMin: 60,
       validityWeeks: 4,
@@ -467,7 +462,7 @@ test('Clientes y Bonos: Asignar bono a cliente vinculado a servicio dinámico ac
   assert.ok(bono.id, 'Debe generar identificador de bono');
   assert.equal(bono.clientId, client.id);
   assert.equal(bono.serviceId, service.id);
-  assert.equal(bono.sessionsBought, 8);
+  assert.equal(bono.sessionsBought, 1);
   assert.equal(Number(bono.totalAmount), 320.00);
   assert.equal(bono.paymentMethod, 'TARJETA');
   assert.equal(bono.paymentStatus, 'PAGADO');

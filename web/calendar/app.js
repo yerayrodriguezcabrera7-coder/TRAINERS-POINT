@@ -120,7 +120,9 @@ if(serverMode) {
   try {data=await api('state');data.bookings=data.bookings.map(fromServer);await loadBookingClients();sessionStorage.setItem('calendar-admin-token',adminToken);}
   catch(e){sessionStorage.removeItem('calendar-admin-token');warn(e.message+'. Recarga para volver a conectar.');$('new-booking').disabled=true;$('schedule-button').disabled=true;return;}
 } else data=loadData();
-let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,dualClientPackages=[],dualPackageRequest=0,dualPackageBusy=false,pendingPackageKey=null,newPendingPackageId=null,dragState=null,suppressClickUntil=0;
+let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,dualClientPackages=[],dualPackageRequest=0,dualPackageBusy=false,pendingPackageKey=null,newPendingPackageId=null,dragState=null,suppressClickUntil=0,clientSearchTimer=null,dualClientSearchTimer=null;
+const debounceClientSearch=(fn)=>{clearTimeout(clientSearchTimer);clientSearchTimer=setTimeout(fn,250);};
+const debounceDualClientSearch=(fn)=>{clearTimeout(dualClientSearchTimer);dualClientSearchTimer=setTimeout(fn,250);};
 function canDragBooking(b) {
   return Boolean(b && currentUser?.role !== 'TRAINER' && ['pending', 'confirmed'].includes(b.status));
 }
@@ -1071,7 +1073,7 @@ if ($('clear-dual-client-search')) {
     $('dual-client-search').focus();
   };
 }
-$('dual-client-search')?.addEventListener('input', renderDualClientResults);
+$('dual-client-search')?.addEventListener('input', (e) => { debounceDualClientSearch(renderDualClientResults); });
 $('dual-client-search')?.addEventListener('focus', renderDualClientResults);
 $('dual-client-results')?.addEventListener('click', event => {
   const result = event.target.closest('[data-dual-client-id]');
@@ -1226,7 +1228,7 @@ $('add-client').addEventListener('click', () => {
   updateClientFields();
   if ($('booking-client').value !== 'new') syncClientPicker();
 });
-$('client-search').addEventListener('input', renderClientResults);
+$('client-search').addEventListener('input', (e) => { debounceClientSearch(renderClientResults); });
 $('client-search').addEventListener('focus', renderClientResults);
 $('client-results').addEventListener('click', event => {
   const result = event.target.closest('[data-client-id]');
@@ -1895,4 +1897,33 @@ window.TrainersPoint.poll(() => {
 },60000);
 
 if(serverMode)window.TrainersPoint.poll(refreshServer,2000,()=>warn('Sin conexión. Los cambios se guardan solo cuando el servidor responde. Reintentando…'));
-})().catch(e=>console.error('No se pudo iniciar el calendario',e));
+
+// Atajos de teclado
+document.addEventListener('keydown', (e) => {
+  // Escape para cerrar diálogos
+  if (e.key === 'Escape') {
+    const openDialog = document.querySelector('dialog[open]');
+    if (openDialog) { openDialog.close(); return; }
+  }
+  // Enter en campos de búsqueda: permitir solo si no hay resultados visibles
+  // Ctrl+K o Ctrl+Shift+K para saltar a la fecha
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || (e.shiftKey && e.key === 'K'))) {
+    e.preventDefault();
+    const jumpInput = $('jump-date');
+    if (jumpInput) jumpInput.showPicker ? jumpInput.showPicker() : jumpInput.focus();
+  }
+  // Flechas izquierda/derecha para navegar calendario solo si no estamos en un campo de formulario
+  if (['ArrowLeft','ArrowRight'].includes(e.key) && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+    e.preventDefault();
+    navigate(e.key === 'ArrowLeft' ? -1 : 1);
+  }
+  // 'n' para nueva reserva, 'h' para ir a hoy (solo si no estamos en un campo de formulario)
+  if (!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey) { showBooking(null); return; }
+    if (e.key === 'h' && !e.ctrlKey && !e.metaKey) { state.date=todayKey();render(true); return; }
+    if (e.key === 'w' && !e.ctrlKey && !e.metaKey) { state.view='week';state.date=todayKey();render(true); return; }
+    if (e.key === 'd' && !e.ctrlKey && !e.metaKey) { state.view='day';state.date=todayKey();render(true); return; }
+    if (e.key === 'm' && !e.ctrlKey && !e.metaKey) { state.view='month';state.date=todayKey();render(true); return; }
+  }
+});
+})().catch(() => { /* The page shows connection errors. */ });

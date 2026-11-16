@@ -5,10 +5,23 @@ import { prisma } from "../lib/prisma";
 import { isRecord, parseServiceInput, serviceSelectFields } from "../validation/records";
 export async function servicesRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
   const { port, hasTrustedOrigin } = context;
+  // GET /api/services/packs – only return packs (type=PACK) with service reference
+  if (request.method === "GET" && url.pathname === "/api/services/packs") {
+    const packs = await prisma.service.findMany({
+      where: { type: "PACK", isActive: true },
+      select: {
+        ...serviceSelectFields,
+      },
+      orderBy: { name: "asc" },
+    });
+    sendJson(response, 200, { packages: packs });
+    return true;
+  }
   if (request.method === "GET" && url.pathname === "/api/services") {
     const includeAll = url.searchParams.get("all") === "true" || url.searchParams.get("includeInactive") === "true";
+    // Exclude packs from the main services list (those are managed in the Packs screen)
     const services = await prisma.service.findMany({
-      where: includeAll ? undefined : { isActive: true },
+      where: includeAll ? undefined : { isActive: true, type: { not: "PACK" } },
       select: serviceSelectFields,
       orderBy: { name: "asc" },
     });

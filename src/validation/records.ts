@@ -88,6 +88,7 @@ type ServiceInput = {
   isActive: boolean;
   category: "TRAINING" | "CABIN";
   color: string;
+  serviceId?: string | null;
 };
 
 export const serviceSelectFields = {
@@ -107,6 +108,7 @@ export const serviceSelectFields = {
   isActive: true,
   createdAt: true,
   updatedAt: true,
+  serviceId: true,
 } as const;
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -480,6 +482,16 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
     ? value.isActive
     : value.isActive === "true" || value.isActive === 1 || value.isActive === undefined || value.isActive === null;
 
+  // serviceId: for PACK type, links to an individual service
+  let serviceId: string | null = null;
+  if (value.serviceId !== undefined && value.serviceId !== null && value.serviceId !== "") {
+    const rawServiceId = typeof value.serviceId === "string" ? value.serviceId.trim() : "";
+    if (rawServiceId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawServiceId)) {
+      return "Selecciona un servicio válido para vincular el pack.";
+    }
+    serviceId = rawServiceId || null;
+  }
+
   return {
     name,
     durationMin,
@@ -494,6 +506,7 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
     conditions,
     isActive,
     description: description || null,
+    ...(serviceId !== null ? { serviceId } : {}),
   };
 }
 

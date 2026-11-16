@@ -28,7 +28,7 @@
             <div class="page-heading-copy">
               <p class="eyebrow">CENTRO · SERVICIOS</p>
               <h1>Servicios <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Gestiona las modalidades, precios, duración y condiciones de los servicios ofrecidos en el centro.</p>
+              <p class="page-description">Define los tipos de sesión que se muestran en el calendario (Individual, Dual, Cabina…) con su color, duración y modalidad. Cada bono/pack se gestiona en la pantalla <strong>Packs</strong>.</p>
             </div>
             <button class="button button-primary" id="open-service-create" type="button">
               <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
@@ -36,17 +36,17 @@
             </button>
           </header>
 
-          <!-- Panel de catálogo (mismo estilo client-panel de clientes) -->
+          <!-- Panel de catálogo -->
           <section class="client-panel" aria-labelledby="services-panel-title">
             <div class="panel-heading">
               <div>
-                <h2 id="services-panel-title">Catálogo de servicios</h2>
-                <p>Consulta tarifas, características y modalidades del centro.</p>
+                <h2 id="services-panel-title">Tipos de sesión</h2>
+                <p>Colores, duración y modalidad para el calendario.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
 
-            <!-- Chips de filtro idénticos a clientes -->
+            <!-- Chips de filtro -->
             <div class="client-filter-chips" role="group" aria-label="Filtrar servicios">
               <button class="filter-chip" type="button" data-filter="CABIN" aria-pressed="false">Cabinas</button>
               <button class="filter-chip active" type="button" data-filter="all" aria-pressed="true">Todos</button>
@@ -54,16 +54,14 @@
               <button class="filter-chip" type="button" data-filter="inactive" aria-pressed="false">Inactivos</button>
               <button class="filter-chip" type="button" data-filter="INDIVIDUAL" aria-pressed="false">Individual</button>
               <button class="filter-chip" type="button" data-filter="DUAL" aria-pressed="false">Dual</button>
-              <button class="filter-chip" type="button" data-filter="PACK" aria-pressed="false">Packs</button>
-              <button class="filter-chip" type="button" data-filter="SESION_INDIVIDUAL" aria-pressed="false">Sesión única</button>
             </div>
 
-            <!-- Toolbar con buscador y botón de refresco como en clientes -->
+            <!-- Toolbar con buscador y botón de refresco -->
             <div class="toolbar">
               <div class="search-box">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
                 <label class="sr-only" for="service-search">Buscar servicio</label>
-                <input id="service-search" type="search" placeholder="Buscar por nombre, descripción o condiciones..." autocomplete="off">
+                <input id="service-search" type="search" placeholder="Buscar por nombre, descripción o condiciones…" autocomplete="off">
                 <button id="clear-search" class="search-clear" type="button" aria-label="Limpiar búsqueda" hidden=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
               </div>
               <button class="button button-outline refresh-button" id="refresh-list" type="button" aria-label="Actualizar catálogo" title="Actualizar catálogo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5m-4.1-2A7.5 7.5 0 0 1 18 7l2 5M4 12l2 5a7.5 7.5 0 0 0 13.1-3"></path></svg></button>
@@ -86,7 +84,7 @@
       </main>
     </div>
 
-    <!-- Modal Dialog para crear y editar servicio (mismo diseño client-dialog) -->
+    <!-- Modal Dialog para crear y editar servicio -->
     <dialog id="service-dialog" class="client-dialog service-dialog" aria-labelledby="dialog-title">
       <form id="service-form" novalidate="">
         <input type="hidden" name="id" id="service-id">
@@ -95,7 +93,7 @@
           <div>
             <p class="eyebrow" id="dialog-eyebrow">CATÁLOGO DE SERVICIOS</p>
             <h2 id="dialog-title">Nuevo servicio</h2>
-            <p id="dialog-subtitle">Introduce las características y tarifa del servicio.</p>
+            <p id="dialog-subtitle">Define el tipo de sesión y su color en el calendario.</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
@@ -103,7 +101,7 @@
         <div class="form-grid">
           <label class="form-field form-field-wide">
             <span>Nombre del servicio <b>*</b></span>
-            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 Sesiones Dúo">
+            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Individual, Dual, Cabina, Studio Body">
           </label>
 
           <label class="form-field">
@@ -115,48 +113,22 @@
           </label>
 
           <label class="form-field"><span>Categoría</span><select id="field-category" name="category"><option value="TRAINING">Entrenamiento</option><option value="CABIN">Cabina</option></select></label>
-          <label class="form-field"><span>Color en el calendario</span><input id="field-color" name="color" type="color" value="#317b9b"><span class="field-hint">Identifica las reservas de este servicio.</span></label>
           <label class="form-field">
-            <span>Tipo de servicio <b>*</b></span>
-            <select name="type" id="field-type" required="">
-              <option value="SESION_INDIVIDUAL">Sesión individual (1 sesión)</option>
-              <option value="PACK">Pack de sesiones (Bono)</option>
-            </select>
+            <span>Color en el calendario <b>*</b></span>
+            <input id="field-color" name="color" type="color" value="#317b9b">
+            <span class="field-hint">Identifica las reservas de este servicio en el calendario.</span>
           </label>
 
           <label class="form-field">
-            <span>Número de sesiones <b>*</b></span>
-            <input name="trainingCount" id="field-trainingCount" type="number" min="1" max="500" step="1" required="" value="1">
-            <span class="field-hint" id="hint-trainingCount">1 sesión para entrenamiento individual.</span>
-          </label>
-
-          <label class="form-field">
-            <span>Precio total (€) <b>*</b></span>
+            <span>Precio por sesión (€) <b>*</b></span>
             <input name="price" id="field-price" type="number" min="0" max="99999999.99" step="0.01" required="" placeholder="0,00">
-            <span class="field-hint" id="hint-price">Importe total del servicio o bono.</span>
+            <span class="field-hint">Importe por sesión individual.</span>
           </label>
 
-          <!-- Cálculo automático del precio por sesión -->
-          <div class="form-field form-field-wide calculated-rate-panel" id="calculated-rate-panel" aria-live="polite">
-            <div class="calc-panel-inner">
-              <div class="calc-label-col">
-                <span class="calc-badge">⚡ CÁLCULO AUTOMÁTICO</span>
-                <span class="calc-label-title">Precio por sesión</span>
-              </div>
-              <div class="calc-display-col">
-                <div class="calc-figure-wrap">
-                  <strong class="calc-figure" id="calc-session-price">—</strong>
-                  <span class="calc-unit" id="calc-session-unit">/ sesión</span>
-                </div>
-                <span class="calc-formula" id="calc-formula">Introduce precio total y número de sesiones para calcular el desglose.</span>
-              </div>
-            </div>
-          </div>
-
           <label class="form-field">
-            <span>Duración por sesión (minutos) <b>*</b></span>
+            <span>Duración (minutos) <b>*</b></span>
             <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
-            <span class="field-hint">Minutos de reserva en calendario.</span>
+            <span class="field-hint">Minutos de la sesión en el calendario.</span>
           </label>
 
           <label class="form-field">
@@ -165,32 +137,30 @@
               <option value="true">Activo (visible para contratación y reservas)</option>
               <option value="false">Inactivo (desactivado temporalmente)</option>
             </select>
-            <span class="field-hint">Controla si está disponible en el centro.</span>
           </label>
 
           <label class="form-field">
-            <span>Validez / Duración <b>*</b></span>
+            <span>Validez (semanas)</span>
             <div class="validity-input-wrap">
-              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4" required="">
+              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4">
               <span class="validity-badge">semanas</span>
             </div>
-            <span class="field-hint">4 semanas por defecto. Puedes adaptar la vigencia de cada servicio.</span>
+            <span class="field-hint">Se aplica a los bonos vinculados.</span>
           </label>
 
           <label class="form-field">
             <span>Frecuencia semanal recomendada (días/sem)</span>
             <input name="recommendedWeeklyFrequency" id="field-frequency" type="number" min="1" max="14" step="1" placeholder="Ej. 2 (opcional)">
-            <span class="field-hint">Días recomendados por semana.</span>
           </label>
 
           <label class="form-field form-field-wide">
             <span>Descripción del servicio</span>
-            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe los objetivos, enfoque o detalles del entrenamiento..."></textarea>
+            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe los objetivos, enfoque o detalles de esta sesión…"></textarea>
           </label>
 
           <label class="form-field form-field-wide">
             <span>Condiciones y políticas</span>
-            <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación..."></textarea>
+            <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación…"></textarea>
           </label>
         </div>
 
@@ -203,8 +173,7 @@
       </form>
     </dialog>
 
-    <!-- Toast de notificaciones (mismo estilo de clientes) -->
+    <!-- Toast de notificaciones -->
     <div id="toast" class="toast" role="status" aria-live="polite" hidden=""></div>
-
 
 </body></html>

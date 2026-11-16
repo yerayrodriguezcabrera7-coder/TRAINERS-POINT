@@ -12,6 +12,7 @@ import { authorize } from './http/authorize';
 import { sendError, sendJson } from "./http/json";
 import { serveRuntime } from "./http/runtime";
 import { prisma } from "./lib/prisma";
+import { databaseOptimization } from "./database/optimization";
 import { progressMigration } from "./progress-migration";
 import { centersRoutes } from './routes/centers';
 import { trainingPlansRoutes } from './routes/training-plans';
@@ -141,6 +142,15 @@ async function start(): Promise<void> {
     ? pool
     : new Pool(databaseConfig(process.env.DATABASE_URL).pg);
   calendarPool = pool;
+  
+  // Aplicar optimizaciones de base de datos
+  try {
+    await pool.query(databaseOptimization);
+    console.log("Optimizaciones de base de datos aplicadas");
+  } catch (error) {
+    console.warn("Advertencia al aplicar optimizaciones de DB:", error);
+  }
+  
   const store = new Store(pool, prisma);
   calendarAccess = new Access(pool, prisma);
   await pool.query(calendarMigration);
@@ -200,7 +210,10 @@ async function start(): Promise<void> {
   calendarHandler = calendar.listeners("request")[0] as (request: IncomingMessage, response: ServerResponse) => unknown;
   server.listen(port, host, () => console.log(`Trainers Point disponible en http://localhost:${port}/`));
   const stopReminders = new ReminderWorker(pool, configuredProvider()).start();
+  let closing = false;
   const close = () => {
+    if (closing) return;
+    closing = true;
     void server.close(async () => {
       await stopReminders();
       calendar.close();
