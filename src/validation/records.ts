@@ -1,6 +1,6 @@
 import { type ClientStatus,PaymentMethod,PaymentStatus } from "@prisma/client";
 
-export const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "INACTIVO", "BAJA"];
+export const validStatuses: ClientStatus[] = ["LEAD", "ACTIVO", "PAUSA", "INACTIVO", "BAJA"];
 const validPaymentMethods: PaymentMethod[] = ["EFECTIVO", "TARJETA", "BIZUM", "TRANSFERENCIA", "OTRO"];
 const validPaymentStatuses: PaymentStatus[] = ["PENDIENTE", "PAGADO", "FALLIDO", "REEMBOLSADO"];
 type ClientInput = {
@@ -29,6 +29,7 @@ type ClientInput = {
   consentData?: Date | null;
   consentMarketing?: Date | null;
   consentPhotos?: Date | null;
+  referredById?: string | null;
 };
 
 const clientSexValues = ["MUJER", "HOMBRE", "NO_INDICA"] as const;
@@ -165,6 +166,7 @@ export function parseClientInput(value: unknown): ClientInput | string {
   const consentData = parseConsentDate(value.consentData);
   const consentMarketing = parseConsentDate(value.consentMarketing);
   const consentPhotos = parseConsentDate(value.consentPhotos);
+  const referredById = value.referredById === undefined ? undefined : value.referredById === null ? null : typeof value.referredById === "string" ? value.referredById.trim() : "";
   if (
     (value.birthDate !== undefined && value.birthDate !== null && typeof value.birthDate !== "string") ||
     (value.dni !== undefined && value.dni !== null && typeof value.dni !== "string") ||
@@ -238,6 +240,9 @@ export function parseClientInput(value: unknown): ClientInput | string {
     return "Una de las fechas indicadas no es válida.";
   }
 
+  if (referredById && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(referredById)) {
+    return "Selecciona un cliente válido para la referencia.";
+  }
   if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
     return "La fecha de nacimiento no es válida.";
   }
@@ -280,6 +285,7 @@ export function parseClientInput(value: unknown): ClientInput | string {
     ...(consentData !== undefined ? { consentData } : {}),
     ...(consentMarketing !== undefined ? { consentMarketing } : {}),
     ...(consentPhotos !== undefined ? { consentPhotos } : {}),
+    ...(referredById !== undefined ? { referredById: referredById || null } : {}),
   };
 }
 

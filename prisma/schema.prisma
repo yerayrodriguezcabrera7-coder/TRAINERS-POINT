@@ -10,6 +10,7 @@ datasource db {
 enum ClientStatus {
   LEAD
   ACTIVO
+  PAUSA
   INACTIVO
   BAJA
 }
@@ -216,6 +217,9 @@ model Client {
   servicePackages  ClientServicePackage[]
   sales            Sale[]
   measurements     ClientMeasurement[]
+  referredById     String?                @db.Uuid
+  referredBy       Client?                @relation("ReferredBy", fields: [referredById], references: [id], onDelete: SetNull)
+  referredClients  Client[]               @relation("ReferredBy")
 
   @@index([status, lastName, firstName])
   @@index([gymId, status])

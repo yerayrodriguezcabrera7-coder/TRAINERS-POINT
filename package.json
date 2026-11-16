@@ -21,7 +21,7 @@
     "db:restore": "node scripts/database-backup.cjs restore"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^6.19.3",
     "aws-jwt-verify": "^5.2.1",
     "dotenv": "^16.4.5",
     "luxon": "^3.7.2",
