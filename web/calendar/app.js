@@ -84,10 +84,19 @@ async function api(path,method='GET',body) {
   if(!res.ok)throw new Error(result.error||'Error de conexión');
   return result;
 }
+// Expose API for other scripts (pending-banner.js)
+if (typeof window !== 'undefined') {
+  window.calendarApi = api;
+}
 let data;
 let currentUser = null;
 let awsClients = [];
 let awsClientsLoaded = false;
+// Expose for pending-banner.js
+if (typeof window !== 'undefined') {
+  window.calendarCurrentUser = () => currentUser;
+  window.calendarGetData = () => data;
+}
 async function loadBookingClients() {
   if (!serverMode) return;
   try {

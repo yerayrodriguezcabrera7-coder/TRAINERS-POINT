@@ -13,10 +13,9 @@
   let pendingData = { packages: [], bookings: [], recoveries: [], clients: [], employees: [], rooms: [], services: [], timezone: 'Europe/Madrid', gymId: '' };
   let pendingType = 'asignacion', pendingLoading = false, pendingSaving = false, pendingEditorData = null;
 
-  // Access the calendar's api function and data
+  // Access the calendar's api function (exposed by app.js as window.calendarApi)
   function calendarApi(path, method, body) {
-    // The calendar's api function is in the parent scope
-    if (typeof api === 'function') return api(path, method, body);
+    if (typeof window.calendarApi === 'function') return window.calendarApi(path, method, body);
     throw new Error('API no disponible');
   }
   function clientName(id) { return pendingData.clients.find(c => c.id === id)?.name || 'Sin nombre'; }
@@ -54,7 +53,7 @@
     const count = $('planning-banner-count');
     if (!banner || !count) return;
     if (!window.CalendarServer && !window.CALENDAR_SERVER) { banner.hidden = true; return; }
-    const isTrainer = currentUser?.role === 'TRAINER';
+    const isTrainer = (typeof window.calendarCurrentUser === 'function' ? window.calendarCurrentUser() : null)?.role === 'TRAINER';
     banner.hidden = !!isTrainer;
     const q = assignmentBookings(), r = rescheduleBookings(), total = q.length + r.length;
     count.textContent = total === 0 ? 'Sin pendientes' : total === 1 ? '1 pendiente' : total + ' pendientes';
