@@ -205,6 +205,133 @@ test('Tienda TPV: simulación de ticket, cálculo de cambio y arqueo con caja', 
   dom.window.close();
 });
 
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
 test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que falta para pedir', async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
   const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
@@ -379,6 +506,133 @@ test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que
   dom.window.close();
 });
 
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
 test('Tienda TPV: compatibilidad con pistola lectora de códigos de barras y gestión de cambio de EAN', async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
 
@@ -508,6 +762,133 @@ test('Tienda TPV: compatibilidad con pistola lectora de códigos de barras y ges
   dom.window.close();
 });
 
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
 test('Tienda TPV & Ficha: cobro cruzado de bono con productos de la tienda', async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
 
@@ -620,6 +1001,261 @@ test('Tienda TPV & Ficha: cobro cruzado de bono con productos de la tienda', asy
   dom.window.close();
 });
 
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
+
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
 test('Tienda TPV: detección de deudas pendientes al comprar un producto y cobro simultáneo', async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
   const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
@@ -704,6 +1340,133 @@ test('Tienda TPV: detección de deudas pendientes al comprar un producto y cobro
   dom.window.close();
 });
 
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
+
+  dom.window.close();
+});
+
 test("Tienda TPV: botón rápido de incidencia 'Se ha ido sin pagar' registra la venta como deuda en la ficha", async () => {
   const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
   assert.ok(html.includes('id="btn-unpaid-incident"'), 'Debe tener botón de incidencia Se ha ido sin pagar');
@@ -779,6 +1542,133 @@ test("Tienda TPV: botón rápido de incidencia 'Se ha ido sin pagar' registra la
 
   // El carrito debe haber quedado resuelto/vaciado
   assert.ok(doc.getElementById('ticket-count').textContent.includes('0'));
+
+  dom.window.close();
+});
+
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
 
   dom.window.close();
 });
@@ -955,6 +1845,133 @@ test('Tienda TPV: gestión de tickets múltiples (en espera), pestañas/nubes la
   assert.ok(savedInStorage && Array.isArray(savedInStorage.tickets), 'Debe haberse guardado el estado en localStorage');
   assert.equal(savedInStorage.tickets.length, 1);
   assert.equal(savedInStorage.tickets[0].name, 'Mesa 3 / María');
+
+  dom.window.close();
+});
+
+test('Tienda TPV: numeración correlativa por centro, formato estrecho para impresora térmica y política legal en el ticket', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+  const css = fs.readFileSync('web/inventory/tienda.css', 'utf8');
+
+  // 1. Verificación en HTML de elementos de ticket térmico y política legal
+  assert.ok(html.includes('id="printable-receipt"'), 'Debe existir contenedor del ticket para impresora');
+  assert.ok(html.includes('id="receipt-ticket-number"'), 'Debe existir campo para el número correlativo de ticket');
+  assert.ok(html.includes('id="receipt-legal-policy"'), 'Debe existir sección de política legal al pie del ticket');
+  assert.ok(html.includes('No se devuelve el dinero'), 'Debe indicar que no se devuelve el dinero');
+  assert.ok(html.includes('15 días'), 'Debe indicar plazo máximo de 15 días para cambios');
+  assert.ok(html.includes('alimentación') && html.includes('suplementación'), 'Debe mencionar alimentación y suplementación');
+  assert.ok(html.includes('abiertos'), 'Debe indicar que no admiten cambio si están abiertos');
+
+  // 2. Verificación de CSS de formato estrecho y reglas de impresión térmica (80mm)
+  assert.ok(css.includes('80mm'), 'Debe incluir tamaño de rollo térmico de 80mm');
+  assert.ok(css.includes('@media print'), 'Debe incluir estilos para impresión');
+  assert.ok(css.includes('#printable-receipt'), 'Debe aplicar formato a #printable-receipt en impresión');
+
+  // 3. Verificación de backend: series correlativas independientes por centro
+  const { getGymSeriesFromKey, getGymSeriesPrefix, saleBalance } = require('../dist/finance/inventory');
+
+  // Pruebas de asignación de series por sede
+  assert.equal(getGymSeriesFromKey('centro-1'), '001');
+  assert.equal(getGymSeriesFromKey('centro-2'), '002');
+  assert.equal(getGymSeriesFromKey('sede-3'), '003');
+  assert.equal(getGymSeriesFromKey('005'), '005');
+
+  const mockTx = {
+    gym: {
+      findMany: async () => [
+        { id: 'gym-bizkaia', name: 'Trainers Point Bizkaia' },
+        { id: 'gym-madrid', name: 'Trainers Point Madrid' },
+        { id: 'gym-valencia', name: 'Trainers Point Valencia' }
+      ]
+    }
+  };
+
+  const serie1 = await getGymSeriesPrefix(mockTx, 'gym-bizkaia');
+  const serie2 = await getGymSeriesPrefix(mockTx, 'gym-madrid');
+  const serie3 = await getGymSeriesPrefix(mockTx, 'gym-valencia');
+
+  assert.equal(serie1, '001', 'Centro 1 debe empezar en serie 001');
+  assert.equal(serie2, '002', 'Centro 2 debe empezar en serie 002');
+  assert.equal(serie3, '003', 'Centro 3 debe empezar en serie 003');
+
+  // Prueba de saleBalance con invoice vinculado
+  const balanced = saleBalance({
+    id: 'sale-1',
+    gymKey: 'gym-bizkaia',
+    totalAmount: 12.50,
+    status: 'COMPLETADA',
+    lines: [{ unitPrice: 12.50, quantity: 1 }],
+    payments: [{ status: 'PAGADO', amount: 12.50 }],
+    invoice: { series: '001', number: '000042' }
+  });
+
+  assert.equal(balanced.ticketNumber, '001-000042');
+  assert.equal(balanced.series, '001');
+  assert.equal(balanced.invoiceNumber, '000042');
+
+  // 4. Prueba en JSDOM del diálogo de ticket térmico
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true }
+  ];
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    if (path === 'inventory/products') return { ok: true, json: async () => ({ products: mockProducts }) };
+    if (path === 'manage') return { ok: true, json: async () => ({ clients: [] }) };
+    if (path === 'inventory/debts') return { ok: true, json: async () => ({ debts: {} }) };
+    if (path === 'services') return { ok: true, json: async () => ({ services: [] }) };
+    if (path === 'services/packs') return { ok: true, json: async () => ({ packages: [] }) };
+    if (path === 'cash/current') return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    if (path === 'inventory/restock') return { ok: true, json: async () => ({ requests: [] }) };
+
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'sale-term-1',
+          ticketNumber: '001-000001',
+          series: '001',
+          invoiceNumber: '000001',
+          status: 'COMPLETADA',
+          totalAmount: 1.50,
+          subtotal: 1.24,
+          taxAmount: 0.26,
+          paymentMethod: 'EFECTIVO',
+          lines: [{ productId: 'p1', quantity: 1, unitPrice: 1.50, description: 'Agua mineral 500ml', lineTotal: 1.50 }]
+        })
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // Añadir agua y confirmar venta
+  doc.querySelector('.tpv-product-card[data-product-id="p1"]').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar que el diálogo de ticket se abre y muestra la serie y política legal
+  const receiptDialog = doc.getElementById('receipt-dialog');
+  assert.equal(receiptDialog.open, true, 'El modal de comprobante debe abrirse tras completar la venta');
+  assert.equal(doc.getElementById('receipt-ticket-number').textContent, '001-000001', 'Debe mostrar el número de ticket correlativo 001-000001');
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('No se devuelve el dinero'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('15 días'));
+  assert.ok(doc.getElementById('receipt-legal-policy').textContent.includes('suplementación'));
 
   dom.window.close();
 });

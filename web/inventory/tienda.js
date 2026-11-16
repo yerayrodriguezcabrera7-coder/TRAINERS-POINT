@@ -476,9 +476,13 @@
   }
 
   async function api(path, method = 'GET', body) {
+    const selectedGym = localStorage.getItem('calendar-selected-gym');
     const res = await fetch('/api/' + path, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(selectedGym ? { 'x-calendar-gym': selectedGym } : {})
+      },
       body: body ? JSON.stringify(body) : undefined
     });
     const data = await res.json();
@@ -1615,10 +1619,21 @@
     }
   };
 
-  // --- 7. TICKET / COMPROBANTE DE VENTA ---
+  // --- 7. TICKET / COMPROBANTE DE VENTA (IMPRESORA TÉRMICA) ---
   function openReceiptDialog(sale) {
     if (!sale) return;
+
+    // Numeración correlativa por centro (serie independiente 001-..., 002-...)
+    const ticketNo = sale.ticketNumber || (sale.invoice ? `${sale.invoice.series}-${sale.invoice.number}` : null) || (sale.series && sale.invoiceNumber ? `${sale.series}-${sale.invoiceNumber}` : (sale.gymSeries ? `${sale.gymSeries}-000001` : '001-000001'));
+    if ($('receipt-ticket-number')) $('receipt-ticket-number').textContent = ticketNo;
     $('receipt-ref').textContent = sale.id ? sale.id.slice(0, 8).toUpperCase() : 'TP-' + Date.now();
+
+    // Nombre de la sede activa
+    const centerTitle = localStorage.getItem('calendar-selected-gym-name') || currentCashSession?.session?.gymName || 'Centro Activo';
+    if ($('receipt-gym-subtitle')) {
+      $('receipt-gym-subtitle').textContent = `SEDE: ${centerTitle.toUpperCase()}`;
+    }
+
     $('receipt-date').textContent = `${dateFormat(sale.soldAt || new Date())} ${timeFormat(sale.soldAt || new Date())}`;
     $('receipt-seller').textContent = me ? `${me.name || me.email}` : 'Personal de centro';
     $('receipt-client').textContent = sale.buyerName || (sale.clientId ? 'Cliente registrado' : 'Persona de paso');
@@ -1632,8 +1647,15 @@
       </tr>
     `).join('');
 
-    $('receipt-total-amount').textContent = eur(sale.totalAmount);
-    const methodNames = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta / Datáfono', BIZUM: 'Bizum' };
+    const totalAmount = Number(sale.totalAmount || 0);
+    const subtotal = sale.subtotal !== undefined ? Number(sale.subtotal) : (totalAmount / 1.21);
+    const taxAmount = sale.taxAmount !== undefined ? Number(sale.taxAmount) : (totalAmount - subtotal);
+
+    if ($('receipt-subtotal-amount')) $('receipt-subtotal-amount').textContent = eur(subtotal);
+    if ($('receipt-tax-amount')) $('receipt-tax-amount').textContent = eur(taxAmount);
+    $('receipt-total-amount').textContent = eur(totalAmount);
+
+    const methodNames = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta / Datáfono', BIZUM: 'Bizum', PENDING: 'Deuda / Sin pagar' };
     $('receipt-method').textContent = methodNames[sale.paymentMethod || sale.payments?.[0]?.method] || 'Efectivo';
 
     if (sale.tendered !== undefined && sale.change !== undefined && sale.change > 0) {

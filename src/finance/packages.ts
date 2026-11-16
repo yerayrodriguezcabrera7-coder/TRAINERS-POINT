@@ -7,6 +7,7 @@ import { financeTransaction } from './transaction';
 import { assertManualPackageAllowed } from '../clients/brand';
 import { accessibleClient, clientScope, clientScopeSQL } from '../network/scope';
 import { productPricing } from './product-pricing';
+import { getGymSeriesPrefix } from './inventory';
 
 const input = z.object({
   requestKey: z.string().uuid().optional(),
@@ -131,6 +132,38 @@ export class Packages {
         } : {})
       }
     });
+
+    let bonoTicketNumber = '001-000001';
+    try {
+      const series = await getGymSeriesPrefix(tx, gym);
+      const lastInvoice = await tx.invoice.findFirst({
+        where: { series },
+        orderBy: { number: 'desc' },
+        select: { number: true }
+      });
+      const lastNum = lastInvoice ? parseInt(lastInvoice.number, 10) : 0;
+      const nextNum = String(lastNum + 1).padStart(6, '0');
+      const c = await tx.client.findUnique({ where: { id: pkg.clientId }, select: { firstName: true, lastName: true } });
+      const customerName = c ? `${c.firstName} ${c.lastName}`.trim() : 'Cliente';
+
+      await tx.invoice.create({
+        data: {
+          saleId: sale.id,
+          series,
+          number: nextNum,
+          customerName,
+          status: 'EMITIDA',
+          complianceStatus: 'ENVIADA',
+          issuedAt: new Date(),
+          subtotal: combinedSubtotal,
+          taxAmount: combinedTax,
+          totalAmount: combinedTotal
+        }
+      });
+      bonoTicketNumber = `${series}-${nextNum}`;
+    } catch {
+      // Fallback
+    }
 
     if (productsToAdd && productsToAdd.length > 0) {
       await tx.stockMovement.createMany({

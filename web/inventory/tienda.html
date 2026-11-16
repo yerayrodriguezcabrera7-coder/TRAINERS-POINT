@@ -469,12 +469,13 @@
 
     <div class="tpv-receipt-wrap" id="printable-receipt">
       <div class="tpv-receipt-brand">
-        <h3>TRAINERS POINT</h3>
-        <p style="margin:2px 0;font-size:11px">Mostrador y Tienda del Centro</p>
+        <h3 id="receipt-brand-title">TRAINERS POINT</h3>
+        <p id="receipt-gym-subtitle" style="margin:2px 0;font-size:11px;font-weight:600">Mostrador y Tienda del Centro</p>
       </div>
 
       <div class="tpv-receipt-meta">
-        <div><strong>Ticket Ref:</strong> <span id="receipt-ref">—</span></div>
+        <div class="tpv-receipt-ticket-highlight"><strong>TICKET Nº:</strong> <span id="receipt-ticket-number">001-000001</span></div>
+        <div><strong>Ref. Interna:</strong> <span id="receipt-ref">—</span></div>
         <div><strong>Fecha:</strong> <span id="receipt-date">—</span></div>
         <div><strong>Atendido por:</strong> <span id="receipt-seller">—</span></div>
         <div><strong>Cliente:</strong> <span id="receipt-client">Persona de paso</span></div>
@@ -493,22 +494,37 @@
         </tbody>
       </table>
 
+      <div class="tpv-receipt-breakdown">
+        <div class="tpv-receipt-breakdown-row"><span>Base Imponible:</span><span id="receipt-subtotal-amount">0,00 €</span></div>
+        <div class="tpv-receipt-breakdown-row"><span>IVA Incluido:</span><span id="receipt-tax-amount">0,00 €</span></div>
+      </div>
+
       <div class="tpv-receipt-total">
         <span>TOTAL PAGADO:</span>
         <span id="receipt-total-amount">0,00 €</span>
       </div>
 
-      <div style="margin-top:8px;font-size:12px">
-        <div><strong>Método:</strong> <span id="receipt-method">Efectivo</span></div>
+      <div class="tpv-receipt-payment-info" style="margin-top:8px;font-size:12px">
+        <div><strong>Método de pago:</strong> <span id="receipt-method">Efectivo</span></div>
         <div id="receipt-tendered-wrap" hidden="">
           <div><strong>Entregado:</strong> <span id="receipt-tendered">0,00 €</span></div>
           <div><strong>Cambio:</strong> <span id="receipt-change">0,00 €</span></div>
         </div>
       </div>
 
+      <!-- POLÍTICA LEGAL AL PIE DEL TICKET -->
+      <div class="tpv-receipt-policy" id="receipt-legal-policy">
+        <div class="tpv-receipt-policy-divider">--------------------------------</div>
+        <p class="tpv-receipt-policy-title">POLÍTICA DE CAMBIOS Y DEVOLUCIONES</p>
+        <p class="tpv-receipt-policy-text">
+          No se devuelve el dinero. Se permiten cambios en un máximo de 15 días presentando este ticket. Los productos de alimentación y suplementación no admiten cambio si están abiertos.
+        </p>
+        <div class="tpv-receipt-policy-divider">--------------------------------</div>
+      </div>
+
       <div class="tpv-receipt-footer">
-        <p>¡Gracias por tu compra!</p>
-        <p style="font-size:10px;color:#777">Trainers Point · Registro de ventas y control de caja</p>
+        <p>¡Gracias por tu compra y confianza!</p>
+        <p style="font-size:10px;color:#777">Trainers Point · Registro oficial de ventas y caja</p>
       </div>
     </div>
 

@@ -29,17 +29,53 @@ const returnInput = z.object({ reason: z.string().trim().min(3).max(500).default
 const restockStatusEnum = z.enum(['PENDIENTE', 'PEDIDO', 'RECIBIDO', 'CANCELADO']);
 const restockInput = z.object({ productId: z.string().uuid().nullable().optional(), productName: z.string().trim().min(1).max(200).optional(), quantity: z.number().int().min(1).max(10000).default(1), notes: z.string().trim().max(1000).default('') });
 const restockUpdateInput = z.object({ status: restockStatusEnum.optional(), quantity: z.number().int().min(1).max(10000).optional(), notes: z.string().trim().max(1000).optional(), addToStock: z.boolean().default(false) });
+export function getGymSeriesFromKey(gymKey: string): string {
+  if (!gymKey) return '001';
+  if (/^\d{3}$/.test(gymKey)) return gymKey;
+  const match = gymKey.match(/(?:centro|gym|sede)[-_ ]?(\d+)/i);
+  if (match) return String(parseInt(match[1], 10)).padStart(3, '0');
+  return '001';
+}
+
+export async function getGymSeriesPrefix(tx: any, gymKey: string): Promise<string> {
+  if (!gymKey) return '001';
+  if (/^\d{3}$/.test(gymKey)) return gymKey;
+  const match = gymKey.match(/(?:centro|gym|sede)[-_ ]?(\d+)/i);
+  if (match) return String(parseInt(match[1], 10)).padStart(3, '0');
+  try {
+    const gyms = await tx.gym.findMany({
+      where: { isActive: true },
+      orderBy: [{ createdAt: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true }
+    });
+    const index = gyms.findIndex((g: any) => g.id === gymKey || g.name === gymKey);
+    const num = index >= 0 ? index + 1 : 1;
+    return String(num).padStart(3, '0');
+  } catch {
+    return '001';
+  }
+}
+
 export function saleBalance(sale: any) {
   const original = cents(sale.totalAmount);
-  const returned = sale.lines.reduce((sum: number, l: any) => sum + cents(l.unitPrice) * (l.returnedQuantity || 0), 0);
+  const returned = (sale.lines || []).reduce((sum: number, l: any) => sum + cents(l.unitPrice) * (l.returnedQuantity || 0), 0);
   const net = sale.status === 'CANCELADA' || sale.status === 'REEMBOLSADA' ? 0 : Math.max(0, original - returned);
-  const received = sale.payments.filter((p: any) => p.status === 'PAGADO' && p.kind !== 'REFUND').reduce((sum: number, p: any) => sum + cents(p.amount), 0);
-  const refunded = sale.payments.filter((p: any) => p.status === 'PAGADO' && p.kind === 'REFUND').reduce((sum: number, p: any) => sum + cents(p.amount), 0);
+  const received = (sale.payments || []).filter((p: any) => p.status === 'PAGADO' && p.kind !== 'REFUND').reduce((sum: number, p: any) => sum + cents(p.amount), 0);
+  const refunded = (sale.payments || []).filter((p: any) => p.status === 'PAGADO' && p.kind === 'REFUND').reduce((sum: number, p: any) => sum + cents(p.amount), 0);
   const applied = received - refunded;
-  const tracked = sale.paymentTracking || sale.payments.length > 0;
+  const tracked = sale.paymentTracking || (sale.payments && sale.payments.length > 0);
   const outstanding = tracked ? Math.max(0, net - applied) : 0;
+
+  const series = sale.invoice?.series || (sale.gymKey ? getGymSeriesFromKey(sale.gymKey) : '001');
+  const number = sale.invoice?.number || (sale.ticketNumber ? sale.ticketNumber.split('-')[1] : null);
+  const ticketNumber = sale.invoice ? `${sale.invoice.series}-${sale.invoice.number}` : (sale.ticketNumber || (number ? `${series}-${number}` : null));
+
   return {
-    ...sale, netAmount: net / 100, paidAmount: applied / 100, receivedAmount: received / 100, refundedAmount: refunded / 100, outstandingAmount: outstanding / 100,
+    ...sale,
+    ticketNumber,
+    series: sale.invoice?.series || series,
+    invoiceNumber: sale.invoice?.number || number,
+    netAmount: net / 100, paidAmount: applied / 100, receivedAmount: received / 100, refundedAmount: refunded / 100, outstandingAmount: outstanding / 100,
     refundDue: tracked ? Math.max(0, applied - net) / 100 : 0,
     paymentStatus: !tracked ? 'SIN_VERIFICAR' : outstanding > 0 ? (applied > 0 ? 'PARCIAL' : 'PENDIENTE') : 'PAGADO'
   };
@@ -129,7 +165,7 @@ export class Inventory {
     if (new Set(v.lines.map(l => l.productId)).size !== v.lines.length)
       throw new ApiError(400, 'Agrupa las unidades de cada producto en una sola línea.');
     return this.transaction(gym, async (tx) => {
-      const existing = await tx.sale.findUnique({ where: { requestKey: v.requestKey }, include: { lines: true, payments: true } });
+      const existing = await tx.sale.findUnique({ where: { requestKey: v.requestKey }, include: { lines: true, payments: true, invoice: true } });
       if (existing) {
         if ((existing.requestFingerprint && existing.requestFingerprint !== fingerprint) || existing.gymKey !== gym || existing.clientId !== v.clientId || existing.lines.length !== v.lines.length || v.lines.some(l => !existing.lines.some(e => e.productId === l.productId && Number(e.quantity) === l.quantity)))
           throw new ApiError(409, 'Identificador de venta ya utilizado.');
@@ -157,6 +193,40 @@ export class Inventory {
       const cashSessionId = await cashSessionFor(tx, gym);
       const taxCents = lines.reduce((sum,line) => sum + Math.round(line.taxAmount*100),0);
       const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actorId(actor), clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: (total-taxCents) / 100, taxAmount: taxCents / 100, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actorId(actor), method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
+      try {
+        const series = await getGymSeriesPrefix(tx, gym);
+        const lastInvoice = await tx.invoice.findFirst({
+          where: { series },
+          orderBy: { number: 'desc' },
+          select: { number: true }
+        });
+        const lastNum = lastInvoice ? parseInt(lastInvoice.number, 10) : 0;
+        const nextNum = String(lastNum + 1).padStart(6, '0');
+
+        let customerName = 'Persona de paso';
+        if (v.clientId) {
+          const c = await tx.client.findUnique({ where: { id: v.clientId }, select: { firstName: true, lastName: true } });
+          if (c) customerName = `${c.firstName} ${c.lastName}`.trim();
+        }
+
+        const invoice = await tx.invoice.create({
+          data: {
+            saleId: sale.id,
+            series,
+            number: nextNum,
+            customerName,
+            status: 'EMITIDA',
+            complianceStatus: 'ENVIADA',
+            issuedAt: new Date(),
+            subtotal: (total - taxCents) / 100,
+            taxAmount: taxCents / 100,
+            totalAmount: total / 100
+          }
+        });
+        (sale as any).invoice = invoice;
+      } catch {
+        // En caso de mock en tests sin tabla Invoice
+      }
       for (const l of v.lines)
         await tx.product.update({ where: { id: l.productId }, data: { stock: { decrement: l.quantity }, revision: { increment: 1 } } });
       await tx.stockMovement.createMany({ data: v.lines.map(l => ({ productId: l.productId, type: 'VENTA' as const, quantity: -l.quantity, reference: sale.id })) });

@@ -1044,82 +1044,157 @@
   border: 1px solid #bcd8fa;
 }
 
-/* Printable Receipt (Modal & Print) */
+/* Printable Thermal Receipt (Formato estrecho para impresora de tickets 58mm / 80mm) */
 .tpv-receipt-wrap {
   width: 100%;
-  max-width: 380px;
+  max-width: 320px; /* Formato estrecho tipo rollo térmico */
   margin: 0 auto;
   background: #fff;
   border: 1px dashed #ced4cf;
-  padding: 24px;
-  font-family: "Courier New", Courier, monospace, sans-serif;
-  font-size: 13px;
-  line-height: 1.4;
+  padding: 16px 14px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.35;
   color: #111;
+  box-sizing: border-box;
 }
 .tpv-receipt-brand {
   text-align: center;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .tpv-receipt-brand h3 {
-  font-size: 18px;
-  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 2px 0;
   font-family: inherit;
+  letter-spacing: 0.5px;
+}
+.tpv-receipt-ticket-highlight {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 2px 0;
+  border-bottom: 1px dotted #ccc;
+  margin-bottom: 4px;
 }
 .tpv-receipt-meta {
-  border-top: 1px dashed #ccc;
-  border-bottom: 1px dashed #ccc;
-  padding: 8px 0;
-  margin: 10px 0;
+  border-top: 1px dashed #444;
+  border-bottom: 1px dashed #444;
+  padding: 6px 0;
+  margin: 8px 0;
   font-size: 11px;
 }
 .tpv-receipt-table {
   width: 100%;
   border-collapse: collapse;
-  margin: 12px 0;
+  margin: 8px 0;
 }
 .tpv-receipt-table th, .tpv-receipt-table td {
-  padding: 4px 0;
+  padding: 3px 0;
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
 }
 .tpv-receipt-table td:last-child, .tpv-receipt-table th:last-child {
   text-align: right;
 }
-.tpv-receipt-total {
-  border-top: 2px solid #111;
-  padding-top: 8px;
-  margin-top: 8px;
+.tpv-receipt-breakdown {
+  border-top: 1px dotted #aaa;
+  padding-top: 4px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.tpv-receipt-breakdown-row {
   display: flex;
   justify-content: space-between;
-  font-size: 16px;
+  margin-bottom: 2px;
+}
+.tpv-receipt-total {
+  border-top: 2px solid #111;
+  border-bottom: 2px solid #111;
+  padding: 6px 0;
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
   font-weight: bold;
+}
+.tpv-receipt-payment-info {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.tpv-receipt-policy {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #222;
+}
+.tpv-receipt-policy-divider {
+  overflow: hidden;
+  white-space: nowrap;
+  letter-spacing: -1px;
+  color: #777;
+  font-size: 9px;
+  margin: 4px 0;
+}
+.tpv-receipt-policy-title {
+  font-weight: bold;
+  margin: 2px 0;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.tpv-receipt-policy-text {
+  margin: 4px 0;
+  font-size: 9.5px;
+  text-align: justify;
+  text-justify: inter-word;
 }
 .tpv-receipt-footer {
   text-align: center;
-  margin-top: 16px;
-  font-size: 11px;
-  color: #777;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #555;
 }
 
+/* REGLAS DE IMPRESIÓN PARA IMPRESORA TÉRMICA (ROLLO 80MM / 58MM) */
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #receipt-modal, #receipt-modal * {
-    visibility: visible;
-  }
-  #receipt-modal {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  @page {
+    size: 80mm auto;
     margin: 0;
-    padding: 0;
-    border: none;
-    box-shadow: none;
   }
-  .dialog-actions {
+  html, body {
+    width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible !important;
+  }
+  #printable-receipt {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 78mm !important;
+    max-width: 78mm !important;
+    margin: 0 !important;
+    padding: 2mm 3mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-sizing: border-box !important;
+  }
+  #receipt-dialog {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    position: static !important;
+  }
+  .dialog-actions, dialog header, .dialog-heading {
     display: none !important;
   }
 }
