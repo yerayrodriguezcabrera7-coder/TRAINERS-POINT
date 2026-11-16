@@ -101,12 +101,39 @@
             </div>
           </div>
 
-          <!-- Columna Derecha: Panel de Ticket y Cobro Rápido -->
-          <div class="tpv-ticket-card" aria-label="Ticket de venta actual">
-            <div class="tpv-ticket-header">
-              <h2>Ticket actual <span id="ticket-count" style="font-size:13px;color:#6b767d;font-weight:normal">(0)</span></h2>
-              <button id="btn-clear-ticket" class="tpv-btn-clear" type="button">Vaciar ticket</button>
+          <!-- Columna Derecha: Panel de Ticket y Cobro Rápido con Nubes/Pestañas Laterales de Tickets Múltiples -->
+          <div class="tpv-ticket-wrapper">
+            <!-- Nubes / Pestañas de Tickets en Espera -->
+            <div class="tpv-ticket-clouds-container" aria-label="Gestión de tickets en espera">
+              <div class="tpv-ticket-clouds-topbar">
+                <div class="tpv-clouds-heading">
+                  <span class="tpv-clouds-icon">📑</span>
+                  <span class="tpv-clouds-title">Tickets múltiples</span>
+                  <span id="badge-waiting-tickets" class="tpv-waiting-badge" hidden="">0 en espera</span>
+                </div>
+                <div class="tpv-clouds-buttons">
+                  <button id="btn-hold-ticket" class="tpv-cloud-btn-hold" type="button" title="Poner el ticket actual en espera y abrir uno nuevo">⏸️ Poner en espera</button>
+                  <button id="btn-new-ticket" class="tpv-cloud-btn-new" type="button" title="Abrir nuevo ticket en paralelo">＋ Nuevo</button>
+                </div>
+              </div>
+              <!-- Lista de nubes / pestañas laterales -->
+              <div id="ticket-clouds-list" class="tpv-ticket-clouds-list" role="tablist" aria-label="Pestañas de tickets en espera">
+                <!-- Se generan dinámicamente -->
+              </div>
             </div>
+
+            <div class="tpv-ticket-card" aria-label="Ticket de venta actual">
+              <div class="tpv-ticket-header">
+                <div class="tpv-ticket-title-wrap">
+                  <h2 id="current-ticket-title">Ticket 1</h2>
+                  <button id="btn-rename-ticket" class="tpv-btn-rename-ticket" type="button" title="Asignar nombre de cliente o referencia al ticket">✏️</button>
+                  <span id="ticket-count" class="tpv-ticket-count-badge" style="font-size:13px;color:#6b767d;font-weight:normal">(0)</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <button id="btn-hold-current-ticket" class="tpv-btn-hold-current" type="button" title="Poner este ticket en espera">⏸️ En espera</button>
+                  <button id="btn-clear-ticket" class="tpv-btn-clear" type="button">Vaciar</button>
+                </div>
+              </div>
 
             <!-- Selector de Comprador -->
             <div class="tpv-buyer-box">
@@ -192,6 +219,7 @@
               Confirmar venta y cobrar (0,00 €)
             </button>
           </div>
+        </div>
         </section>
 
         <!-- SECCIÓN 2: SALIDAS DE HOY (APUNTAR LO QUE SALE) -->
@@ -669,6 +697,28 @@
       <footer class="dialog-actions">
         <button type="button" id="btn-cancel-barcode-manual">Cerrar</button>
         <button type="submit" id="btn-submit-barcode-manual" class="primary">Leer y procesar código</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- MODAL: ASIGNAR NOMBRE / CLIENTE AL TICKET -->
+  <dialog id="rename-ticket-dialog" class="tpv-modal" aria-labelledby="rename-dialog-title">
+    <form id="rename-ticket-form">
+      <header class="dialog-heading">
+        <h2 id="rename-dialog-title">✏️ Asignar nombre al ticket / cliente</h2>
+        <button type="button" id="btn-close-rename-dialog" aria-label="Cerrar">×</button>
+      </header>
+
+      <div class="form-grid">
+        <label class="full">
+          Nombre o referencia del cliente (ej. Juan Pérez, Chico sudadera roja, Mesa 3)
+          <input id="rename-ticket-input" type="text" maxlength="80" placeholder="Escribe el nombre o apodo del cliente…" required>
+        </label>
+      </div>
+
+      <footer class="dialog-actions">
+        <button type="button" id="btn-cancel-rename-dialog">Cancelar</button>
+        <button type="submit" id="btn-save-rename-ticket" class="primary">Guardar nombre</button>
       </footer>
     </form>
   </dialog>

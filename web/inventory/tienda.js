@@ -17,7 +17,7 @@
   let clients = [];
   let currentCashSession = null;
   let unassignedPayments = 0;
-  let cart = new Map(); // productId -> quantity
+  let cart = new Map(); // productId -> quantity (apunta al carrito del ticket activo)
   let selectedCategory = 'all';
   let buyerKind = 'walkin';
   let paymentMethod = 'EFECTIVO';
@@ -27,6 +27,256 @@
   let selectedRestockStatus = 'PENDIENTE';
   let viewMode = 'grid'; // 'grid' | 'list'
   let currentEanToAssign = '';
+
+  // --- GESTIÓN DE TICKETS MÚLTIPLES (EN ESPERA) ---
+  function createEmptyTicket(name) {
+    const id = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    return {
+      id,
+      name: name || `Ticket ${tickets.length + 1}`,
+      buyerKind: 'walkin',
+      clientId: null,
+      clientName: '',
+      cart: new Map(),
+      paymentMethod: 'EFECTIVO',
+      paymentMode: 'PAID',
+      cashTendered: '',
+      createdAt: Date.now()
+    };
+  }
+
+  let tickets = [];
+  let activeTicketId = null;
+
+  function getActiveTicket() {
+    let t = tickets.find(item => item.id === activeTicketId);
+    if (!t) {
+      if (tickets.length === 0) {
+        tickets.push(createEmptyTicket('Ticket 1'));
+      }
+      activeTicketId = tickets[0].id;
+      t = tickets[0];
+    }
+    return t;
+  }
+
+  function saveTicketsToStorage() {
+    try {
+      const serializable = tickets.map(t => ({
+        id: t.id,
+        name: t.name,
+        buyerKind: t.buyerKind,
+        clientId: t.clientId,
+        clientName: t.clientName,
+        cart: Array.from(t.cart.entries()),
+        paymentMethod: t.paymentMethod,
+        paymentMode: t.paymentMode,
+        cashTendered: t.cashTendered,
+        createdAt: t.createdAt
+      }));
+      localStorage.setItem('tpv_multi_tickets', JSON.stringify({ activeTicketId, tickets: serializable }));
+    } catch (_) {}
+  }
+
+  function loadTicketsFromStorage() {
+    try {
+      const raw = localStorage.getItem('tpv_multi_tickets');
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+        tickets = data.tickets.map(t => ({
+          ...t,
+          cart: new Map(t.cart || [])
+        }));
+        activeTicketId = data.activeTicketId && tickets.some(t => t.id === data.activeTicketId)
+          ? data.activeTicketId
+          : tickets[0].id;
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function syncActiveTicketFromUI() {
+    const t = getActiveTicket();
+    t.buyerKind = buyerKind;
+    t.paymentMethod = paymentMethod;
+    t.paymentMode = paymentMode;
+    t.clientId = buyerKind === 'client' ? $('client-select')?.value || null : null;
+    const opt = $('client-select')?.selectedOptions?.[0];
+    t.clientName = buyerKind === 'client' && opt ? opt.textContent.trim() : '';
+    t.cashTendered = $('cash-tendered')?.value || '';
+    saveTicketsToStorage();
+  }
+
+  function syncActiveTicketToUI() {
+    const t = getActiveTicket();
+    cart = t.cart;
+    buyerKind = t.buyerKind || 'walkin';
+    paymentMethod = t.paymentMethod || 'EFECTIVO';
+    paymentMode = t.paymentMode || 'PAID';
+
+    $('buyer-opt-walkin')?.classList.toggle('selected', buyerKind === 'walkin');
+    $('buyer-opt-client')?.classList.toggle('selected', buyerKind === 'client');
+    if ($('client-select-wrap')) {
+      $('client-select-wrap').hidden = buyerKind !== 'client';
+    }
+    if (t.clientId && $('client-select')) {
+      $('client-select').value = t.clientId;
+    }
+
+    if ($('payment-mode-select')) {
+      $('payment-mode-select').value = paymentMode;
+    }
+
+    $('payment-methods-grid')?.querySelectorAll('.tpv-pay-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.method === paymentMethod);
+    });
+    if ($('cash-calc-wrap')) {
+      $('cash-calc-wrap').hidden = paymentMethod !== 'EFECTIVO' || paymentMode === 'PENDING';
+    }
+
+    if ($('cash-tendered')) {
+      $('cash-tendered').value = t.cashTendered || '';
+    }
+
+    if ($('current-ticket-title')) {
+      $('current-ticket-title').textContent = t.name;
+      $('current-ticket-title').title = t.name;
+    }
+  }
+
+  function switchToTicket(targetId) {
+    if (targetId === activeTicketId) return;
+    syncActiveTicketFromUI();
+    activeTicketId = targetId;
+    syncActiveTicketToUI();
+    renderCart();
+    renderCatalog();
+    updateCashCalculator();
+    renderTicketClouds();
+    saveTicketsToStorage();
+  }
+
+  function createNewTicket(customName, autoSwitch = true) {
+    syncActiveTicketFromUI();
+    const nextNum = tickets.length + 1;
+    const newT = createEmptyTicket(customName || `Ticket ${nextNum}`);
+    tickets.push(newT);
+    if (autoSwitch) {
+      switchToTicket(newT.id);
+    } else {
+      renderTicketClouds();
+      saveTicketsToStorage();
+    }
+    return newT;
+  }
+
+  function putCurrentTicketOnHold() {
+    syncActiveTicketFromUI();
+    const cur = getActiveTicket();
+
+    // Buscar si hay otro ticket abierto
+    const other = tickets.find(t => t.id !== cur.id);
+    if (other) {
+      switchToTicket(other.id);
+      showNotice(`Ticket "${cur.name}" puesto en espera.`);
+    } else {
+      const newT = createNewTicket();
+      showNotice(`Ticket "${cur.name}" puesto en espera.`);
+    }
+  }
+
+  function closeTicket(ticketId) {
+    const t = tickets.find(item => item.id === ticketId);
+    if (!t) return;
+
+    let totalUnits = 0;
+    for (const qty of t.cart.values()) totalUnits += qty;
+
+    if (totalUnits > 0) {
+      const ok = window.confirm(`¿Deseas descartar el ticket "${t.name}" con sus ${totalUnits} artículo(s)?`);
+      if (!ok) return;
+    }
+
+    tickets = tickets.filter(item => item.id !== ticketId);
+    if (tickets.length === 0) {
+      tickets.push(createEmptyTicket('Ticket 1'));
+    }
+
+    if (activeTicketId === ticketId) {
+      activeTicketId = tickets[0].id;
+      syncActiveTicketToUI();
+      renderCart();
+      renderCatalog();
+      updateCashCalculator();
+    }
+
+    renderTicketClouds();
+    saveTicketsToStorage();
+  }
+
+  function renderTicketClouds() {
+    const list = $('ticket-clouds-list');
+    if (!list) return;
+
+    const waitingTickets = tickets.filter(t => t.id !== activeTicketId && t.cart.size > 0);
+    const badge = $('badge-waiting-tickets');
+    if (badge) {
+      badge.textContent = `${waitingTickets.length} en espera`;
+      badge.hidden = waitingTickets.length === 0;
+    }
+
+    list.innerHTML = tickets.map(t => {
+      const isActive = t.id === activeTicketId;
+      let units = 0;
+      let total = 0;
+      for (const [pId, qty] of t.cart.entries()) {
+        const p = products.find(item => item.id === pId);
+        units += qty;
+        if (p) total += Number(p.unitPrice) * qty;
+      }
+
+      const statusIcon = isActive ? '🟢' : (units > 0 ? '⏳' : '⚪');
+      const statusText = isActive ? 'Atendiendo' : (units > 0 ? 'En espera' : 'Vacío');
+      const infoText = units > 0 ? `${units} uds · ${eur(total)}` : 'Vacío';
+      const closeBtn = tickets.length > 1
+        ? `<button class="cloud-tab-btn-close" data-close-ticket="${esc(t.id)}" type="button" title="Cerrar ticket ${esc(t.name)}">✕</button>`
+        : '';
+
+      return `
+        <div class="tpv-ticket-cloud-tab ${isActive ? 'is-active' : 'is-waiting'}" data-ticket-id="${esc(t.id)}" role="tab" aria-selected="${isActive}">
+          <span title="${statusText}">${statusIcon}</span>
+          <span class="cloud-tab-name" title="${esc(t.name)}">${esc(t.name)}</span>
+          <span class="cloud-tab-badge">${infoText}</span>
+          ${closeBtn}
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.tpv-ticket-cloud-tab').forEach(tab => {
+      tab.onclick = (e) => {
+        if (e.target.closest('.cloud-tab-btn-close')) return;
+        switchToTicket(tab.dataset.ticketId);
+      };
+    });
+
+    list.querySelectorAll('.cloud-tab-btn-close').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        closeTicket(btn.dataset.closeTicket);
+      };
+    });
+  }
+
+  function initTickets() {
+    const loaded = loadTicketsFromStorage();
+    if (!loaded) {
+      tickets = [createEmptyTicket('Ticket 1')];
+      activeTicketId = tickets[0].id;
+    }
+    syncActiveTicketToUI();
+  }
 
   // --- BARCODE SCANNER & AUDIO FEEDBACK ---
   function matchesBarcode(productBarcode, code) {
@@ -250,8 +500,10 @@
       renderClientOptions();
       await refreshCashSession();
       initViewMode();
+      initTickets();
       renderCatalog();
       renderCart();
+      renderTicketClouds();
       updateDispatchedTab();
       renderRestockSection();
 
@@ -433,6 +685,8 @@
 
     renderCart();
     renderCatalog(); // updates in-cart badges
+    renderTicketClouds();
+    saveTicketsToStorage();
   }
 
   function renderCart() {
@@ -495,6 +749,8 @@
         cart.delete(id);
         renderCart();
         renderCatalog();
+        renderTicketClouds();
+        saveTicketsToStorage();
       };
     });
 
@@ -542,6 +798,8 @@
     $('payment-mode-select').value = 'PAID';
     $('payment-mode-select').querySelector('[value=PENDING]').disabled = true;
     paymentMode = 'PAID';
+    syncActiveTicketFromUI();
+    renderTicketClouds();
   };
 
   $('buyer-opt-client').onclick = () => {
@@ -550,15 +808,44 @@
     $('buyer-opt-walkin').classList.remove('selected');
     $('client-select-wrap').hidden = false;
     $('payment-mode-select').querySelector('[value=PENDING]').disabled = false;
+    const cur = getActiveTicket();
+    const opt = $('client-select').selectedOptions?.[0];
+    if (opt && opt.value) {
+      cur.clientId = opt.value;
+      cur.clientName = opt.textContent.trim();
+      if (/^Ticket \d+$/.test(cur.name)) {
+        cur.name = `👤 ${cur.clientName.split(' — ')[0].trim()}`;
+        if ($('current-ticket-title')) $('current-ticket-title').textContent = cur.name;
+      }
+    }
+    syncActiveTicketFromUI();
+    renderTicketClouds();
   };
 
   $('client-search').oninput = renderClientOptions;
+
+  $('client-select').onchange = () => {
+    const opt = $('client-select').selectedOptions?.[0];
+    const cur = getActiveTicket();
+    if (opt && opt.value) {
+      cur.clientId = opt.value;
+      cur.clientName = opt.textContent.trim();
+      if (/^Ticket \d+$/.test(cur.name) || cur.name.startsWith('👤 ')) {
+        cur.name = `👤 ${cur.clientName.split(' — ')[0].trim()}`;
+        if ($('current-ticket-title')) $('current-ticket-title').textContent = cur.name;
+      }
+    }
+    syncActiveTicketFromUI();
+    renderTicketClouds();
+  };
 
   $('payment-mode-select').onchange = e => {
     paymentMode = e.target.value;
     const isPending = paymentMode === 'PENDING';
     $('payment-methods-grid').style.opacity = isPending ? '0.5' : '1';
     $('cash-calc-wrap').hidden = isPending || paymentMethod !== 'EFECTIVO';
+    syncActiveTicketFromUI();
+    renderTicketClouds();
   };
 
   // --- 5. FORMAS DE PAGO Y CALCULADORA DE CAMBIO ---
@@ -574,6 +861,8 @@
       payButtons.forEach(b => b.btn.classList.toggle('selected', b.method === method));
       $('cash-calc-wrap').hidden = method !== 'EFECTIVO' || paymentMode === 'PENDING';
       updateCashCalculator();
+      syncActiveTicketFromUI();
+      renderTicketClouds();
     };
   });
 
@@ -609,7 +898,11 @@
     }
   }
 
-  $('cash-tendered').oninput = updateCashCalculator;
+  $('cash-tendered').oninput = () => {
+    getActiveTicket().cashTendered = $('cash-tendered').value;
+    updateCashCalculator();
+    saveTicketsToStorage();
+  };
 
   // Bill chips
   document.querySelectorAll('.tpv-bill-chip').forEach(chip => {
@@ -622,7 +915,9 @@
         const val = Number(bill);
         $('cash-tendered').value = val.toFixed(2);
       }
+      getActiveTicket().cashTendered = $('cash-tendered').value;
       updateCashCalculator();
+      saveTicketsToStorage();
     };
   });
 
@@ -806,9 +1101,45 @@
     if (cart.size > 0 && confirm('¿Deseas vaciar el ticket de venta actual?')) {
       cart.clear();
       $('cash-tendered').value = '';
+      const cur = getActiveTicket();
+      if (cur) {
+        cur.items = [];
+        cur.cashTendered = '';
+      }
       renderCart();
       renderCatalog();
+      renderTicketClouds();
+      saveTicketsToStorage();
     }
+  };
+
+  // --- MULTI-TICKETS / TICKETS EN ESPERA HANDLERS ---
+  $('btn-new-ticket').onclick = () => createNewTicket();
+  $('btn-hold-ticket').onclick = () => putCurrentTicketOnHold();
+  $('btn-hold-current-ticket').onclick = () => putCurrentTicketOnHold();
+
+  $('btn-rename-ticket').onclick = () => {
+    const cur = getActiveTicket();
+    $('rename-ticket-input').value = cur ? cur.name : '';
+    $('rename-ticket-dialog').showModal();
+    setTimeout(() => $('rename-ticket-input').select(), 50);
+  };
+
+  $('btn-close-rename-dialog').onclick = () => $('rename-ticket-dialog').close();
+  $('btn-cancel-rename-dialog').onclick = () => $('rename-ticket-dialog').close();
+
+  $('rename-ticket-form').onsubmit = (e) => {
+    e.preventDefault();
+    const newName = $('rename-ticket-input').value.trim();
+    if (!newName) return;
+    const cur = getActiveTicket();
+    if (cur) {
+      cur.name = newName;
+      $('current-ticket-title').textContent = cur.name;
+      renderTicketClouds();
+      saveTicketsToStorage();
+    }
+    $('rename-ticket-dialog').close();
   };
 
   // --- 6. CONFIRMAR VENTA ---
@@ -861,11 +1192,30 @@
         buyerName: isClient ? ($('client-select').options[$('client-select').selectedIndex]?.text || 'Cliente') : 'Persona de paso'
       };
 
-      // Reset ticket
-      cart.clear();
-      $('cash-tendered').value = '';
-      renderCart();
-      showNotice(`Venta completada por ${eur(sale.totalAmount)}.`);
+      // Reset ticket or advance to next waiting ticket
+      const completedTicketId = activeTicketId;
+      if (tickets.length > 1) {
+        tickets = tickets.filter(t => t.id !== completedTicketId);
+        activeTicketId = tickets[0].id;
+        syncActiveTicketToUI();
+        renderCart();
+        showNotice(`Venta completada por ${eur(sale.totalAmount)}. Reanudando "${getActiveTicket().name}".`);
+      } else {
+        cart.clear();
+        $('cash-tendered').value = '';
+        const cur = getActiveTicket();
+        cur.name = 'Ticket 1';
+        cur.buyerKind = 'walkin';
+        cur.clientId = null;
+        cur.clientName = '';
+        cur.cashTendered = '';
+        cur.items = [];
+        syncActiveTicketToUI();
+        renderCart();
+        showNotice(`Venta completada por ${eur(sale.totalAmount)}.`);
+      }
+      renderTicketClouds();
+      saveTicketsToStorage();
 
       // Update backend data
       const prodRes = await api('inventory/products');

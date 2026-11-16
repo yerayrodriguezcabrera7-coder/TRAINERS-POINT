@@ -508,3 +508,179 @@ test('Tienda TPV: compatibilidad con pistola lectora de códigos de barras y ges
   dom.window.close();
 });
 
+test('Tienda TPV: gestión de tickets múltiples (en espera), pestañas/nubes laterales y cambio entre clientes', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+
+  // 1. Verificación estática de elementos HTML para tickets en espera
+  assert.ok(html.includes('id="btn-hold-ticket"'), 'Debe tener botón de poner en espera');
+  assert.ok(html.includes('id="btn-new-ticket"'), 'Debe tener botón de nuevo ticket');
+  assert.ok(html.includes('id="ticket-clouds-list"'), 'Debe tener contenedor para las nubes/pestañas de tickets');
+  assert.ok(html.includes('id="badge-waiting-tickets"'), 'Debe tener badge contador de tickets en espera');
+  assert.ok(html.includes('id="current-ticket-title"'), 'Debe tener título del ticket activo');
+  assert.ok(html.includes('id="btn-rename-ticket"'), 'Debe tener botón para renombrar ticket / cliente');
+  assert.ok(html.includes('id="btn-hold-current-ticket"'), 'Debe tener botón rápido para poner en espera el ticket actual');
+  assert.ok(html.includes('id="rename-ticket-dialog"'), 'Debe tener diálogo para renombrar');
+
+  // 2. Simulación JSDOM
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  // Mock dialog methods
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.confirm = () => true;
+
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', unitPrice: 1.50, stock: 20, isActive: true },
+    { id: 'p2', name: 'Barrita Proteína', unitPrice: 2.50, stock: 10, isActive: true }
+  ];
+
+  let salesRecorded = [];
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') {
+      return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    }
+    if (path === 'inventory/products') {
+      return { ok: true, json: async () => ({ products: mockProducts }) };
+    }
+    if (path === 'manage') {
+      return { ok: true, json: async () => ({ clients: [{ id: 'cl-1', firstName: 'Juan', lastName: 'Pérez' }] }) };
+    }
+    if (path === 'inventory/restock') {
+      return { ok: true, json: async () => ({ requests: [] }) };
+    }
+    if (path === 'cash/current') {
+      return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    }
+    if (path === 'inventory/sales' && opts.method === 'POST') {
+      const body = JSON.parse(opts.body);
+      const sale = {
+        id: 'sale-' + Date.now(),
+        soldAt: new Date().toISOString(),
+        totalAmount: body.lines.reduce((s, l) => s + (l.quantity * (l.expectedUnitPrice || 1.5)), 0),
+        paymentMethod: body.paymentMethod,
+        lines: body.lines.map(l => ({ ...l, description: l.productId === 'p1' ? 'Agua mineral 500ml' : 'Barrita Proteína', unitPrice: 1.5 }))
+      };
+      salesRecorded.push(sale);
+      return { ok: true, json: async () => sale };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+  await new Promise(r => setTimeout(r, 60));
+
+  const doc = w.document;
+
+  // 3. Estado inicial: 1 ticket activo
+  assert.equal(doc.getElementById('current-ticket-title').textContent, 'Ticket 1');
+  let clouds = doc.querySelectorAll('.tpv-ticket-cloud-tab');
+  assert.equal(clouds.length, 1, 'Debe haber 1 pestaña/nube inicialmente');
+  assert.ok(clouds[0].classList.contains('is-active'), 'El ticket inicial debe estar activo');
+  assert.ok(clouds[0].querySelector('[title="Atendiendo"]'), 'Debe tener indicador de atendiendo');
+
+  // 4. Añadir producto al Ticket 1
+  const cardAgua = doc.querySelector('.tpv-product-card[data-product-id="p1"]');
+  cardAgua.click();
+  await new Promise(r => setTimeout(r, 30));
+
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('1'));
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('1,50'));
+
+  // Renombrar Ticket 1 a "Carlos Gómez" mediante el modal de renombrar
+  doc.getElementById('btn-rename-ticket').click();
+  assert.equal(doc.getElementById('rename-ticket-dialog').open, true);
+  doc.getElementById('rename-ticket-input').value = 'Carlos Gómez';
+  doc.getElementById('rename-ticket-form').dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true }));
+
+  assert.equal(doc.getElementById('current-ticket-title').textContent, 'Carlos Gómez');
+  clouds = doc.querySelectorAll('.tpv-ticket-cloud-tab');
+  assert.ok(clouds[0].textContent.includes('Carlos Gómez'));
+  assert.ok(clouds[0].textContent.includes('1,50'));
+
+  // 5. Poner en espera y crear un nuevo ticket en paralelo
+  doc.getElementById('btn-hold-ticket').click();
+  await new Promise(r => setTimeout(r, 40));
+
+  // Ahora debe haber 2 tickets: Carlos Gómez (en espera) y Ticket 2 (activo)
+  clouds = doc.querySelectorAll('.tpv-ticket-cloud-tab');
+  assert.equal(clouds.length, 2, 'Deben existir 2 nubes/pestañas de tickets');
+  assert.equal(doc.getElementById('badge-waiting-tickets').textContent, '1 en espera');
+
+  // El ticket activo actual debe ser el nuevo (Ticket 2) con carrito vacío
+  assert.equal(doc.getElementById('current-ticket-title').textContent, 'Ticket 2');
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('0'));
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('0,00'));
+
+  // Comprobar estado de las nubes
+  const waitingCloud = Array.from(clouds).find(c => c.textContent.includes('Carlos Gómez'));
+  assert.ok(waitingCloud.classList.contains('is-waiting'), 'Carlos Gómez debe estar en espera');
+  assert.ok(waitingCloud.querySelector('[title="En espera"]'), 'Carlos Gómez debe mostrar tooltip en espera');
+  assert.ok(waitingCloud.textContent.includes('1,50'));
+
+  const activeCloud = Array.from(clouds).find(c => c.textContent.includes('Ticket 2'));
+  assert.ok(activeCloud.classList.contains('is-active'), 'Ticket 2 debe ser el activo');
+
+  // 6. Añadir producto a Ticket 2 (Barrita Proteína)
+  const cardBarrita = doc.querySelector('.tpv-product-card[data-product-id="p2"]');
+  cardBarrita.click();
+  await new Promise(r => setTimeout(r, 30));
+
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('1'));
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('2,50'));
+
+  // Renombrar Ticket 2 a "Mesa 3 / María"
+  doc.getElementById('btn-rename-ticket').click();
+  doc.getElementById('rename-ticket-input').value = 'Mesa 3 / María';
+  doc.getElementById('rename-ticket-form').dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true }));
+
+  // 7. Alternar de nuevo al ticket de Carlos Gómez haciendo clic en su pestaña/nube
+  waitingCloud.click();
+  await new Promise(r => setTimeout(r, 40));
+
+  // Verificar que se restaura el ticket de Carlos Gómez con su producto
+  assert.equal(doc.getElementById('current-ticket-title').textContent, 'Carlos Gómez');
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('1'));
+  assert.ok(doc.getElementById('ticket-total-price').textContent.includes('1,50'));
+  assert.ok(doc.getElementById('ticket-items').textContent.includes('Agua mineral 500ml'));
+
+  // Y que "Mesa 3 / María" pasa a estar en espera
+  clouds = doc.querySelectorAll('.tpv-ticket-cloud-tab');
+  const mariaCloud = Array.from(clouds).find(c => c.textContent.includes('Mesa 3 / María'));
+  assert.ok(mariaCloud.classList.contains('is-waiting'), 'Mesa 3 / María debe estar ahora en espera');
+  assert.ok(mariaCloud.textContent.includes('2,50'));
+
+  // 8. Cobrar y completar la venta de Carlos Gómez
+  doc.getElementById('pay-btn-cash').click();
+  doc.getElementById('cash-tendered').value = '10.00';
+  doc.getElementById('cash-tendered').dispatchEvent(new w.Event('input'));
+  doc.getElementById('btn-confirm-sale').click();
+  await new Promise(r => setTimeout(r, 80));
+
+  // La venta debe haberse registrado
+  assert.equal(salesRecorded.length, 1);
+  assert.equal(salesRecorded[0].totalAmount, 1.50);
+
+  // Al completar la venta, el sistema debe reanudar automáticamente el ticket en espera ("Mesa 3 / María")
+  assert.equal(doc.getElementById('current-ticket-title').textContent, 'Mesa 3 / María');
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('1'));
+  assert.ok(doc.getElementById('ticket-items').textContent.includes('Barrita Proteína'));
+  assert.equal(doc.getElementById('badge-waiting-tickets').textContent, '0 en espera');
+
+  // Las nubes deben tener solo 1 ticket ahora
+  clouds = doc.querySelectorAll('.tpv-ticket-cloud-tab');
+  assert.equal(clouds.length, 1);
+  assert.ok(clouds[0].textContent.includes('Mesa 3 / María'));
+
+  // 9. Verificar persistencia en localStorage
+  const savedInStorage = JSON.parse(w.localStorage.getItem('tpv_multi_tickets'));
+  assert.ok(savedInStorage && Array.isArray(savedInStorage.tickets), 'Debe haberse guardado el estado en localStorage');
+  assert.equal(savedInStorage.tickets.length, 1);
+  assert.equal(savedInStorage.tickets[0].name, 'Mesa 3 / María');
+
+  dom.window.close();
+});
+
+

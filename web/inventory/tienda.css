@@ -388,17 +388,215 @@
   padding: 2px 6px;
 }
 
-/* Ticket panel (Side) */
+/* Ticket panel (Side) & Multiple Tickets / On-Hold Clouds */
+.tpv-ticket-wrapper {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tpv-ticket-clouds-container {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+.tpv-ticket-clouds-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tpv-clouds-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+}
+.tpv-clouds-icon {
+  font-size: 15px;
+}
+.tpv-waiting-badge {
+  background: #fff4e5;
+  color: #a05e03;
+  border: 1px solid #fedfae;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tpv-clouds-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tpv-cloud-btn-hold,
+.tpv-cloud-btn-new,
+.tpv-btn-hold-current {
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tpv-cloud-btn-hold,
+.tpv-btn-hold-current {
+  background: #fff8eb;
+  border: 1px solid #fed8a6;
+  color: #8c4c00;
+}
+.tpv-cloud-btn-hold:hover,
+.tpv-btn-hold-current:hover {
+  background: #fde8c5;
+  border-color: #f7be73;
+}
+.tpv-cloud-btn-new {
+  background: #f0f7f2;
+  border: 1px solid #c2e2cc;
+  color: #1a633a;
+}
+.tpv-cloud-btn-new:hover {
+  background: #def0e3;
+  border-color: #9cd4ae;
+}
+
+/* Nubes / Pestañas de tickets */
+.tpv-ticket-clouds-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px 2px;
+  scrollbar-width: thin;
+}
+.tpv-ticket-cloud-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #d4ded8;
+  background: #f7faf8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+}
+.tpv-ticket-cloud-tab:hover {
+  background: #edf3ef;
+  border-color: #b0c4b8;
+  transform: translateY(-1px);
+}
+.tpv-ticket-cloud-tab.is-active {
+  background: #1e262a;
+  color: #fff;
+  border-color: #1e262a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+}
+.tpv-ticket-cloud-tab.is-waiting {
+  background: #fffcf5;
+  border-color: #fce1b4;
+  color: #7b4500;
+}
+.tpv-ticket-cloud-tab.is-waiting:hover {
+  background: #fff6e0;
+  border-color: #f8c97e;
+}
+.cloud-tab-name {
+  font-weight: 700;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cloud-tab-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.06);
+}
+.tpv-ticket-cloud-tab.is-active .cloud-tab-badge {
+  background: rgba(255,255,255,0.22);
+  color: #fff;
+}
+.tpv-ticket-cloud-tab.is-waiting .cloud-tab-badge {
+  background: #feeed1;
+  color: #8c4c00;
+}
+.cloud-tab-btn-close {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  margin-left: 2px;
+  border-radius: 50%;
+  line-height: 1;
+}
+.cloud-tab-btn-close:hover {
+  opacity: 1;
+  color: #c92a2a;
+}
+.tpv-ticket-cloud-tab.is-active .cloud-tab-btn-close:hover {
+  color: #ff9999;
+}
+
+/* Header inside ticket card */
 .tpv-ticket-card {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 20px;
-  position: sticky;
-  top: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.tpv-ticket-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tpv-ticket-title-wrap h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.tpv-btn-rename-ticket {
+  background: none;
+  border: 1px solid #ccd5cf;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #556268;
+  transition: all 0.12s;
+  line-height: 1;
+}
+.tpv-btn-rename-ticket:hover {
+  background: #f0f4f1;
+  color: var(--ink);
+  border-color: #8fa697;
 }
 .tpv-ticket-header {
   display: flex;
@@ -931,6 +1129,7 @@
   .tpv-main-grid {
     grid-template-columns: 1fr;
   }
+  .tpv-ticket-wrapper,
   .tpv-ticket-card {
     position: static;
   }
