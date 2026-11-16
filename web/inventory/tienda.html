@@ -81,6 +81,7 @@
                 <button id="view-mode-grid" class="tpv-view-btn active" type="button" title="Vista en tarjetas" aria-pressed="true">🔲 Tarjetas</button>
                 <button id="view-mode-list" class="tpv-view-btn" type="button" title="Vista en listado" aria-pressed="false">☰ Listado</button>
               </div>
+              <button id="btn-barcode-mode" class="outline-button tpv-btn-barcode" type="button" title="Lector de código de barras activo. Pulsa para teclear un código manualmente o gestionar el EAN.">🔫 Lector EAN</button>
               <button id="btn-catalog-restock" class="outline-button" type="button" title="Anotar producto que falta para pedir">📝 Anotar falta</button>
               <button id="btn-refresh-products" class="outline-button" type="button">Actualizar</button>
             </div>
@@ -574,6 +575,100 @@
       <footer class="dialog-actions">
         <button type="button" data-close="restock-dialog">Cancelar</button>
         <button class="primary" type="submit" id="btn-submit-restock">Guardar aviso para pedir</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- MODAL: GESTIÓN DE CÓDIGO DE BARRAS / CAMBIO DE EAN -->
+  <dialog id="ean-manager-dialog" class="tpv-modal" aria-labelledby="ean-dialog-title">
+    <form id="ean-manager-form">
+      <header class="dialog-heading">
+        <h2 id="ean-dialog-title">🏷️ Gestión de Código de Barras / EAN</h2>
+        <button type="button" id="btn-close-ean-dialog" aria-label="Cerrar">×</button>
+      </header>
+
+      <div class="ean-dialog-banner">
+        <div class="ean-scanned-code-badge">
+          <span class="ean-icon">🏷️ Código:</span>
+          <strong id="ean-scanned-code-display" class="ean-code-text">—</strong>
+        </div>
+        <p id="ean-banner-hint" class="ean-help-text">
+          Si el fabricante ha cambiado el <strong>código EAN</strong> del envase o es un nuevo lote con código distinto, asígnalo aquí de inmediato a un producto existente para poder venderlo con la pistola lectora.
+        </p>
+      </div>
+
+      <div class="form-grid">
+        <label class="full">
+          Buscar o seleccionar producto existente
+          <select id="ean-product-select" required>
+            <option value="">-- Seleccionar producto --</option>
+          </select>
+        </label>
+
+        <div id="ean-product-preview" class="full ean-product-preview-card" hidden>
+          <div class="ean-preview-content">
+            <div id="ean-preview-thumb" class="ean-preview-thumb"></div>
+            <div class="ean-preview-details">
+              <strong id="ean-preview-name">Nombre</strong>
+              <div id="ean-preview-price-stock" class="ean-preview-meta">PVP: 0,00 € · Stock: 0 uds</div>
+              <div id="ean-preview-current-barcode" class="ean-preview-barcode">Código actual: Ninguno</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="full ean-mode-box">
+          <p style="font-size:12px;font-weight:700;margin:0 0 8px;color:#2f3a40">¿Cómo deseas registrar este código?</p>
+          <label class="ean-radio-label">
+            <input type="radio" name="ean-update-mode" value="replace" checked>
+            <span><strong>Reemplazar código actual:</strong> El producto pasará a identificarse con este nuevo EAN.</span>
+          </label>
+          <label class="ean-radio-label">
+            <input type="radio" name="ean-update-mode" value="append">
+            <span><strong>Añadir como código alternativo:</strong> Se mantendrán ambos códigos (útil si aún quedan envases con el código anterior).</span>
+          </label>
+        </div>
+
+        <label class="full ean-checkbox-label">
+          <input type="checkbox" id="ean-auto-add-cart" checked>
+          <span>Añadir 1 unidad al ticket de venta inmediatamente tras guardar el código</span>
+        </label>
+      </div>
+
+      <p id="ean-form-error" role="alert" style="color:#af241d;font-size:12px;margin:8px 0 0"></p>
+
+      <footer class="dialog-actions">
+        <button type="button" id="btn-cancel-ean-dialog">Cancelar</button>
+        <button type="button" id="btn-create-product-with-ean" class="outline-button">＋ Crear producto nuevo</button>
+        <button type="submit" id="btn-save-ean" class="primary">Guardar y asignar código</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- MODAL: ENTRADA / TEST MANUAL DE CÓDIGO DE BARRAS -->
+  <dialog id="barcode-manual-dialog" class="tpv-modal" aria-labelledby="barcode-manual-title">
+    <form id="barcode-manual-form">
+      <header class="dialog-heading">
+        <h2 id="barcode-manual-title">🔫 Pistola lectora de códigos de barras</h2>
+        <button type="button" id="btn-close-barcode-manual" aria-label="Cerrar">×</button>
+      </header>
+
+      <div style="background:#f4f7f5;border:1px solid #d4ded7;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px;line-height:1.4">
+        <p style="margin:0 0 6px"><strong>🟢 Lector preparado en segundo plano:</strong> Puedes apuntar y disparar con la pistola lectora física en cualquier momento sin necesidad de pulsar ningún botón ni abrir este diálogo.</p>
+        <p style="margin:0;color:#59676e;font-size:12px">Si no dispones del lector conectado o deseas probar o introducir un código EAN a mano, puedes teclearlo aquí:</p>
+      </div>
+
+      <div class="form-grid">
+        <label class="full">
+          Código de barras o EAN (ej. 8412345678901)
+          <input id="barcode-manual-input" type="text" autocomplete="off" placeholder="Escanea con la pistola o teclea el código…" required>
+        </label>
+      </div>
+
+      <p id="barcode-manual-error" role="alert" style="color:#af241d;font-size:12px;margin:8px 0 0"></p>
+
+      <footer class="dialog-actions">
+        <button type="button" id="btn-cancel-barcode-manual">Cerrar</button>
+        <button type="submit" id="btn-submit-barcode-manual" class="primary">Leer y procesar código</button>
       </footer>
     </form>
   </dialog>

@@ -1054,3 +1054,159 @@
   background: #ffe3e1;
 }
 
+/* --- Barcode Scanner Gun & EAN Management Styles --- */
+.tpv-btn-barcode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f7faf8;
+  border-color: #cbd5ce;
+  font-weight: 600;
+  color: #274b35;
+}
+.tpv-btn-barcode:hover {
+  background: #eef6f1;
+  border-color: #2da160;
+}
+.tpv-product-barcode {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: 600;
+  background: #f2f5f3;
+  color: #43544a;
+  border: 1px solid #d8e0db;
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.tpv-product-barcode:hover {
+  background: #e6eee9;
+  border-color: #28a745;
+  color: #175228;
+}
+
+/* Card flash animation on scan */
+@keyframes tpvScanFlash {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+  50% { transform: scale(1.03); box-shadow: 0 0 0 8px rgba(40, 167, 69, 0); border-color: #28a745; }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+.tpv-card-pulse {
+  animation: tpvScanFlash 0.5s ease-out;
+}
+
+/* EAN Manager Dialog */
+.ean-dialog-banner {
+  background: #f7f9f8;
+  border: 1px solid #dce4df;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.ean-scanned-code-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #c2cfc6;
+  border-radius: 6px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+}
+.ean-scanned-code-badge .ean-icon {
+  font-size: 16px;
+}
+.ean-scanned-code-badge .ean-code-text {
+  font-size: 18px;
+  font-family: monospace;
+  color: #0e2e1a;
+  letter-spacing: 0.5px;
+}
+.ean-help-text {
+  margin: 0;
+  font-size: 13px;
+  color: #556269;
+  line-height: 1.45;
+}
+.ean-product-preview-card {
+  background: #fff;
+  border: 1px solid #d9e0db;
+  border-radius: 8px;
+  padding: 12px;
+}
+.ean-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ean-preview-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: #f4f6f5;
+  border: 1px solid #e1e6e3;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ean-preview-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ean-preview-meta {
+  font-size: 12px;
+  color: #56646b;
+}
+.ean-preview-barcode {
+  font-size: 11px;
+  font-family: monospace;
+  color: #8c5300;
+  background: #fff8eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  align-self: flex-start;
+}
+.ean-mode-box {
+  background: #fcfdfc;
+  border: 1px solid #e2e8e4;
+  border-radius: 8px;
+  padding: 12px;
+}
+.ean-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #38454c;
+  cursor: pointer;
+}
+.ean-radio-label:last-child {
+  margin-bottom: 0;
+}
+.ean-radio-label input {
+  margin-top: 3px;
+}
+.ean-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e5c3c;
+  cursor: pointer;
+}
+.ean-checkbox-label input {
+  width: 18px;
+  height: 18px;
+}
+

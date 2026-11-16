@@ -26,6 +26,143 @@
   let restockRequests = [];
   let selectedRestockStatus = 'PENDIENTE';
   let viewMode = 'grid'; // 'grid' | 'list'
+  let currentEanToAssign = '';
+
+  // --- BARCODE SCANNER & AUDIO FEEDBACK ---
+  function matchesBarcode(productBarcode, code) {
+    if (!productBarcode || !code) return false;
+    const cleanScan = String(code).trim().toLowerCase();
+    const tokens = String(productBarcode).split(/[\s,;/]+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+    return tokens.includes(cleanScan) || String(productBarcode).trim().toLowerCase() === cleanScan;
+  }
+
+  function playScanSound(type = 'success') {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'success') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1760, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } else {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+      }
+    } catch (_) {}
+  }
+
+  function handleBarcodeScanned(rawCode, fromSearchInput = false) {
+    const code = String(rawCode || '').trim();
+    if (!code) return;
+
+    // 1. Search active products by barcode or SKU
+    const product = products.find(p => p.isActive && matchesBarcode(p.barcode, code))
+                 || products.find(p => p.isActive && p.sku && p.sku.toLowerCase() === code.toLowerCase());
+
+    if (product) {
+      if (product.stock <= 0) {
+        playScanSound('error');
+        showNotice(`⚠️ "${product.name}" está agotado (stock: 0).`, true);
+      } else {
+        playScanSound('success');
+        addToCart(product.id, 1);
+        showNotice(`✓ "${product.name}" añadido al ticket (+1 ud) · ${eur(product.unitPrice)}`);
+
+        // Visual pulse animation on the card
+        const card = document.querySelector(`.tpv-product-card[data-product-id="${product.id}"]`);
+        if (card) {
+          card.classList.add('tpv-card-pulse');
+          setTimeout(() => card.classList.remove('tpv-card-pulse'), 600);
+          card.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+
+      if (fromSearchInput) {
+        $('product-search').value = '';
+        renderCatalog();
+      }
+      return;
+    }
+
+    // 2. Check if an inactive (descatalogado) product matches
+    const inactiveProduct = products.find(p => !p.isActive && matchesBarcode(p.barcode, code));
+    if (inactiveProduct) {
+      playScanSound('error');
+      showNotice(`📦 El producto "${inactiveProduct.name}" está descatalogado o anterior. Abriendo gestión EAN...`, true);
+      openEanManagerModal(code, inactiveProduct.id);
+      return;
+    }
+
+    // 3. Fallback: if entered in search input and matches exactly 1 active product by name, add it
+    if (fromSearchInput) {
+      const nameMatches = products.filter(p => p.isActive && (p.name + ' ' + (p.description || '')).toLowerCase().includes(code.toLowerCase()));
+      if (nameMatches.length === 1 && nameMatches[0].stock > 0) {
+        addToCart(nameMatches[0].id, 1);
+        playScanSound('success');
+        showNotice(`✓ "${nameMatches[0].name}" añadido al ticket (+1 ud).`);
+        $('product-search').value = '';
+        renderCatalog();
+        return;
+      }
+    }
+
+    // 4. Code not recognized -> Open EAN manager dialog
+    playScanSound('error');
+    openEanManagerModal(code);
+  }
+
+  function openEanManagerModal(code = '', preselectedProductId = '') {
+    currentEanToAssign = String(code || '').trim();
+    $('ean-scanned-code-display').textContent = currentEanToAssign || '(Sin código escaneado)';
+    $('ean-form-error').textContent = '';
+
+    const sel = $('ean-product-select');
+    sel.innerHTML = '<option value="">-- Seleccionar producto para asignar código --</option>' +
+      products.map(p => `
+        <option value="${esc(p.id)}" ${p.id === preselectedProductId ? 'selected' : ''}>
+          ${esc(p.name)} (${eur(p.unitPrice)}) ${p.barcode ? `· EAN actual: ${esc(p.barcode)}` : '· Sin EAN'} ${!p.isActive ? '[Descatalogado]' : ''}
+        </option>
+      `).join('');
+
+    if (preselectedProductId) {
+      sel.value = preselectedProductId;
+    }
+
+    updateEanProductPreview();
+    $('ean-manager-dialog').showModal();
+  }
+
+  function updateEanProductPreview() {
+    const sel = $('ean-product-select');
+    const pId = sel.value;
+    const preview = $('ean-product-preview');
+    if (!pId) {
+      preview.hidden = true;
+      return;
+    }
+    const p = products.find(item => item.id === pId);
+    if (!p) {
+      preview.hidden = true;
+      return;
+    }
+    preview.hidden = false;
+    $('ean-preview-thumb').innerHTML = renderProductImage(p.imageData, p.name, true);
+    $('ean-preview-name').textContent = p.name;
+    $('ean-preview-price-stock').textContent = `PVP: ${eur(p.unitPrice)} · Stock actual: ${p.stock} uds ${p.isActive ? '' : '(Descatalogado)'}`;
+    $('ean-preview-current-barcode').textContent = p.barcode ? `Código actual: ${p.barcode}` : 'Código actual: Ninguno';
+  }
 
   function renderProductImage(imageData, name, isThumb = false) {
     if (imageData && (typeof imageData === 'string' && (/^data:image\/(png|jpeg|webp);base64,/i.test(imageData) || /^https?:\/\//i.test(imageData) || /^\//.test(imageData)))) {
@@ -167,7 +304,8 @@
     const grid = $('products-grid');
 
     const filtered = products.filter(p => {
-      const matchesQuery = (p.name + ' ' + (p.description || '')).toLowerCase().includes(query);
+      const haystack = (p.name + ' ' + (p.description || '') + ' ' + (p.barcode || '') + ' ' + (p.sku || '')).toLowerCase();
+      const matchesQuery = haystack.includes(query);
       if (!matchesQuery) return false;
 
       if (selectedCategory === 'anteriores') return !p.isActive;
@@ -188,6 +326,10 @@
       const isOut = stock <= 0;
       const isLow = stock > 0 && stock <= 3;
       const inCart = cart.get(p.id) || 0;
+
+      const barcodeBadge = p.barcode
+        ? `<span class="tpv-product-barcode" data-barcode-pid="${esc(p.id)}" title="EAN: ${esc(p.barcode)} · Pulsa para gestionar o cambiar código">🏷️ ${esc(p.barcode)}</span>`
+        : '';
 
       const stockBadge = isAnterior
         ? '<span class="tpv-product-stock low" style="background:#f3f4f6;color:#556066;border-color:#d1d5db">Descatalogado</span>'
@@ -219,6 +361,7 @@
           <div class="tpv-product-footer">
             <span class="tpv-product-price">${eur(p.unitPrice)}</span>
             <div class="tpv-product-badges">
+              ${barcodeBadge}
               ${stockBadge}
               ${restockActionBadge}
             </div>
@@ -242,10 +385,20 @@
       };
     });
 
+    // Click handler on barcode badge
+    grid.querySelectorAll('.tpv-product-barcode').forEach(badge => {
+      badge.onclick = e => {
+        e.stopPropagation();
+        const pId = badge.dataset.barcodePid;
+        const p = products.find(item => item.id === pId);
+        openEanManagerModal(p?.barcode || '', pId);
+      };
+    });
+
     // Click handler on products
     grid.querySelectorAll('.tpv-product-card').forEach(card => {
       card.onclick = (e) => {
-        if (e.target.closest('.tpv-card-restock-btn') || e.target.closest('.tpv-badge-restock-pending')) return;
+        if (e.target.closest('.tpv-card-restock-btn') || e.target.closest('.tpv-badge-restock-pending') || e.target.closest('.tpv-product-barcode')) return;
         const pId = card.dataset.productId;
         const p = products.find(item => item.id === pId);
         if (!p) return;
@@ -506,6 +659,147 @@
     } catch (e) {
       showNotice(e.message, true);
     }
+  };
+
+  // --- BARCODE HARDWARE SCANNER LISTENER ---
+  let barcodeBuffer = '';
+  let lastKeyTime = 0;
+  const SCANNER_CHAR_INTERVAL = 45; // ms between consecutive keystrokes from a barcode scanner gun
+  const MIN_SCAN_LENGTH = 3;
+
+  window.addEventListener('keydown', (e) => {
+    const activeEl = document.activeElement;
+    const isTextInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+
+    const now = Date.now();
+    const isEnter = e.key === 'Enter';
+
+    if (isEnter) {
+      if (barcodeBuffer.length >= MIN_SCAN_LENGTH) {
+        const elapsedSinceLast = now - lastKeyTime;
+        if (elapsedSinceLast < SCANNER_CHAR_INTERVAL * 5) {
+          const scanned = barcodeBuffer.trim();
+          barcodeBuffer = '';
+          lastKeyTime = 0;
+          e.preventDefault();
+          e.stopPropagation();
+
+          if (isTextInput && activeEl.id !== 'product-search' && activeEl.id !== 'barcode-manual-input') {
+            if (activeEl.value.endsWith(scanned)) {
+              activeEl.value = activeEl.value.slice(0, -scanned.length).trim();
+            }
+          }
+          handleBarcodeScanned(scanned, activeEl?.id === 'product-search');
+          return;
+        }
+      }
+      barcodeBuffer = '';
+      lastKeyTime = 0;
+      return;
+    }
+
+    if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      if (now - lastKeyTime > SCANNER_CHAR_INTERVAL) {
+        barcodeBuffer = '';
+      }
+      barcodeBuffer += e.key;
+      lastKeyTime = now;
+    }
+  }, true);
+
+  // Search input keydown listener (Enter triggers scan lookup)
+  $('product-search').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const val = $('product-search').value.trim();
+      if (val) {
+        e.preventDefault();
+        handleBarcodeScanned(val, true);
+      }
+    }
+  });
+
+  // Manual Barcode Dialog handlers
+  $('btn-barcode-mode').onclick = () => {
+    $('barcode-manual-form').reset();
+    $('barcode-manual-error').textContent = '';
+    $('barcode-manual-dialog').showModal();
+    setTimeout(() => $('barcode-manual-input').focus(), 50);
+  };
+  $('btn-close-barcode-manual').onclick = () => $('barcode-manual-dialog').close();
+  $('btn-cancel-barcode-manual').onclick = () => $('barcode-manual-dialog').close();
+
+  $('barcode-manual-form').onsubmit = (e) => {
+    e.preventDefault();
+    const val = $('barcode-manual-input').value.trim();
+    if (!val) return;
+    $('barcode-manual-dialog').close();
+    handleBarcodeScanned(val);
+  };
+
+  // EAN Manager Modal handlers
+  $('ean-product-select').onchange = updateEanProductPreview;
+
+  $('ean-manager-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const pId = $('ean-product-select').value;
+    if (!pId) {
+      $('ean-form-error').textContent = 'Selecciona el producto al que deseas asignar este código.';
+      return;
+    }
+    const p = products.find(item => item.id === pId);
+    if (!p) return;
+
+    const mode = document.querySelector('input[name="ean-update-mode"]:checked')?.value || 'replace';
+    let newBarcodeValue = currentEanToAssign;
+    if (mode === 'append' && p.barcode) {
+      const existingTokens = p.barcode.split(/[\s,;/]+/).map(t => t.trim()).filter(Boolean);
+      if (!existingTokens.includes(currentEanToAssign)) {
+        newBarcodeValue = `${p.barcode}, ${currentEanToAssign}`;
+      } else {
+        newBarcodeValue = p.barcode;
+      }
+    }
+
+    const btn = $('btn-save-ean');
+    btn.disabled = true;
+    $('ean-form-error').textContent = '';
+
+    try {
+      await api(`inventory/products/${pId}/barcode`, 'PATCH', { barcode: newBarcodeValue });
+
+      // Update local product record
+      p.barcode = newBarcodeValue;
+
+      // Refresh in background
+      api('inventory/products').then(res => {
+        if (res.products) products = res.products;
+        renderCatalog();
+      }).catch(() => {});
+
+      renderCatalog();
+      $('ean-manager-dialog').close();
+
+      const autoAdd = $('ean-auto-add-cart').checked;
+      if (autoAdd && p.isActive && p.stock > 0) {
+        addToCart(p.id, 1);
+        playScanSound('success');
+        showNotice(`✓ Código ${currentEanToAssign} asignado a "${p.name}" y añadido 1 ud al ticket.`);
+      } else {
+        showNotice(`✓ Código ${currentEanToAssign} asignado correctamente a "${p.name}".`);
+      }
+    } catch (err) {
+      $('ean-form-error').textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  $('btn-close-ean-dialog').onclick = () => $('ean-manager-dialog').close();
+  $('btn-cancel-ean-dialog').onclick = () => $('ean-manager-dialog').close();
+
+  $('btn-create-product-with-ean').onclick = () => {
+    $('ean-manager-dialog').close();
+    window.location.href = `/productos.html?nuevo=1&barcode=${encodeURIComponent(currentEanToAssign)}`;
   };
 
   $('btn-clear-ticket').onclick = () => {

@@ -81,5 +81,10 @@
     if(!canProducts)throw Error('Tu perfil no permite acceder a productos.');
     const canEditProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html'));
     $('new-product').hidden=!canEditProducts;await load();
+    const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get('nuevo') === '1' && canEditProducts) {
+      edit();
+      if (urlParams.get('barcode')) form.elements.barcode.value = urlParams.get('barcode');
+    }
   }catch(error){$('notice').textContent=error.message;}
 })();

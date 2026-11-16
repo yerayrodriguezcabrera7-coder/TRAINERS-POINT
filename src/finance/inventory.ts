@@ -17,7 +17,7 @@ const actorId = (actor: FinanceActor) => typeof actor === 'string' ? actor : act
 const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: productMoney,
   costPrice: productMoney.optional(), taxRate: z.number().min(0).max(100).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6).optional(),
-  barcode: z.string().trim().max(80).regex(/^[\p{L}\p{N} ._/-]*$/u).transform(v => v || null).nullable().optional(),
+  barcode: z.string().trim().max(80).regex(/^[\p{L}\p{N} .,_/-]*$/u).transform(v => v || null).nullable().optional(),
   imageData: z.string().refine(validProductImage,'Selecciona una imagen PNG, JPEG o WebP válida de hasta 550 KB.').nullable().optional(),
   trackStock: z.boolean().optional(), stock: z.number().int().min(0).max(1000000), revision: z.number().int().positive().optional() });
 const paymentMethod = z.enum(['EFECTIVO', 'TARJETA', 'BIZUM']);
@@ -61,8 +61,17 @@ export class Inventory {
         ...(v.costPrice !== undefined ? { costPrice: v.costPrice } : {}), ...(v.taxRate !== undefined ? { taxRate: v.taxRate } : {}),
         ...(v.barcode !== undefined ? { barcode: v.barcode } : {}), ...(v.imageData !== undefined ? { imageData: v.imageData } : {}),
         ...(v.trackStock !== undefined ? { trackStock: v.trackStock } : {}) };
-      if (v.barcode && await tx.product.findFirst({ where: { gymKey: gym, barcode: v.barcode, ...(id ? { id: { not: id } } : {}) } }))
-        throw new ApiError(409, 'Ya hay un producto con ese código de barras en este centro.');
+      if (v.barcode) {
+        const newTokens = v.barcode.split(/[\s,;/]+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+        const existing = await tx.product.findMany({ where: { gymKey: gym, barcode: { not: null }, ...(id ? { id: { not: id } } : {}) } });
+        for (const ep of existing) {
+          const epTokens = (ep.barcode || '').split(/[\s,;/]+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+          const overlap = newTokens.find(t => epTokens.includes(t));
+          if (overlap) {
+            throw new ApiError(409, `Ya hay un producto con el código de barras "${overlap}" en este centro (${ep.name}).`);
+          }
+        }
+      }
       const product = old ? await tx.product.update({ where: { id: old.id }, data: { ...details, revision: { increment: 1 } } }) : await tx.product.create({ data: { gymKey: gym, ...details } });
       const difference = v.stock - (old?.stock || 0);
       if (difference)
@@ -78,6 +87,36 @@ export class Inventory {
         throw new ApiError(404, 'Producto desconocido.');
       const product = await tx.product.update({ where: { id }, data: { isActive: false, revision: { increment: 1 } } });
       await recordAudit(tx, { gymKey: gym, actor, action: 'PRODUCT_DISABLED', entityType: 'Product', entityId: id, detail: `Producto desactivado: ${product.name}.` });
+      return product;
+    });
+  }
+  async updateProductBarcode(gym: string, id: string, newBarcode: string | null, actor: FinanceActor = 'system') {
+    const v = z.string().trim().max(80).regex(/^[\p{L}\p{N} .,_/-]*$/u).transform(v => v || null).nullable().parse(newBarcode);
+    return this.transaction(gym, async (tx) => {
+      const old = await tx.product.findFirst({ where: { id, gymKey: gym } });
+      if (!old)
+        throw new ApiError(404, 'Producto desconocido.');
+      if (v) {
+        const newTokens = v.split(/[\s,;/]+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+        const existing = await tx.product.findMany({ where: { gymKey: gym, barcode: { not: null }, id: { not: id } } });
+        for (const ep of existing) {
+          const epTokens = (ep.barcode || '').split(/[\s,;/]+/).map(t => t.trim().toLowerCase()).filter(Boolean);
+          const overlap = newTokens.find(t => epTokens.includes(t));
+          if (overlap) {
+            throw new ApiError(409, `Ya hay un producto con el código de barras "${overlap}" en este centro (${ep.name}).`);
+          }
+        }
+      }
+      const product = await tx.product.update({ where: { id: old.id }, data: { barcode: v, revision: { increment: 1 } } });
+      await recordAudit(tx, {
+        gymKey: gym,
+        actor,
+        action: 'PRODUCT_BARCODE_UPDATED',
+        entityType: 'Product',
+        entityId: id,
+        detail: `Código de barras actualizado para "${old.name}": anterior "${old.barcode || 'ninguno'}", nuevo "${v || 'ninguno'}".`,
+        metadata: { oldBarcode: old.barcode, newBarcode: v }
+      });
       return product;
     });
   }
@@ -391,11 +430,11 @@ export function inventoryPermission(actor: Identity | undefined, action: string)
     const perms = actor.pagePermissions;
     const allowed = action === 'admin'
       ? (perms.includes('productos.html') || perms.includes('caja.html'))
-      : ['read', 'sell', 'return', 'restock'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html'].some(p => perms.includes(p));
+      : ['read', 'sell', 'return', 'restock', 'barcode'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html'].some(p => perms.includes(p));
     if (!allowed)
       throw new ApiError(403, 'No tienes permiso para esta operación.');
     return;
   }
-  if (!(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock'].includes(action)))
+  if (!(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock', 'barcode'].includes(action)))
     throw new ApiError(403, 'No tienes permiso para esta operación.');
 }

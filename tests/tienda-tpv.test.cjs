@@ -379,3 +379,132 @@ test('Tienda TPV: desde recepción se puede registrar, listar y gestionar lo que
   dom.window.close();
 });
 
+test('Tienda TPV: compatibilidad con pistola lectora de códigos de barras y gestión de cambio de EAN', async () => {
+  const html = fs.readFileSync('web/inventory/tienda.html', 'utf8');
+
+  // 1. Verificación estática de elementos HTML del lector y gestión EAN
+  assert.ok(html.includes('id="btn-barcode-mode"'), 'Debe tener botón de lector EAN en toolbar');
+  assert.ok(html.includes('id="ean-manager-dialog"'), 'Debe tener diálogo para gestionar EAN');
+  assert.ok(html.includes('id="ean-scanned-code-display"'), 'Debe mostrar el código escaneado');
+  assert.ok(html.includes('id="ean-product-select"'), 'Debe permitir seleccionar producto para reasignar');
+  assert.ok(html.includes('id="barcode-manual-dialog"'), 'Debe tener diálogo manual de lector');
+
+  // 2. Simulación JSDOM
+  const dom = new JSDOM(html, { url: 'http://localhost/tienda.html', runScripts: 'outside-only' });
+  const w = dom.window;
+
+  // Mock API
+  const mockProducts = [
+    { id: 'p1', name: 'Agua mineral 500ml', barcode: '8412345678901', unitPrice: 1.50, stock: 10, isActive: true },
+    { id: 'p2', name: 'Barrita Proteína', barcode: '8412345678902', unitPrice: 2.50, stock: 5, isActive: true },
+    { id: 'p3', name: 'Creatina Monohidrato', barcode: '8412345678903', unitPrice: 18.00, stock: 0, isActive: true } // Agotado
+  ];
+
+  let patchedBarcode = null;
+  let patchedProductId = null;
+
+  w.fetch = async (url, opts = {}) => {
+    const path = url.replace('/api/', '');
+    if (path === 'me') {
+      return { ok: true, json: async () => ({ id: 'usr-1', name: 'Recepcionista', role: 'RECEPTION', pagePermissions: ['tienda.html'] }) };
+    }
+    if (path === 'inventory/products') {
+      return { ok: true, json: async () => ({ products: mockProducts }) };
+    }
+    if (path === 'manage') {
+      return { ok: true, json: async () => ({ clients: [] }) };
+    }
+    if (path === 'inventory/restock') {
+      return { ok: true, json: async () => ({ requests: [] }) };
+    }
+    if (path === 'cash/current') {
+      return { ok: true, json: async () => ({ session: { id: 's1', openedAt: '2026-11-06T08:00:00Z', summary: { expectedCash: 100 } } }) };
+    }
+    const barcodeMatch = path.match(/^inventory\/products\/([^\/]+)\/barcode$/);
+    if (barcodeMatch && opts.method === 'PATCH') {
+      patchedProductId = barcodeMatch[1];
+      const body = JSON.parse(opts.body);
+      patchedBarcode = body.barcode;
+      const target = mockProducts.find(p => p.id === patchedProductId);
+      if (target) target.barcode = patchedBarcode;
+      return { ok: true, json: async () => ({ product: target }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  // Mock dialog methods
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+
+  // Cargar tienda.js
+  const scriptContent = fs.readFileSync('web/inventory/tienda.js', 'utf8');
+  w.eval(scriptContent);
+
+  await new Promise(r => setTimeout(r, 60));
+  const doc = w.document;
+
+  // 3. Simular disparo de pistola lectora con código conocido (p1: 8412345678901)
+  const codeP1 = '8412345678901';
+  for (const char of codeP1) {
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: char, bubbles: true }));
+  }
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+  await new Promise(r => setTimeout(r, 60));
+
+  // Comprobar que p1 se añadió al ticket de venta
+  const ticketItems = doc.querySelectorAll('.tpv-item-row');
+  assert.equal(ticketItems.length, 1, 'Debe haber 1 producto en ticket tras el escaneo');
+  assert.ok(ticketItems[0].textContent.includes('Agua mineral 500ml'));
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('1'));
+
+  // 4. Simular lectura con lector de un código que cambia (EAN nuevo desconocido: 8499999999999)
+  const newEan = '8499999999999';
+  for (const char of newEan) {
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: char, bubbles: true }));
+  }
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+  await new Promise(r => setTimeout(r, 60));
+
+  // Debe abrirse el diálogo de gestión EAN
+  const eanDialog = doc.getElementById('ean-manager-dialog');
+  assert.equal(eanDialog.open, true, 'El diálogo de gestión EAN debe abrirse');
+  assert.equal(doc.getElementById('ean-scanned-code-display').textContent, newEan);
+
+  // Seleccionar producto p2 (Barrita Proteína) para asignarle el nuevo EAN
+  const eanSelect = doc.getElementById('ean-product-select');
+  eanSelect.value = 'p2';
+  eanSelect.dispatchEvent(new w.Event('change'));
+
+  // Comprobar previsualización del producto
+  assert.equal(doc.getElementById('ean-product-preview').hidden, false);
+  assert.equal(doc.getElementById('ean-preview-name').textContent, 'Barrita Proteína');
+
+  // Enviar formulario para reasignar nuevo EAN a p2
+  const eanForm = doc.getElementById('ean-manager-form');
+  eanForm.dispatchEvent(new w.Event('submit', { cancelable: true, bubbles: true }));
+
+  await new Promise(r => setTimeout(r, 80));
+
+  // Verificar llamada al backend
+  assert.equal(patchedProductId, 'p2');
+  assert.equal(patchedBarcode, newEan);
+  assert.equal(eanDialog.open, false, 'El diálogo debe cerrarse tras guardar');
+
+  // Al tener marcado "Añadir 1 unidad al ticket", debe haberse añadido p2 al ticket
+  const ticketItemsAfter = doc.querySelectorAll('.tpv-item-row');
+  assert.equal(ticketItemsAfter.length, 2, 'Deben haber 2 productos en ticket tras reasignar y añadir');
+
+  // 5. Ahora escanear nuevamente el nuevo EAN debe encontrar directamente a p2
+  for (const char of newEan) {
+    w.dispatchEvent(new w.KeyboardEvent('keydown', { key: char, bubbles: true }));
+  }
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+  await new Promise(r => setTimeout(r, 60));
+  assert.ok(doc.getElementById('ticket-count').textContent.includes('3'), 'Debe haberse sumado otra unidad de p2 con el nuevo EAN');
+
+  dom.window.close();
+});
+
