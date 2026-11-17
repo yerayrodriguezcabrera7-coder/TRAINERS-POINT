@@ -74,6 +74,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         consentData: true,
         consentMarketing: true,
         consentPhotos: true,
+        referredById: true,
         email: true,
         phone: true,
         notes: true,
@@ -126,6 +127,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
     const editableFields = [
       "dni", "address", "birthDate", "sex", "source", "sourceDetail", "preferredName", "contactPreference", "contactSlot",
       "injuries", "injuryNotes", "availability", "sessionsPerWeek", "firstSessionPreference", "consentData", "consentMarketing", "consentPhotos",
+      "referredById",
     ] as const;
     const submitted = Object.fromEntries(editableFields
       .filter((field) => Object.prototype.hasOwnProperty.call(body, field))
@@ -182,6 +184,11 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       data.consentMarketing = input.consentMarketing ?? null;
     if (Object.prototype.hasOwnProperty.call(body, "consentPhotos"))
       data.consentPhotos = input.consentPhotos ?? null;
+    if (Object.prototype.hasOwnProperty.call(body, "referredById")) {
+      data.referredBy = input.referredById
+        ? { connect: { id: input.referredById } }
+        : { disconnect: true };
+    }
     try {
       const client = await prisma.client.update({
         where: { id: clientDetailsMatch[1] },
@@ -205,6 +212,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           consentData: true,
           consentMarketing: true,
           consentPhotos: true,
+          referredById: true,
         },
       });
       sendJson(response, 200, { client });
@@ -378,6 +386,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           consentData: true,
           consentMarketing: true,
           consentPhotos: true,
+          referredById: true,
           trainingPlans: { where: { status: "ACTIVO" }, select: { name: true }, take: 1 },
           clientNotes: { orderBy: { createdAt: "desc" }, select: { content: true }, take: 1 },
           birthDate: true,
@@ -483,6 +492,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           ...(input.consentData !== undefined ? { consentData: input.consentData } : {}),
           ...(input.consentMarketing !== undefined ? { consentMarketing: input.consentMarketing } : {}),
           ...(input.consentPhotos !== undefined ? { consentPhotos: input.consentPhotos } : {}),
+          ...(input.referredById ? { referredBy: { connect: { id: input.referredById } } } : {}),
         },
         select: {
           id: true,
@@ -508,6 +518,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           consentData: true,
           consentMarketing: true,
           consentPhotos: true,
+          referredById: true,
           status: true,
           gymId: true,
           gym: { select: { id: true, name: true, city: true, province: true } },
@@ -564,6 +575,78 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         return true;
       }
       throw error;
+    }
+    return true;
+  }
+  // GET /api/clients/:id/plan-amigo → count active referrals + discount info
+  const planAmigoMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/plan-amigo$/i);
+  if (request.method === "GET" && planAmigoMatch) {
+    try {
+      const client = await prisma.client.findUnique({
+        where: { id: planAmigoMatch[1] },
+        select: {
+          id: true,
+          gymId: true,
+          status: true,
+          referredBy: { select: { id: true, firstName: true, lastName: true, gymId: true } },
+        },
+      });
+      if (!client) {
+        sendError(response, 404, "No se encontró el cliente.");
+        return true;
+      }
+      // Count active referrals from this client
+      let activeReferrals = 0;
+      if (client.referredBy) {
+        activeReferrals = await prisma.client.count({
+          where: {
+            referredById: client.referredBy.id,
+            status: "ACTIVO",
+            gymId: client.referredBy.gymId,
+          },
+        });
+      }
+      const activeCount = Math.min(activeReferrals, 20);
+      sendJson(response, 200, {
+        activeReferrals: activeCount,
+        discountPerFriend: 5,
+        discountAmount: activeCount * 5,
+        discountEnabled: true,
+        referrerName: client.referredBy
+          ? `${client.referredBy.firstName} ${client.referredBy.lastName}`
+          : null,
+      });
+    } catch (error) {
+      sendError(response, 500, "No se pudo obtener datos del Plan Amigo.");
+    }
+    return true;
+  }
+  // PATCH /api/clients/:id/plan-amigo → toggle discount off
+  if (request.method === "PATCH" && planAmigoMatch) {
+    const body = await readJsonBody(request);
+    const enabled = typeof body === "object" && body !== null && "enabled" in body && typeof body.enabled === "boolean"
+      ? body.enabled : true;
+    try {
+      const clientData = await prisma.client.findUnique({
+        where: { id: planAmigoMatch[1] },
+        select: {
+          referredBy: { select: { id: true, gymId: true } },
+        },
+      });
+      let discountAmount = 0;
+      if (enabled && clientData?.referredBy) {
+        const activeReferrals = await prisma.client.count({
+          where: {
+            referredById: clientData.referredBy.id,
+            status: "ACTIVO",
+            gymId: clientData.referredBy.gymId,
+          },
+        });
+        discountAmount = Math.min(activeReferrals, 20) * 5;
+      }
+      sendJson(response, 200, { discountAmount, discountEnabled: enabled });
+    } catch (error) {
+      sendError(response, 500, "No se pudo actualizar el Plan Amigo.");
     }
     return true;
   }

@@ -37,6 +37,27 @@
     .perms-toggle.is-role-default { border-left: 3px solid var(--tp-accent); }
     .perms-legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--tp-muted); margin-bottom: 10px; padding: 6px 10px; background: var(--tp-surface-muted); border-radius: 6px; }
     .legend-indicator { width: 10px; height: 10px; border-radius: 2px; background: var(--tp-accent); display: inline-block; }
+    /* Plantillas */
+    .template-section { margin-top: 32px; }
+    .templates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .template-card { background: var(--tp-surface); border: 1px solid var(--tp-line); border-radius: var(--tp-radius-md); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+    .template-card-name { font-weight: 700; font-size: 14px; color: var(--tp-ink); }
+    .template-card-desc { font-size: 12px; color: var(--tp-muted); margin: 0; }
+    .template-card-meta { font-size: 11px; color: var(--tp-muted); }
+    .template-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+    .template-card-actions .button-small { padding: 3px 10px; font-size: 11px; }
+    .tpl-dropdown { position: relative; display: inline-block; }
+    .tpl-dropdown-menu { position: absolute; bottom: 100%; right: 0; background: var(--tp-surface); border: 1px solid var(--tp-line); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); min-width: 200px; max-height: 240px; overflow-y: auto; z-index: 50; display: none; }
+    .tpl-dropdown-menu.is-open { display: block; }
+    .tpl-dropdown-item { padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .tpl-dropdown-item:hover { background: var(--tp-surface-muted); }
+    dialog#template-dialog { border: none; border-radius: var(--tp-radius-md); padding: 0; max-width: 520px; width: 90%; }
+    dialog#template-dialog::backdrop { background: rgba(0,0,0,0.4); }
+    dialog#template-dialog form { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+    dialog#template-dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: var(--tp-ink); }
+    dialog#template-dialog input[type="text"], dialog#template-dialog textarea { padding: 8px 10px; border: 1px solid var(--tp-line); border-radius: 6px; font-size: 13px; background: var(--tp-surface); color: var(--tp-ink); }
+    dialog#template-dialog textarea { resize: vertical; min-height: 60px; }
+    dialog#template-dialog .perms-grid { max-height: 280px; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -78,8 +99,47 @@
             <p class="list-message">Cargando usuarios…</p>
           </div>
         </section>
+
+        <section class="template-section" aria-labelledby="template-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="template-title">Plantillas de permisos</h2>
+              <p>Crea, guarda y edita plantillas rápidas de permisos para usar con cualquier usuario.</p>
+            </div>
+            <button id="new-template" type="button" class="primary" hidden>＋ Nueva plantilla</button>
+          </div>
+          <div id="templates-list" class="templates-grid">
+            <p class="list-message">Cargando plantillas…</p>
+          </div>
+        </section>
       </section>
     </main>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Modal: crear/editar plantilla -->
+  <dialog id="template-dialog">
+    <form method="dialog" id="template-form">
+      <h3 id="template-dialog-title">Nueva plantilla</h3>
+      <label for="tpl-name">
+        Nombre
+        <input id="tpl-name" type="text" required maxlength="200" placeholder="Ej: Recepcionista avanzado">
+      </label>
+      <label for="tpl-desc">
+        Descripción
+        <textarea id="tpl-desc" maxlength="1000" placeholder="Breve descripción de la plantilla…"></textarea>
+      </label>
+      <div class="perms-grid" id="tpl-pages-grid">
+        <!-- se rellena dinámicamente -->
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <button type="button" id="tpl-select-all" style="font-size:12px;color:var(--tp-accent);cursor:pointer;background:none;border:none;text-decoration:underline;">Marcar todas</button>
+        <button type="button" id="tpl-select-none" style="font-size:12px;color:var(--tp-accent);cursor:pointer;background:none;border:none;text-decoration:underline;">Desmarcar todas</button>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button type="button" id="tpl-cancel" class="button button-outline">Cancelar</button>
+        <button type="submit" id="tpl-save" class="button button-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 </body></html>

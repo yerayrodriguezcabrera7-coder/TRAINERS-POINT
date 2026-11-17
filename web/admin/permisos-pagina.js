@@ -442,5 +442,259 @@
       searchInput.value = ''; searchQuery = ''; clearBtn.hidden = true; renderList(); searchInput.focus();
     });
     loadData();
+    initTemplates();
   });
+
+  // ─── Plantillas ───────────────────────────────────────────
+
+  let _templatesCache = null;
+
+  async function getTemplates() {
+    if (_templatesCache !== null) return _templatesCache;
+    try {
+      _templatesCache = await api('manage/templates');
+    } catch { _templatesCache = []; }
+    return _templatesCache;
+  }
+
+  function renderTemplates() {
+    const el = $('templates-list');
+    const newBtn = $('new-template');
+    if (!el) return;
+
+    const canManage = manageData?.role === 'ADMIN' || (manageData?.pagePermissions?.includes('permisos-pagina.html'));
+    if (!canManage) { el.innerHTML = '<p class="list-message">Solo administración puede gestionar plantillas.</p>'; return; }
+    if (newBtn) newBtn.hidden = false;
+
+    const templates = _templatesCache || [];
+    if (!templates.length) {
+      el.innerHTML = '<p class="list-message">No hay plantillas. Pulsa "＋ Nueva plantilla" para crear la primera.</p>';
+      return;
+    }
+
+    el.innerHTML = '';
+    const nonAdminUsers = (manageData?.users || []).filter(u => u.role !== 'ADMIN');
+
+    templates.forEach(tpl => {
+      const card = document.createElement('div');
+      card.className = 'template-card';
+      card.dataset.templateId = tpl.id;
+
+      const descHtml = tpl.description ? `<p class="template-card-desc">${esc(tpl.description)}</p>` : '';
+      const metaHtml = `<span class="template-card-meta">${tpl.pages.length} página${tpl.pages.length !== 1 ? 's' : ''}${tpl.createdBy ? ' · Creada por ti' : ''}</span>`;
+
+      card.innerHTML = `
+        <div class="template-card-name">${esc(tpl.name)}</div>
+        ${descHtml}
+        ${metaHtml}
+        <div class="template-card-actions">
+          ${nonAdminUsers.length > 0 ? `
+          <div class="tpl-dropdown">
+            <button type="button" class="button button-secondary button-small tpl-apply-btn">Aplicar a usuario…</button>
+            <div class="tpl-dropdown-menu" data-user-dropdown-for="${tpl.id}">
+              ${nonAdminUsers.map(u => {
+                const uname = resolvePersonName(u);
+                return `<div class="tpl-dropdown-item" data-user-id="${esc(u.id)}">${esc(uname)}${u.role ? ' · ' + roleNames[u.role] : ''}</div>`;
+              }).join('')}
+            </div>
+          </div>
+          ` : ''}
+          <button type="button" class="button button-secondary button-small tpl-edit-btn">Editar</button>
+          <button type="button" class="button button-secondary button-small tpl-duplicate-btn">Duplicar</button>
+          <button type="button" class="button button-outline button-small tpl-delete-btn" style="color:var(--tp-error,#d32f2f);">Eliminar</button>
+        </div>
+      `;
+
+      el.appendChild(card);
+    });
+
+    // Bind events
+    el.querySelectorAll('.tpl-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tpl = templates.find(t => t.id === btn.closest('.template-card')?.dataset.templateId);
+        if (tpl) openTemplateDialog(tpl);
+      });
+    });
+
+    el.querySelectorAll('.tpl-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const card = btn.closest('.template-card');
+        const tplId = card?.dataset.templateId;
+        if (!tplId) return;
+        const tpl = templates.find(t => t.id === tplId);
+        if (!tpl || !confirm(`¿Eliminar la plantilla "${tpl.name}"?`)) return;
+        btn.disabled = true;
+        try {
+          await api('manage/templates/' + encodeURIComponent(tplId), 'DELETE');
+          _templatesCache = null;
+          renderTemplates();
+          showToast('Plantilla eliminada.');
+        } catch (err) {
+          showToast(err.message, true);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    el.querySelectorAll('.tpl-duplicate-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tpl = templates.find(t => t.id === btn.closest('.template-card')?.dataset.templateId);
+        if (tpl) {
+          openTemplateDialog({ name: tpl.name + ' (copia)', description: tpl.description, pages: [...tpl.pages] });
+        }
+      });
+    });
+
+    // Apply dropdown
+    el.querySelectorAll('.tpl-apply-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dropdown = btn.closest('.tpl-dropdown')?.querySelector('.tpl-dropdown-menu');
+        if (!dropdown) return;
+        const wasOpen = dropdown.classList.contains('is-open');
+        // Close all dropdowns first
+        el.querySelectorAll('.tpl-dropdown-menu.is-open').forEach(m => m.classList.remove('is-open'));
+        if (!wasOpen) dropdown.classList.add('is-open');
+      });
+    });
+
+    el.querySelectorAll('.tpl-dropdown-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const dropdown = item.closest('.tpl-dropdown-menu');
+        const card = dropdown?.closest('.template-card');
+        const tplId = card?.dataset.templateId;
+        const userId = item.dataset.userId;
+        if (!tplId || !userId) return;
+
+        dropdown?.classList.remove('is-open');
+
+        try {
+          // Get template pages
+          const tplData = await api('manage/templates/' + encodeURIComponent(tplId));
+          // Find the user card and apply
+          const userCard = document.querySelector(`.perms-user-card[data-user-id="${userId}"]`);
+          if (userCard) {
+            const checkboxes = [...userCard.querySelectorAll('input[type="checkbox"]')];
+            checkboxes.forEach(cb => {
+              const isChecked = tplData.pages.includes(cb.dataset.pageKey);
+              cb.checked = isChecked;
+              cb.closest('.perms-toggle')?.classList.toggle('is-checked', isChecked);
+            });
+            userCard.classList.add('is-open');
+            userCard.querySelector('.perms-user-header')?.setAttribute('aria-expanded', 'true');
+            userCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            userCard.style.outline = '2px solid var(--tp-accent)';
+            userCard.style.transition = 'outline 0.3s ease';
+            setTimeout(() => { userCard.style.outline = 'none'; }, 2000);
+
+            const statusEl = userCard.querySelector('.perms-status');
+            if (statusEl) {
+              const targetUser = (manageData?.users || []).find(u => u.id === userId);
+              statusEl.textContent = `✓ Plantilla "${tplData.name}" aplicada a ${resolvePersonName(targetUser || { id: userId, role: '' })}. Pulsa "Guardar permisos" para aplicar.`;
+              statusEl.className = 'perms-status';
+              statusEl.hidden = false;
+              setTimeout(() => { statusEl.hidden = true; }, 4000);
+            }
+          }
+          showToast(`Plantilla "${tplData.name}" aplicada al usuario.`);
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      });
+    });
+
+    // Close dropdowns on outside click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.tpl-dropdown')) {
+        el.querySelectorAll('.tpl-dropdown-menu.is-open').forEach(m => m.classList.remove('is-open'));
+      }
+    }, { once: false });
+  }
+
+  let _editingTemplateId = null;
+
+  function openTemplateDialog(template) {
+    const dialog = $('template-dialog');
+    if (!dialog) return;
+
+    _editingTemplateId = template?.id ?? null;
+    $('template-dialog-title').textContent = template ? 'Editar plantilla' : 'Nueva plantilla';
+    $('tpl-name').value = template?.name || '';
+    $('tpl-desc').value = template?.description || '';
+
+    const grid = $('tpl-pages-grid');
+    grid.innerHTML = '';
+    const defaultChecked = template?.pages || [];
+    PAGES.forEach(page => {
+      const checked = defaultChecked.includes(page.key);
+      const label = document.createElement('label');
+      label.className = 'perms-toggle' + (checked ? ' is-checked' : '');
+      label.innerHTML = `<input type="checkbox" data-page-key="${esc(page.key)}" ${checked ? 'checked' : ''}><span>${esc(page.label)}</span>`;
+      grid.appendChild(label);
+    });
+
+    dialog.showModal();
+  }
+
+  function initTemplates() {
+    const newBtn = $('new-template');
+    const dialog = $('template-dialog');
+    const form = $('template-form');
+    const cancelBtn = $('tpl-cancel');
+
+    if (newBtn) {
+      newBtn.addEventListener('click', () => openTemplateDialog());
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => dialog?.close());
+    }
+
+    // Select all / none in template dialog
+    const tplSelectAll = $('tpl-select-all');
+    const tplSelectNone = $('tpl-select-none');
+    tplSelectAll?.addEventListener('click', () => {
+      dialog?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(cb => { cb.checked = true; cb.closest('.perms-toggle')?.classList.add('is-checked'); });
+    });
+    tplSelectNone?.addEventListener('click', () => {
+      dialog?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(cb => { cb.checked = false; cb.closest('.perms-toggle')?.classList.remove('is-checked'); });
+    });
+
+    // Form submit
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = $('tpl-name')?.value?.trim();
+        const description = $('tpl-desc')?.value?.trim();
+        const pages = [...(dialog?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]') || [])]
+          .filter(cb => cb.checked)
+          .map(cb => cb.dataset.pageKey || '');
+        if (!name) { showToast('Indica un nombre para la plantilla.', true); return; }
+        if (pages.length === 0) { showToast('Selecciona al menos una página.', true); return; }
+
+        const saveBtn = $('tpl-save');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Guardando…'; }
+
+        try {
+          if (_editingTemplateId) {
+            await api('manage/templates/' + encodeURIComponent(_editingTemplateId), 'PUT', { name, description, pages });
+            showToast('Plantilla actualizada.');
+          } else {
+            await api('manage/templates', 'POST', { name, description, pages });
+            showToast('Plantilla creada.');
+          }
+          _templatesCache = null;
+          renderTemplates();
+          dialog?.close();
+        } catch (err) {
+          showToast(err.message, true);
+        } finally {
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Guardar'; }
+        }
+      });
+    }
+
+    // Initial load — wait for manageData before rendering
+    getTemplates().then(() => renderTemplates());
+  }
 })();

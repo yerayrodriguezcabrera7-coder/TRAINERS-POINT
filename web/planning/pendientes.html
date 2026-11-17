@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pendientes de asignación · Trainers Point</title>
+<title>Redirigiendo al calendario · Trainers Point</title>
 <script src="/polling.js" defer></script>
 <link rel="stylesheet" href="/fichajes.css"><link rel="stylesheet" href="/gestion.css"><link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/design.css">
 <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><link rel="stylesheet" href="/pendientes.css">
 <script src="/runtime.js" defer></script><script src="/menu.js" defer></script><script src="/pendientes.js" defer></script><script src="/ayuda.js" defer></script>
+<script>window.addEventListener('load',()=>{setTimeout(()=>{location.replace('/index.html#pendientes'+(new URLSearchParams(location.search).get('tipo')==='reprogramacion'?'?tipo=reprogramacion':''));},80);});</script>
 </head><body class="planning-page"><div class="app-shell">
 <aside data-app-menu="" aria-label="Navegación principal"></aside>
 <main class="attendance-shell main-content">

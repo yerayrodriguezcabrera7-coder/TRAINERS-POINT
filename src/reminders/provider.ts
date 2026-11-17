@@ -1,5 +1,5 @@
 export type ReminderMessage = {
-  channel: 'WHATSAPP' | 'SMS'; phone: string; client: string; date: string; time: string; service: string; trainer: string;
+  channel: 'WHATSAPP' | 'SMS'; phone: string; client: string; date: string; time: string; service: string; trainer: string; body?: string;
 };
 export interface ReminderProvider { send(message: ReminderMessage): Promise<string>; }
 export class DeliveryError extends Error {
@@ -18,7 +18,7 @@ export function configuredProvider(env: NodeJS.ProcessEnv = process.env, request
     if (wa) {
       body.set('ContentSid', template!);
       body.set('ContentVariables', JSON.stringify({ '1': message.client, '2': message.date, '3': message.time, '4': message.service, '5': message.trainer }));
-    } else body.set('Body', reminderText(message));
+    } else body.set('Body', message.body || reminderText(message));
     let response: Response;
     try {
       response = await request(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, { method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + token).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: AbortSignal.timeout(10000) });

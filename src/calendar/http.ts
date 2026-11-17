@@ -161,7 +161,12 @@ export function server(
           }
 
           if (req.method === "GET" && path === "/api/mobile/calendar") {
-            send(res, 200, mobileStaffView(await store.state(gym), identity));
+            const s = await store.state(gym);
+            const [pendingPackagesData, recoveriesData] = await Promise.all([
+              store.clientsDb ? pendingPackages(store.clientsDb, gym) : Promise.resolve([]),
+              store.recoveries(gym),
+            ]);
+            send(res, 200, mobileStaffView({ ...s, pendingPackages: pendingPackagesData, recoveries: recoveriesData }, identity));
             return;
           }
 

@@ -114,6 +114,28 @@ export interface TrainingPlan {
   endsAt?: string | null;
 }
 
+export interface PendingPackage {
+  packageId: string;
+  clientId: string;
+  clientName: string;
+  serviceName: string;
+  sessionsToSchedule: number;
+  sessionsScheduled: number;
+  expiresAt: string;
+  daysRemaining: number;
+  paymentPending?: boolean;
+}
+
+export interface Recovery {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  serviceId: string;
+  serviceName?: string;
+  status: string;
+  employeeId?: string;
+}
+
 export interface Measurement {
   id: string;
   clientId: string;

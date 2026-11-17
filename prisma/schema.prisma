@@ -10,6 +10,7 @@ datasource db {
 enum ClientStatus {
   LEAD
   ACTIVO
+  PAUSA
   INACTIVO
   BAJA
 }
@@ -100,6 +101,7 @@ enum StockMovementType {
   DEVOLUCION
   AJUSTE
   DANO
+  SALIDA
 }
 
 enum RestockStatus {
@@ -215,6 +217,9 @@ model Client {
   servicePackages  ClientServicePackage[]
   sales            Sale[]
   measurements     ClientMeasurement[]
+  referredById     String?                @db.Uuid
+  referredBy       Client?                @relation("ReferredBy", fields: [referredById], references: [id], onDelete: SetNull)
+  referredClients  Client[]               @relation("ReferredBy")
 
   @@index([status, lastName, firstName])
   @@index([gymId, status])
@@ -499,7 +504,27 @@ model Product {
 
   @@index([isActive, name])
   @@index([gymKey])
+  @@index([providerId])
   @@unique([gymKey, barcode])
+  providerId  String?       @db.Uuid
+  provider    Provider?     @relation("ProductProvider", fields: [providerId], references: [id], onDelete: SetNull)
+}
+
+model Provider {
+  id          String   @id @default(uuid()) @db.Uuid
+  gymKey      String?
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  products    Product[] @relation("ProductProvider")
+
+  @@index([gymKey])
 }
 
 model RestockRequest {
@@ -709,4 +734,19 @@ model CashMovement {
   actorId String
   actorName String
   @@index([sessionId, createdAt])
+}
+
+model PermissionTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  gymKey      String?
+  name        String
+  description String?  @db.Text
+  pages       String[]
+  isBuiltIn   Boolean  @default(false)
+  createdBy   String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([gymKey])
+  @@index([isBuiltIn])
 }

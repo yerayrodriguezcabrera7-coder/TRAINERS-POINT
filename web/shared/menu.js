@@ -24,12 +24,14 @@
   const items = [
     ['Mis reservas','calendar','/mis-reservas.html'],
     ['Calendario','calendar','/index.html'],
-    ['Pendientes de asignación','calendar','/pendientes.html'],
+    ['Pendientes de asignación','calendar','/index.html#pendientes'],
     ['Clientes','people','/clientes'],
     ['Servicios','list','/servicios'],
     ['Packs','bag','/packs.html'],
     ['Tienda TPV','bag','/tienda.html'],
     ['Productos','bag','/productos.html'],
+    ['Pedidos / Albaranes','list','/pedidos.html'],
+    ['Historial de stock','history','/historial-stock.html'],
     ['Caja','cash','/caja.html'],
     ['Cuadro de mando','chart','/cuadro-mando.html'],
     ['Informes','report','/informes.html'],
@@ -63,11 +65,7 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
-<<<<<<< HEAD
-  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes','Historial de eventos']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
-=======
-  const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
->>>>>>> origin/main
+const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes','Historial de eventos']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -77,7 +75,10 @@
     if (!isAdmin) return;
     const label = center.querySelector('#gym-workspace-label');
     if (!label) return;
-    label.replaceWith(Object.assign(document.createElement('select'), { id: 'gym-switcher', ariaLabel: 'Cambiar de gimnasio' }));
+    const select = document.createElement('select');
+    select.id = 'gym-switcher';
+    select.setAttribute('aria-label', 'Cambiar de gimnasio');
+    label.replaceWith(select);
     const gymSwitcher = center.querySelector('#gym-switcher');
     if (!gymSwitcher) return;
     try {
@@ -121,7 +122,7 @@
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'pedidos.html', 'historial-stock.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
       };

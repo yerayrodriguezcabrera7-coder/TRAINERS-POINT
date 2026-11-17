@@ -94,6 +94,12 @@ export class Inventory {
         throw new ApiError(404, 'Producto desconocido.');
       if (old && v.revision !== old.revision)
         throw new ApiError(409, 'El stock ha cambiado. Actualiza antes de guardar.');
+      const oldStock = old?.stock ?? 0;
+      const difference = v.stock - oldStock;
+      if (difference !== 0 && typeof actor === 'object') {
+        if (actor.role !== 'ADMIN')
+          throw new ApiError(403, 'Solo los administradores pueden modificar las existencias.');
+      }
       const details = { name: v.name, description: v.description, unitPrice: v.price, stock: v.stock,
         ...(v.costPrice !== undefined ? { costPrice: v.costPrice } : {}), ...(v.taxRate !== undefined ? { taxRate: v.taxRate } : {}),
         ...(v.barcode !== undefined ? { barcode: v.barcode } : {}), ...(v.imageData !== undefined ? { imageData: v.imageData } : {}),
@@ -110,7 +116,6 @@ export class Inventory {
         }
       }
       const product = old ? await tx.product.update({ where: { id: old.id }, data: { ...details, revision: { increment: 1 } } }) : await tx.product.create({ data: { gymKey: gym, ...details } });
-      const difference = v.stock - (old?.stock || 0);
       if (difference)
         await tx.stockMovement.create({ data: { productId: product.id, type: old ? 'AJUSTE' : 'ENTRADA', quantity: difference, reference: 'Inventario', notes: old ? 'Ajuste manual de existencias' : 'Stock inicial' } });
       await recordAudit(tx, { gymKey: gym, actor, action: difference ? 'PRODUCT_STOCK_ADJUSTED' : old ? 'PRODUCT_UPDATED' : 'PRODUCT_CREATED', entityType: 'Product', entityId: product.id, detail: `${old ? 'Producto actualizado' : 'Producto creado'}: ${product.name}.${difference ? ` Stock ${difference > 0 ? '+' : ''}${difference}; total ${product.stock}.` : ''}`, metadata: { stockBefore: old?.stock ?? 0, stockAfter: product.stock, difference } });
@@ -584,6 +589,28 @@ export class Inventory {
     if (!existing) throw new ApiError(404, 'Aviso de reposición no encontrado.');
     await (this.db as any).restockRequest.delete({ where: { id } });
     return { success: true };
+  }
+  async stockMovements(gym: string, filters: { product?: string; type?: string; from?: string; to?: string; search?: string }) {
+    const where: any = { product: { gymKey: gym } };
+    if (filters.product) where.productId = filters.product;
+    if (filters.type) where.type = filters.type;
+    if (filters.from || filters.to) {
+      where.occurredAt = {};
+      if (filters.from) where.occurredAt.gte = new Date(filters.from);
+      if (filters.to) where.occurredAt.lte = new Date(filters.to + 'T23:59:59');
+    }
+    if (filters.search) {
+      where.OR = [
+        { notes: { contains: filters.search, mode: 'insensitive' } },
+        { reference: { contains: filters.search, mode: 'insensitive' } }
+      ];
+    }
+    return (this.db as any).stockMovement.findMany({
+      where,
+      include: { product: { select: { name: true, stock: true } } },
+      orderBy: { occurredAt: 'desc' },
+      take: 500
+    });
   }
 }
 export function inventoryPermission(actor: Identity | undefined, action: string) {

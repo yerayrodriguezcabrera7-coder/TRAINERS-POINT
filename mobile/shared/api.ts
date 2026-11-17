@@ -116,6 +116,39 @@ export class ApiClient {
       method: "PUT", body: JSON.stringify({ booking }),
     });
   }
+  // Assign/update a booking (for office/reception)
+  assignBooking(bookingId: string, data: {
+    employeeId?: string;
+    date?: string;
+    start?: string;
+    end?: string;
+    roomId?: string;
+    status?: string;
+    needsReschedule?: boolean;
+  }) {
+    return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}`, {
+      method: "PUT", body: JSON.stringify({ booking: data }),
+    });
+  }
+  // Query available slots
+  getSlots(query: { date: string; employeeId: string; serviceId: string; roomId: string; centerId?: string; excludeId?: string }) {
+    const params = new URLSearchParams();
+    params.set("date", query.date);
+    params.set("employeeId", query.employeeId);
+    params.set("serviceId", query.serviceId);
+    params.set("roomId", query.roomId);
+    if (query.centerId) params.set("centerId", query.centerId);
+    if (query.excludeId) params.set("excludeId", query.excludeId);
+    return this.request<Array<{ start: string; end: string }>>(`/api/slots?${params}`);
+  }
+  // Get pending packages (to contract/schedule)
+  getPendingPackages() {
+    return this.request<any[]>("/api/pending-packages");
+  }
+  // Get recovery credits
+  getRecoveries() {
+    return this.request<any[]>("/api/recoveries");
+  }
   completeWorkerBooking(bookingId: string, version: number) {
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/worker-action`, {
       method: "POST", body: JSON.stringify({ action: "COMPLETE", version }),

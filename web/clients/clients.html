@@ -147,6 +147,7 @@
                 <label class="form-field form-field-wide"><span>Correo electrónico <b>*</b></span><input name="email" type="email" required="" maxlength="254" autocomplete="email" placeholder="laura@email.com" aria-describedby="intake-error-email"><span class="intake-field-error" id="intake-error-email" data-field-error="email" aria-live="polite" hidden=""></span><span class="duplicate-message" data-duplicate-for="email" aria-live="polite"></span></label>
                 <label class="form-field form-field-wide"><span>Dirección</span><input name="address" maxlength="300" autocomplete="street-address" placeholder="Opcional"></label>
                 <label class="form-field form-field-wide"><span>Cómo prefiere que le llamen</span><input name="preferredName" maxlength="100" autocomplete="nickname" placeholder="Opcional"></label>
+                <label class="form-field form-field-wide intake-referal-field"><span>Recomendado por <small>(opcional — Plan Amigo)</small></span><input name="referredByName" maxlength="200" placeholder="Escribe nombre para buscar…" autocomplete="off"><input type="hidden" name="referredById"><div class="intake-referal-dropdown" hidden=""><ul></ul></div></label>
               </div>
             </section>
 
@@ -307,6 +308,7 @@
               <label class="form-field">
                 <span>Importe total (€) <b>*</b></span>
                 <input name="totalAmount" type="number" min="0" max="9999999999.99" step="0.01" required="" placeholder="0,00">
+                <input type="hidden" name="planAmigoDiscount" value="0">
               </label>
 
               <div class="form-field form-field-wide bono-choice-section">
@@ -353,6 +355,12 @@
                   <strong id="purchase-ticket-total" class="ticket-price">0,00 €</strong>
                   <span id="purchase-ticket-rate" class="ticket-rate">— €/sesión</span>
                 </div>
+              </div>
+              <div id="purchase-plan-amigo" class="form-field-wide plan-amigo-badge" hidden="">
+                <span class="plan-amigo-label">🤝 Plan Amigo:</span>
+                <span id="plan-amigo-text">0 amigos activos · –0,00 €</span>
+                <button type="button" class="plan-amigo-toggle" title="Desactivar descuento" aria-label="Desactivar descuento Plan Amigo">✕</button>
+              </div>
               </div>
 
               <label class="form-field form-field-wide">
@@ -422,4 +430,22 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 
+<!-- Plan Amigo styles -->
+  <style>
+    .intake-referal-field { position: relative; }
+    .intake-referal-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #e0d6cc; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.1); z-index: 100; max-height: 200px; overflow-y: auto; }
+    .intake-referal-dropdown ul { list-style: none; margin: 0; padding: 0; }
+    .intake-referal-dropdown li { padding: 8px 12px; cursor: pointer; font-size: .875rem; border-bottom: 1px solid #f0ebe5; }
+    .intake-referal-dropdown li:last-child { border-bottom: none; }
+    .intake-referal-dropdown li:hover { background: #f9f3ec; }
+    .intake-referal-no-results { padding: 8px 12px; font-size: .875rem; color: #999; }
+    .plan-amigo-badge { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: #f0ebe5; border-radius: 6px; margin-bottom: 8px; }
+    .plan-amigo-label { font-size: .8rem; color: #8b6914; font-weight: 600; }
+    #plan-amigo-text { font-size: .85rem; color: #5a4a2a; flex: 1; }
+    .plan-amigo-toggle { background: none; border: 1px solid #ccc; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; line-height: 1; }
+    .plan-amigo-toggle:hover { background: #f44; color: white; border-color: #f44; }
+    .plan-amigo-badge.has-discount { background: #d4edda; }
+    .plan-amigo-badge.has-discount .plan-amigo-label { color: #155724; }
+    .plan-amigo-badge.has-discount #plan-amigo-text { color: #2d5016; }
+  </style>
 </body></html>

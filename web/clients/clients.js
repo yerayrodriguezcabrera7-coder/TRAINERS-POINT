@@ -16,8 +16,10 @@ fetchUserRole();
 const statusLabels = {
   LEAD: "Nuevo interesado",
   ACTIVO: "Activo",
+  PAUSA: "En pausa",
   INACTIVO: "Inactivo",
   BAJA: "Baja",
+  RECOMMENDED: "Activo",
 };
 
 const rows = document.querySelector("#client-rows");
@@ -725,6 +727,22 @@ async function openClientHistory(client) {
   loading.className = "history-empty";
   loading.textContent = "Cargando historial…";
   packageList.append(loading);
+  // Plan Amigo: fetch discount data
+  try {
+    const amigores = await fetch(`/api/clients/${encodeURIComponent(client.id)}/plan-amigo`);
+    if (amigores.ok) {
+      const amigo = await amigores.json();
+      if (amigo.activeReferrals > 0 && amigo.discountEnabled !== false) {
+        const badge = document.querySelector("#purchase-plan-amigo");
+        if (badge) {
+          badge.hidden = false;
+          badge.classList.add("has-discount");
+          document.getElementById("plan-amigo-text").textContent =
+            `${amigo.activeReferrals} amigo${amigo.activeReferrals !== 1 ? "s" : ""} activo${amigo.activeReferrals !== 1 ? "s" : ""} · –${amigo.discountAmount.toFixed(2)} €`;
+        }
+      }
+    }
+  } catch (_) {}
   try {
     await loadServices();
     const response = await fetch(`/api/clients/${encodeURIComponent(client.id)}/service-history`, {
@@ -905,6 +923,7 @@ function intakeDraft() {
     consentData: form.elements.namedItem("consentData").checked ? new Date().toISOString() : null,
     consentMarketing: form.elements.namedItem("consentMarketing").checked ? new Date().toISOString() : null,
     consentPhotos: form.elements.namedItem("consentPhotos").checked ? new Date().toISOString() : null,
+    referredById: form.elements.namedItem("referredById")?.value || null,
   };
 }
 
@@ -1205,6 +1224,48 @@ createForm.addEventListener("change", (event) => {
 });
 createForm.querySelector('[name="phone"]').addEventListener("blur", () => checkDuplicate("phone"));
 createForm.querySelector('[name="email"]').addEventListener("blur", () => checkDuplicate("email"));
+// Plan Amigo: autocompletado "Recomendado por"
+(function(){
+  const nameInput = createForm.elements.namedItem("referredByName");
+  if (!nameInput) return;
+  const hidden = createForm.elements.namedItem("referredById");
+  const dropdown = nameInput.parentElement.querySelector(".intake-referal-dropdown");
+  const list = dropdown?.querySelector("ul");
+  if (!dropdown || !list) return;
+  let timer, selectedId = null, selectedName = "";
+  nameInput.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = nameInput.value.trim();
+    selectedId = null; selectedName = ""; hidden.value = "";
+    nameInput.placeholder = q ? "Buscando…" : "Escribe nombre para buscar…";
+    if (q.length < 2) { dropdown.hidden = true; return; }
+    timer = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/clients?search="+encodeURIComponent(q));
+        if (!r.ok) { dropdown.hidden = true; return; }
+        const d = await r.json();
+        list.innerHTML = "";
+        const active = (d.clients || []).filter(c => c.status === "ACTIVO");
+        const all = d.clients || [];
+        const show = active.length > 0 ? active : all;
+        if (!show.length) { list.innerHTML = '<li class="intake-referal-no-results">No se encontraron clientes</li>'; dropdown.hidden = false; return; }
+        show.forEach(c => {
+          const li = document.createElement("li");
+          li.dataset.clientId = c.id;
+          li.textContent = c.firstName + " " + c.lastName + (c.status === "ACTIVO" ? " (Activo)" : "");
+          li.addEventListener("click", () => {
+            selectedId = c.id; selectedName = c.firstName + " " + c.lastName;
+            nameInput.value = selectedName; hidden.value = selectedId;
+            dropdown.hidden = true; nameInput.placeholder = selectedName + " · Cambiar";
+          });
+          list.appendChild(li);
+        });
+        dropdown.hidden = false;
+      } catch (_) { dropdown.hidden = true; }
+    }, 300);
+  });
+  nameInput.addEventListener("blur", () => setTimeout(() => dropdown.hidden = true, 200));
+})();
 intakeNextButton.addEventListener("click", async () => {
   if (!validateIntakeStep(intakeStep)) return;
   await enterIntakeStep(intakeStep + 1);
@@ -1361,6 +1422,21 @@ purchaseForm.addEventListener("submit", async (event) => {
     const body = Object.fromEntries(new FormData(purchaseForm).entries());
     body.sessionsBought = Number(body.sessionsBought);
     body.totalAmount = Number(body.totalAmount);
+    
+    // Apply Plan Amigo discount
+    const planAmigoBadge = document.querySelector("#purchase-plan-amigo");
+    if (planAmigoBadge && planAmigoBadge.classList.contains("has-discount")) {
+      const planAmigoRes = await fetch(`/api/clients/${encodeURIComponent(historyClientId)}/plan-amigo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      });
+      if (planAmigoRes.ok) {
+        const planData = await planAmigoRes.json();
+        body.planAmigoDiscount = planData.discountAmount || 0;
+      }
+    }
+    
     await addClientServicePackage(historyClientId, body);
 
     purchaseForm.reset();
@@ -1796,6 +1872,15 @@ document.querySelector("#purchase-status-chips")?.addEventListener("click", (eve
   btn.classList.add("is-selected");
   const statusSelect = purchaseForm.elements.namedItem("paymentStatus");
   if (statusSelect) statusSelect.value = btn.dataset.value;
+});
+
+// Plan Amigo toggle handler — disable discount
+document.querySelector(".plan-amigo-toggle")?.addEventListener("click", () => {
+  const badge = document.querySelector("#purchase-plan-amigo");
+  if (badge) {
+    badge.classList.remove("has-discount");
+    document.getElementById("plan-amigo-text").textContent = "Descuento desactivado";
+  }
 });
 
 if (purchaseServiceSelect) {

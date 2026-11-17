@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pedidos / Albaranes · Trainers Point</title>
+<script src="/runtime.js" defer></script><script src="/menu.js" defer></script><script src="/pedidos.js" defer></script>
+<link rel="stylesheet" href="/fichajes.css"><link rel="stylesheet" href="/gestion.css"><link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/design.css"><link rel="stylesheet" href="/pedidos.css"><link rel="stylesheet" href="/orden.css"><link rel="stylesheet" href="/ayuda.css"><script src="/ayuda.js" defer></script></head>
+<body><div class="app-shell"><aside data-app-menu aria-label="Navegación"></aside><main class="attendance-shell main-content"><header class="topbar"><div class="breadcrumb"><span>Ventas y caja</span><span class="crumb-separator">/</span><strong>Pedidos / Albaranes</strong></div></header><section class="page-content">
+<header class="attendance-header"><div><p class="eyebrow">CATÁLOGO E INVENTARIO</p><h1>Pedidos / Albaranes<span class="accent">.</span></h1><p>Gestiona los pedidos de reposición y albaranes de recepción.</p></div><button id="new-pedido" type="button" class="primary" hidden>＋ Nuevo pedido</button></header><p id="notice" role="status"></p>
+<section id="stats" class="product-stock-alert" aria-label="Resumen de pedidos" aria-live="polite"></section>
+<section class="attendance-card management-card" aria-label="Lista de pedidos y albaranes"><div class="panel-toolbar">
+<label class="product-search">Buscar producto o pedido<input id="search" type="search" placeholder="Nombre, notas o ID" autocomplete="off"></label>
+<div class="filter-group"><label for="filter-status">Estado:</label><select id="filter-status"><option value="ALL">Todos</option><option value="PENDIENTE">Pendiente</option><option value="PEDIDO">Pedido</option><option value="RECIBIDO">Recibido</option><option value="CANCELADO">Cancelado</option></select></div>
+<button id="refresh" type="button" class="outline-button">Actualizar</button></div>
+<div class="history-scroll"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>Estado</th><th>Fecha</th><th>Solicitado por</th><th>Acciones</th></tr></thead><tbody id="pedidos"></tbody></table></div></section>
+</section></main></div>
+<dialog id="pedido-dialog" aria-labelledby="pedido-title"><form id="pedido-form"><header class="dialog-heading"><h2 id="pedido-title">Nuevo pedido</h2><button type="button" data-close="pedido-dialog" aria-label="Cerrar">×</button></header><div class="form-grid">
+<label>Producto <select id="pedido-product-select"><option value="">-- Buscar producto existente --</option></select></label>
+<label class="full" id="custom-product-wrap">O nombre del artículo<input name="productName" maxlength="200" placeholder="Nombre del producto"></label>
+<label>Cantidad <input name="quantity" type="number" min="1" max="10000" step="1" required value="1"></label>
+<label class="full">Notas / Motivo<textarea name="notes" maxlength="1000" placeholder="Motivo del pedido..."></textarea></label>
+</div><p id="pedido-error" role="alert"></p><footer class="dialog-actions"><button type="button" data-close="pedido-dialog">Cancelar</button><button id="save-pedido" class="primary">Guardar pedido</button></footer></form></dialog>
+<dialog id="action-dialog" aria-labelledby="action-title"><header class="dialog-heading"><h2 id="action-title">Acción</h2><button type="button" data-close="action-dialog" aria-label="Cerrar">×</button></header><div id="action-content"></div><p id="action-error" role="alert"></p><footer class="dialog-actions"><button type="button" data-close="action-dialog">Cerrar</button></footer></dialog>
+<dialog id="detail-dialog" aria-labelledby="detail-title"><header class="dialog-heading"><h2 id="detail-title">Detalle del pedido</h2><button type="button" data-close="detail-dialog" aria-label="Cerrar">×</button></header><div id="detail-content"></div><footer class="dialog-actions"><button type="button" data-close="detail-dialog">Cerrar</button></footer></dialog></body></html>
