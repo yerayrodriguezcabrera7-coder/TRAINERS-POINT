@@ -6,17 +6,25 @@
   <link rel="stylesheet" href="menu.css">
   <link rel="stylesheet" href="design.css">
   <link rel="stylesheet" href="styles.css">
-  <script src="menu.js" defer=""></script>
-  <script src="runtime.js" defer=""></script>
-  <script src="calendar-core.js" defer=""></script>
-  <script src="app.js" defer=""></script>
+  <script src="menu.js" charset="utf-8" defer=""></script>
+  <script src="runtime.js" charset="utf-8" defer=""></script>
+  <script src="calendar-core.js" charset="utf-8" defer=""></script>
+  <script src="app.js" charset="utf-8" defer=""></script>
 <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><script src="/ayuda.js" defer=""></script><link rel="stylesheet" href="/booking-payment.css"><script src="/booking-payment.js" defer></script><link rel="stylesheet" href="/training-plans.css"><script src="/training-plans.js" defer></script><script src="pending-banner.js" defer></script></head>
 <body>
 
   <div class="app-shell"><aside data-app-menu="" aria-label="Navegación del centro"></aside><main id="main" class="main-content"><header class="topbar"><div class="breadcrumb"><span>Centro</span><span class="crumb-separator">/</span><strong>Calendario del equipo</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header><section class="page-content">
     <header class="page-heading">
-      <div><div class="eyebrow">TRAINERS POINT / OPERATIVA DEL CENTRO</div><h1>Calendario del equipo<span style="color:var(--red)">.</span></h1><p id="today-label"></p></div>
-      <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">＋</span> Nueva reserva</button></div>
+      <div>
+        <div class="calendar-brand-tabs" role="tablist" aria-label="Seleccionar marca del calendario">
+          <button type="button" class="brand-tab" id="brand-tab-tp" data-brand-tab="TRAINERS_POINT" role="tab" aria-selected="true"><span class="brand-tab-badge">TP</span><strong>Trainers Point</strong></button>
+          <button type="button" class="brand-tab" id="brand-tab-cobosu" data-brand-tab="COBOSU" role="tab" aria-selected="false"><span class="brand-tab-badge cobosu">CB</span><strong>Cobosu</strong></button>
+        </div>
+        <div class="eyebrow"><span id="calendar-brand-label">TRAINERS POINT</span> / OPERATIVA DEL CENTRO</div>
+        <h1 id="calendar-heading-title">Calendario del equipo<span style="color:var(--red)">.</span></h1>
+        <p id="today-label"></p>
+      </div>
+      <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">+</span> Nueva reserva</button></div>
     </header>
     <div id="storage-warning" class="warning" role="alert" hidden=""></div>
     <!-- Pending & Recoveries collapsible banner -->
@@ -55,7 +63,7 @@
         <div class="view-switch" role="group" aria-label="Vista del calendario"><button data-view="day">Día</button><button data-view="week" class="selected">Semana</button><button data-view="month">Mes</button></div>
       </div>
       <div class="filter-row">
-        <div class="filters"><label>Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button><button type="button" class="button secondary repeat-week-btn" id="repeat-week-btn" hidden="" title="Clonar planificación de turnos de la semana anterior">🔄 Repetir semana anterior</button></div>
+        <div class="filters"><label id="employee-filter-wrap">Entrenador<select id="employee-filter"><option value="all">Ver todos</option></select></label><label>Servicio<select id="service-filter"><option value="all">Todos los servicios</option></select></label><label class="calendar-client-search-wrap">Buscar cliente<div class="calendar-client-input-wrap"><input id="calendar-client-search" type="search" placeholder="Nombre del cliente…" autocomplete="off" aria-controls="calendar-client-results"><button type="button" id="clear-calendar-client-search" class="calendar-client-clear" aria-label="Limpiar búsqueda de cliente" hidden>×</button></div><span id="calendar-client-results" class="calendar-client-results" role="listbox" aria-label="Clientes y citas" hidden></span></label><button class="clear-filters" id="clear-filters" hidden="">Limpiar filtros</button><button type="button" class="button secondary repeat-week-btn" id="repeat-week-btn" hidden="" title="Clona exclusivamente los turnos del equipo, sin reservas de clientes">🔄 Repetir semana anterior</button></div>
         <div class="legend" aria-label="Estados"><span><i class="dot confirmed"></i>Confirmada</span><span><i class="dot pending"></i>Pendiente</span><span><i class="dot completed"></i>Finalizada</span><span><i class="dot cancelled"></i>Cancelada</span></div>
       </div>
       <div id="calendar" class="calendar-scroll" aria-label="Cuadrante de reservas"></div>
@@ -67,8 +75,8 @@
       <header class="modal-header"><div><div class="eyebrow">AGENDA DEL EQUIPO</div><h2 id="booking-title">Nueva reserva</h2></div><button type="button" class="icon-button" data-close="booking-dialog" aria-label="Cerrar">×</button></header>
       <div class="modal-body">
         <div id="booking-slot-summary" class="booking-slot-summary">
-          <div class="booking-slot-item">
-            <span class="booking-slot-label">Entrenador</span>
+          <div class="booking-slot-item" id="summary-employee-item">
+            <span class="booking-slot-label" id="summary-employee-label">Entrenador</span>
             <strong id="summary-employee-name">-</strong>
           </div>
           <div class="booking-slot-item">
@@ -77,7 +85,7 @@
           </div>
         </div>
         <div class="form-grid">
-          <div class="full client-picker-field"><span class="field-label">1. Selecciona el cliente</span><div class="client-picker"><input id="client-search" type="search" placeholder="Buscar cliente por nombre…" autocomplete="off" aria-controls="client-results" aria-autocomplete="list"><button type="button" id="clear-client-search" class="client-search-clear" aria-label="Limpiar búsqueda">×</button></div><div id="client-results" class="client-results" role="listbox" aria-label="Clientes"></div><select id="booking-client" required="" hidden="" aria-hidden="true"></select><button type="button" class="button secondary client-add-button" id="add-client">＋ Añadir nuevo cliente</button></div>
+          <div class="full client-picker-field"><span class="field-label">1. Selecciona el cliente</span><div class="client-picker"><input id="client-search" type="search" placeholder="Buscar cliente por nombre…" autocomplete="off" aria-controls="client-results" aria-autocomplete="list"><button type="button" id="clear-client-search" class="client-search-clear" aria-label="Limpiar búsqueda">×</button></div><div id="client-results" class="client-results" role="listbox" aria-label="Clientes"></div><select id="booking-client" required="" hidden="" aria-hidden="true"></select><button type="button" class="button secondary client-add-button" id="add-client">+ Añadir nuevo cliente</button></div>
           <div class="new-client-fields full" id="new-client-fields" hidden=""><label>Nombre y apellidos<input id="client-name" maxlength="100" autocomplete="name"></label><label>Correo electrónico (opcional)<input id="client-email" type="email" maxlength="150" autocomplete="email"></label><label>Teléfono (opcional)<input id="client-phone" type="tel" maxlength="30" autocomplete="tel"></label></div>
           <button type="button" class="text-button full" id="view-client">Ver ficha del cliente ↗</button>
           <section id="booking-package-panel" class="full package-step" aria-labelledby="package-heading">
@@ -87,7 +95,7 @@
             <div id="existing-package-wrap" style="margin-top:10px;" hidden>
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                 <label for="booking-package" style="font-size:12px; font-weight:600; margin:0;">Bono disponible del cliente</label>
-                <button type="button" class="text-button" id="toggle-buy-package-btn" style="font-size:11px; padding:0;">＋ Contratar otro bono</button>
+                <button type="button" class="text-button" id="toggle-buy-package-btn" style="font-size:11px; padding:0;">+ Contratar otro bono</button>
               </div>
               <select id="booking-package">
                 <option value="">Reservar sin bono · pago pendiente</option>
@@ -225,13 +233,43 @@
           </div>
         </div>
         <div id="booking-debt" role="status" hidden=""></div>
+        <div id="booking-training-detail" class="booking-training-detail" hidden></div>
+        <section id="reschedule-panel" class="reschedule-panel" hidden aria-label="Reagendar reserva">
+          <div class="reschedule-panel-header">
+            <strong>🗓️ Reagendar cita · Mini-calendario</strong>
+            <button type="button" class="reschedule-close-btn" id="cancel-reschedule" aria-label="Cerrar reagendar">×</button>
+          </div>
+          <p class="reschedule-subtitle">Selecciona el nuevo día y la hora para mover la cita fácilmente.</p>
+          <div id="mini-calendar-widget" class="mini-calendar-widget">
+            <div class="mini-cal-nav">
+              <button type="button" id="mini-cal-prev" class="mini-cal-btn" aria-label="Mes anterior">‹</button>
+              <strong id="mini-cal-month-label">-</strong>
+              <button type="button" id="mini-cal-next" class="mini-cal-btn" aria-label="Mes siguiente">›</button>
+            </div>
+            <div class="mini-cal-weekdays">
+              <span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span>
+            </div>
+            <div id="mini-cal-grid" class="mini-cal-grid"></div>
+          </div>
+          <div class="mini-cal-time-section">
+            <span class="mini-cal-time-heading">Horas disponibles:</span>
+            <div id="mini-cal-time-chips" class="mini-cal-time-chips"></div>
+          </div>
+          <div class="reschedule-fields">
+            <label>Fecha seleccionada<input id="reschedule-date" type="date" required></label>
+            <label>Hora seleccionada<input id="reschedule-start" type="time" step="900" required></label>
+          </div>
+          <div class="reschedule-actions">
+            <button type="button" class="button primary" id="apply-reschedule">✓ Guardar nuevo horario</button>
+          </div>
+        </section>
         <button type="button" class="button primary" id="collect-booking" hidden>Registrar cobro pendiente</button>
         <button type="button" class="button secondary" id="view-training-plan" hidden>Ver planning de hoy</button>
         <div id="booking-renewal-alert" role="status" hidden=""></div>
         <div id="booking-history"></div>
         <p class="form-error" id="booking-error" role="alert" hidden=""></p>
       </div>
-      <footer class="modal-footer"><button type="button" class="button secondary" id="unassign-booking" hidden="" title="Mover la cita a Sin asignar para reorganizar después">📦 Mover a Sin asignar</button><button type="button" class="button secondary" id="reschedule-booking" hidden="">Pendiente de reprogramar</button><button type="button" class="button secondary" id="defer-booking" hidden="">Dejar pendiente (recuperación)</button><button type="button" class="button secondary" id="worker-complete" hidden="">Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden="">Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden="">Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
+      <footer class="modal-footer"><button type="button" class="button secondary" id="unassign-booking" hidden="" title="Mover la cita a Sin asignar para reorganizar después">📦 Mover a Sin asignar</button><button type="button" class="button secondary" id="reschedule-booking" hidden="">Pendiente de reprogramar</button><button type="button" class="button secondary" id="open-reschedule" hidden="">🗓 Reagendar</button><button type="button" class="button secondary" id="defer-booking" hidden="">Dejar pendiente (recuperación)</button><button type="button" class="button secondary" id="worker-complete" hidden="">Marcar realizada</button><button type="button" class="button secondary" id="worker-incident" hidden="">Comunicar incidencia</button><button type="button" class="button danger" id="cancel-booking" hidden="">Cancelar reserva</button><div class="footer-actions"><button type="button" class="button secondary" data-close="booking-dialog">Cerrar</button><button type="submit" class="button primary">Guardar reserva</button></div></footer>
     </form>
   </dialog>
   <dialog id="shift-dialog" aria-labelledby="shift-title">

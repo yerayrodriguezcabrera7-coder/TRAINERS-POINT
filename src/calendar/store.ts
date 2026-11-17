@@ -295,17 +295,19 @@ export class Store {
         const rows = await this.clientsDb.$queryRaw<Array<{
           id: string;
           name: string;
+          brand: string;
           address: string | null;
           city: string | null;
           province: string | null;
           maxBookingsPerHour: number | null;
           schedule: unknown;
-        }>>(Prisma.sql`SELECT "id", "name", "address", "city", "province", "maxBookingsPerHour", "schedule" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
+        }>>(Prisma.sql`SELECT "id", "name", "brand", "address", "city", "province", "maxBookingsPerHour", "schedule" FROM "Gym" WHERE "isActive" = true ORDER BY "name" ASC`);
         result = rows.map((r) => {
           const parsedSchedule = Array.isArray(r.schedule) ? week.safeParse(r.schedule) : null;
           return {
             id: r.id,
             name: r.name,
+            brand: r.brand,
             address: r.address || '',
             city: r.city || '',
             province: r.province || '',
@@ -326,6 +328,7 @@ export class Store {
           result = rows.map((r) => ({
             id: r.id,
             name: r.name,
+            brand: r.name.toLowerCase().includes("cobosu") ? "COBOSU" : "TRAINERS_POINT",
             address: r.address || '',
             city: r.city || '',
             province: r.province || '',
@@ -335,7 +338,7 @@ export class Store {
         } catch {
           result = await this.clientsDb.gym.findMany({
             where: { isActive: true },
-            select: { id: true, name: true, address: true, city: true, province: true },
+            select: { id: true, name: true, brand: true, address: true, city: true, province: true },
             orderBy: { name: "asc" },
           }).then((list) => list.map((g) => ({ ...g, maxBookingsPerHour: null, schedule: null }) as any));
         }
@@ -360,7 +363,14 @@ export class Store {
     if (!rows.length) throw new ApiError(404, "Gimnasio desconocido.");
     const [centers, packageResult, config] = await Promise.all([
       this.centers(),
-      this.clientsDb ? this.pool.query('SELECT b.id,b."saleId",b."paymentPending",p."paymentStatus" FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1',[gym]) : Promise.resolve({rows:[]}),
+      this.clientsDb ? this.pool.query(`SELECT b.id,b."saleId",b."paymentPending",p."paymentStatus",p."sessionsBought",
+        CASE WHEN b."packageId" IS NULL THEN NULL ELSE (
+          SELECT count(*) FROM "Booking" prior
+          WHERE prior."clientId"=b."clientId" AND prior."packageId"=b."packageId"
+            AND prior.attendance IN ('PENDIENTE','ASISTIO') AND prior.status<>'CANCELADA'
+            AND (prior."startTime"<b."startTime" OR (prior."startTime"=b."startTime" AND prior.id<=b.id))
+        ) END AS "packageSessionNumber"
+        FROM "Booking" b LEFT JOIN "ClientServicePackage" p ON p.id=b."packageId" WHERE b."calendarGymId"=$1`,[gym]) : Promise.resolve({rows:[]}),
       this.externalConfig(gym, rows[0].config),
     ]);
     const centersById = new Map(centers.map(center => [center.id, center]));
@@ -368,7 +378,7 @@ export class Store {
     const result = {
       gymId:gym, centers, packagesEnabled:!!this.clientsDb,
       ...config,
-      bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&(b.packageId?linked.paymentStatus!=='PAGADO':linked.paymentPending)}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
+      bookings: rows[0].bookings.map((b:Booking)=>{const center=centersById.get(b.centerId||gym);const linked=packagesByBooking.get(b.id);return {...b,...(linked?{paymentDue:!b.recoveryId&&(b.packageId?linked.paymentStatus!=='PAGADO':linked.paymentPending),...(linked.packageSessionNumber!=null&&linked.sessionsBought!=null?{packageSessionNumber:Number(linked.packageSessionNumber),packageSessionTotal:Number(linked.sessionsBought)}:{})}:{}),centerId:b.centerId||gym,centerName:center?.name||b.centerName||gym,centerAddress:[center?.address,center?.city,center?.province].filter(Boolean).join(', ')||b.centerAddress||''};}),
       revision: Number(rows[0].revision),
       version: 1,
     };

@@ -22,7 +22,7 @@
   function employeePeriods(employee, date, schedule) {
     if (employee.active === false) return [];
     const override = employee.shifts?.find(s => s.date === date);
-    if (override) return override.periods;
+    if (override) return override.periods || [];
     if (employee.weeklyPeriods) return employee.weeklyPeriods[(parseDate(date).getDay() + 6) % 7];
     const hours = hoursFor(date, employee.schedule || schedule);
     return hours.closed ? [] : [hours];

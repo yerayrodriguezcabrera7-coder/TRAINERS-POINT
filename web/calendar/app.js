@@ -182,19 +182,78 @@ function visibleDates() {
   const start = C.monday(first);
   return Array.from({ length: 42 }, (_, i) => C.addDays(start, i));
 }
+function defaultBrandView() {
+  const saved = localStorage.getItem('calendar-active-brand-view');
+  if (saved === 'COBOSU' || saved === 'TRAINERS_POINT') return saved;
+  const center = (data?.centers || []).find(item => item.id === currentGymId());
+  if (center?.brand === 'COBOSU' || (center?.name || '').toLowerCase().includes('cobosu')) return 'COBOSU';
+  return 'TRAINERS_POINT';
+}
+function activeBrandView() {
+  return state.brandView || defaultBrandView();
+}
+function isCobosuRecord(b) {
+  if (!b) return false;
+  if (b.employeeId === COBOSU_ID || Boolean(b.isCobosu)) return true;
+  const client = lookup('clients', b.clientId);
+  if (client?.brand === 'COBOSU') return true;
+  const center = lookup('centers', b.centerId);
+  if (center?.brand === 'COBOSU' || (center?.name || '').toLowerCase().includes('cobosu')) return true;
+  if ((b.centerName || '').toLowerCase().includes('cobosu')) return true;
+  return false;
+}
 function visibleBookings() {
   const dates = new Set(visibleDates());
   const activeGym = currentGymId();
-  return data.bookings.filter(b => dates.has(b.date) && (!b.centerId || b.centerId === activeGym || activeGym === 'local') && (state.employee === 'all' || (b.employeeId||'__unassigned') === state.employee) && (state.service === 'all' || b.serviceId === state.service));
+  const isCobosuView = activeBrandView() === 'COBOSU';
+
+  return data.bookings.filter(b => {
+    if (!dates.has(b.date)) return false;
+
+    // Strict brand separation: Cobosu appointments only in Cobosu, TP appointments only in TP
+    const isCob = isCobosuRecord(b);
+    if (isCobosuView && !isCob) return false;
+    if (!isCobosuView && isCob) return false;
+
+    if (b.centerId && activeGym && activeGym !== 'local' && b.centerId !== activeGym) {
+      const bCenter = (data.centers || []).find(c => c.id === b.centerId);
+      if (bCenter && isCobosuView !== (bCenter.brand === 'COBOSU' || (bCenter.name || '').toLowerCase().includes('cobosu'))) {
+        return false;
+      }
+    }
+
+    if (state.employee !== 'all' && (b.employeeId || '__unassigned') !== state.employee) return false;
+    if (state.service !== 'all' && b.serviceId !== state.service) return false;
+    return true;
+  });
 }
 function fillSelect(id, list, extra = '') { $(id).innerHTML = extra + list.map(item => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join(''); }
 function setupSelects() {
-  fillSelect('employee-filter', data.employees.filter(e => e.active !== false), '<option value="all">Ver todos</option><option value="__cobosu">Cobosu</option>'+(currentUser?.role!=='TRAINER'?'<option value="__unassigned">Sin asignar</option>':''));
-  fillSelect('service-filter', data.services.filter(s => s.active !== false), '<option value="all">Todos los servicios</option>');
-  fillSelect('booking-employee', data.employees.filter(e => e.active !== false), '<option value="__cobosu">Cobosu</option><option value="">Sin asignar</option>');
-  fillSelect('booking-service', data.services.filter(s => s.active !== false));
-  if ($('no-package-service')) fillSelect('no-package-service', data.services.filter(s => s.active !== false));
+  const isCobosuView = activeBrandView() === 'COBOSU';
+  const filteredEmployees = data.employees.filter(e => e.active !== false && e.id !== COBOSU_ID);
+
+  const empFilterOptions = '<option value="all">Ver todos</option>' +
+    (isCobosuView ? '<option value="__cobosu">Cobosu</option>' : '') +
+    (currentUser?.role !== 'TRAINER' ? '<option value="__unassigned">Sin asignar</option>' : '');
+
+  fillSelect('employee-filter', isCobosuView ? [cobosuColumn()] : filteredEmployees, empFilterOptions);
+  const empWrap = $('employee-filter-wrap');
+  if (empWrap) empWrap.hidden = isCobosuView;
+
+  const activeServices = sortedServices(data.services.filter(s => s.active !== false));
+  fillSelect('service-filter', activeServices, '<option value="all">Todos los servicios</option>');
+
+  const bookingEmpOptions = (isCobosuView ? '<option value="__cobosu">Cobosu</option>' : '') +
+    (serverMode ? '<option value="">Sin asignar</option>' : '');
+  fillSelect('booking-employee', isCobosuView ? [cobosuColumn()] : filteredEmployees, bookingEmpOptions);
+
+  fillSelect('booking-service', activeServices);
+  if ($('no-package-service')) fillSelect('no-package-service', activeServices);
   for(const [id,key] of [['employee-filter','employee'],['service-filter','service']]){ $(id).value=state[key]; if(!$(id).value){state[key]='all';$(id).value='all';} }
+  if (isCobosuView) {
+    state.employee = 'all';
+    if ($('employee-filter')) $('employee-filter').value = 'all';
+  }
   if (currentUser?.role === 'TRAINER') {
     state.employee = currentUser.employeeId;
     const empFilter = $('employee-filter');
@@ -203,6 +262,9 @@ function setupSelects() {
       empFilter.disabled = true;
     }
   }
+}
+function sortedServices(services) {
+  return [...services].sort((a, b) => Number(isDualService(b.id)) - Number(isDualService(a.id)) || a.name.localeCompare(b.name, 'es'));
 }
 function titleForPeriod(dates) {
   if (state.view === 'day') return prettyDate(state.date, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -233,8 +295,160 @@ function dualMissingPartner(b) {
   return !data.bookings.some(other => other.id !== b.id && other.status !== 'cancelled' && other.sessionId === b.sessionId);
 }
 function dualBadge(b) {
-  if (!dualMissingPartner(b)) return '';
-  return '<span class="booking-dual-missing-badge" title="Sesión dual pendiente de 2ª persona. Haz clic para asignarla.">👥 Falta por asignar 2ª persona</span>';
+  if (!b || b.status === 'cancelled' || !isDualService(b.serviceId)) return '';
+  const missing = dualMissingPartner(b);
+  return `<span class="booking-dual-badge ${missing ? 'is-missing' : 'is-complete'}" title="${missing ? 'Sesión dual pendiente de 2ª persona. Haz clic para asignarla.' : 'Sesión dual completa: 2 personas asignadas.'}" aria-label="${missing ? 'Falta la segunda persona' : 'Dos personas asignadas'}"><span class="dual-icon">${missing ? '👤' : '👥'}</span> ${missing ? '1/2 Falta 2ª' : '2/2'}</span>`;
+}
+let bookingSessionLabels = new Map();
+function refreshBookingSessionLabels() {
+  bookingSessionLabels = new Map();
+  const groups = new Map();
+  for (const booking of data.bookings) {
+    if (!booking.packageId || ['cancelled', 'no_show'].includes(booking.status)) continue;
+    if (booking.packageSessionNumber && booking.packageSessionTotal) {
+      bookingSessionLabels.set(booking.id, `Sesión ${booking.packageSessionNumber}/${booking.packageSessionTotal}`);
+      continue;
+    }
+    const key = `${booking.clientId}\0${booking.packageId}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(booking);
+  }
+  for (const bookings of groups.values()) {
+    bookings.sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`));
+    const service = lookup('services', bookings[0].serviceId);
+    const total = Math.max(1, Number(service.trainingCount) || bookings.length);
+    bookings.forEach((booking, index) => bookingSessionLabels.set(booking.id, `Sesión ${index + 1}/${total}`));
+  }
+}
+function sessionDetail(b) {
+  if (b?.recoveryId) return 'Sesión de recuperación';
+  return bookingSessionLabels.get(b?.id) || '';
+}
+function sessionBadge(b) {
+  const label = sessionDetail(b);
+  if (!label) return '';
+  const isRec = Boolean(b?.recoveryId);
+  const displayText = isRec ? 'Sesión de recuperación' : (label.startsWith('Sesión ') ? label.slice(7) : label);
+  return `<span class="booking-session-badge ${isRec ? 'is-recovery' : ''}" title="${escapeHTML(label)}">${isRec ? '🔄 ' : '🎟️ '}${escapeHTML(displayText)}</span>`;
+}
+function clientMatchClass(b) {
+  if (!state.calendarClientId) return '';
+  if (b.clientId === state.calendarClientId) return 'client-search-match';
+  if (b.sessionId && data.bookings.some(other => other.sessionId === b.sessionId && other.clientId === state.calendarClientId && other.status !== 'cancelled')) {
+    return 'client-search-match';
+  }
+  return 'client-search-muted';
+}
+function updateCalendarBrand() {
+  const brand = activeBrandView();
+  state.brandView = brand;
+  const isCobosu = brand === 'COBOSU';
+
+  let center = (data.centers || []).find(item => item.id === currentGymId());
+  if (center && isCobosu !== (center.brand === 'COBOSU' || (center.name || '').toLowerCase().includes('cobosu'))) {
+    const matching = (data.centers || []).find(c => isCobosu === (c.brand === 'COBOSU' || (c.name || '').toLowerCase().includes('cobosu')));
+    if (matching) center = matching;
+  }
+  if (!center && data.centers?.length) center = data.centers[0];
+
+  const label = isCobosu ? 'COBOSU' : 'TRAINERS POINT';
+  document.body.dataset.calendarBrand = brand.toLowerCase().replace('_', '-');
+
+  const brandLabel = $('calendar-brand-label');
+  if (brandLabel) {
+    brandLabel.dataset.brand = brand.toLowerCase().replace('_', '-');
+    brandLabel.textContent = `${label}${center?.name ? ` · ${center.name}` : ''}`;
+  }
+
+  const headingTitle = $('calendar-heading-title');
+  if (headingTitle) {
+    headingTitle.innerHTML = `Calendario de ${isCobosu ? 'Cobosu' : 'Trainers Point'}<span style="color:${isCobosu ? '#dc2626' : 'var(--red)'}">.</span>`;
+  }
+
+  const tabTP = $('brand-tab-tp');
+  const tabCobosu = $('brand-tab-cobosu');
+  if (tabTP && tabCobosu) {
+    tabTP.classList.toggle('active', !isCobosu);
+    tabTP.setAttribute('aria-selected', String(!isCobosu));
+    tabCobosu.classList.toggle('active', isCobosu);
+    tabCobosu.setAttribute('aria-selected', String(isCobosu));
+  }
+
+  const empWrap = $('employee-filter-wrap');
+  if (empWrap) empWrap.hidden = isCobosu;
+  if (isCobosu && $('repeat-week-btn')) $('repeat-week-btn').hidden = true;
+}
+function setBrandView(brand) {
+  state.brandView = brand;
+  localStorage.setItem('calendar-active-brand-view', brand);
+  state.employee = 'all';
+  state.service = 'all';
+  state.calendarClientId = null;
+
+  if (data?.centers?.length) {
+    const matching = data.centers.find(c =>
+      brand === 'COBOSU'
+        ? (c.brand === 'COBOSU' || (c.name || '').toLowerCase().includes('cobosu'))
+        : (c.brand === 'TRAINERS_POINT' || !(c.name || '').toLowerCase().includes('cobosu'))
+    );
+    if (matching && matching.id !== currentGymId()) {
+      localStorage.setItem('calendar-selected-gym', matching.id);
+      if (serverMode) {
+        refreshServer(true).then(() => {
+          updateCalendarBrand();
+          setupSelects();
+          render(true);
+        });
+        return;
+      }
+    }
+  }
+
+  updateCalendarBrand();
+  setupSelects();
+  render(true);
+}
+function renderCalendarClientSearch() {
+  const input = $('calendar-client-search');
+  const results = $('calendar-client-results');
+  const clearBtn = $('clear-calendar-client-search');
+  if (!input || !results) return;
+  const query = input.value.trim().toLocaleLowerCase('es');
+  if (clearBtn) clearBtn.hidden = !state.calendarClientId && !query;
+
+  if (!state.calendarClientId && query.length < 2) {
+    results.hidden = true;
+    results.innerHTML = '';
+    return;
+  }
+  if (!state.calendarClientId) {
+    const matches = availableClients().filter(client => `${client.name} ${client.email || ''} ${client.phone || ''}`.toLocaleLowerCase('es').includes(query)).slice(0, 8);
+    results.innerHTML = matches.length
+      ? matches.map(client => `<button type="button" class="calendar-client-option" role="option" data-calendar-client="${escapeHTML(client.id)}"><strong>${escapeHTML(client.name)}</strong><small>${escapeHTML(client.phone || client.email || '')}</small></button>`).join('')
+      : '<p class="calendar-client-empty">No se han encontrado clientes.</p>';
+    results.hidden = false;
+    return;
+  }
+  const client = availableClients().find(item => item.id === state.calendarClientId) || lookup('clients', state.calendarClientId);
+  const bookings = data.bookings
+    .filter(booking => {
+      if (booking.status === 'cancelled' && !booking.needsReschedule) return false;
+      if (booking.clientId === state.calendarClientId) return true;
+      if (booking.sessionId) {
+        return data.bookings.some(other => other.sessionId === booking.sessionId && other.clientId === state.calendarClientId && other.status !== 'cancelled');
+      }
+      return false;
+    })
+    .sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`));
+  results.innerHTML = `<strong class="calendar-client-result-heading">📅 ${escapeHTML(client.name)} · ${bookings.length} cita${bookings.length === 1 ? '' : 's'} asignada${bookings.length === 1 ? '' : 's'}</strong>${bookings.length
+    ? bookings.map(booking => {
+        const srv = lookup('services', booking.serviceId);
+        const emp = lookup('employees', booking.employeeId);
+        const sDetail = sessionDetail(booking);
+        return `<button type="button" class="calendar-client-option calendar-appointment-option" role="option" data-calendar-booking="${escapeHTML(booking.id)}"><div class="calendar-appt-time"><strong>${escapeHTML(prettyDate(booking.date, { weekday: 'short', day: 'numeric', month: 'short' }))}</strong><span>${escapeHTML(booking.start)}–${escapeHTML(booking.end)}</span></div><small>${escapeHTML(srv.name)} · ${escapeHTML(emp.name)}${sDetail ? ` · ${escapeHTML(sDetail)}` : ''}${booking.needsReschedule ? ' · Reprogramar' : ''}</small></button>`;
+      }).join('')
+    : '<p class="calendar-client-empty">No tiene citas asignadas en este centro.</p>'}`;
+  results.hidden = false;
 }
 function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${dualMissingPartner(b)?', Falta por asignar 2ª persona':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
 
@@ -244,8 +458,15 @@ function sundayParkingColumn() {
 
 function employeesForDate(date, dayBookings, allEmployees) {
   const sunday = isSunday(date);
+  const isCobosuView = activeBrandView() === 'COBOSU';
+
+  if (isCobosuView) {
+    // En Cobosu NO hay opción de poner entrenadores: ese calendario funciona exclusivamente con la App.
+    return [cobosuColumn()];
+  }
+
   if (state.employee !== 'all') {
-    if (state.employee === COBOSU_ID) return [cobosuColumn()];
+    if (state.employee === COBOSU_ID) return [];
     if (state.employee === '__unassigned') {
       return [sunday ? sundayParkingColumn() : { id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
     }
@@ -255,9 +476,6 @@ function employeesForDate(date, dayBookings, allEmployees) {
 
   if (sunday) {
     const cols = currentUser?.role !== 'TRAINER' ? [sundayParkingColumn()] : [];
-    if (dayBookings.some(b => b.employeeId === COBOSU_ID)) {
-      cols.push(cobosuColumn());
-    }
     const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
     for (const emp of allEmployees) {
       if (emp.id !== COBOSU_ID && emp.id !== '__unassigned' && bookingEmpIds.has(emp.id)) {
@@ -267,7 +485,8 @@ function employeesForDate(date, dayBookings, allEmployees) {
     return cols;
   }
 
-  const scheduled = [cobosuColumn()];
+  // Trainers Point: cuadrante de turnos del equipo (Cobosu NUNCA aparece aquí)
+  const scheduled = [];
 
   for (const emp of allEmployees) {
     if (emp.id === '__unassigned' || emp.id === COBOSU_ID) continue;
@@ -275,6 +494,11 @@ function employeesForDate(date, dayBookings, allEmployees) {
     if (shift && shift.periods && shift.periods.length > 0) {
       scheduled.push(emp);
     }
+  }
+
+  for (const emp of allEmployees) {
+    if (emp.id === '__unassigned' || emp.id === COBOSU_ID || emp.active === false || scheduled.some(item => item.id === emp.id)) continue;
+    if (!C.employeePeriods(emp, date, data.schedule).length) scheduled.push(emp);
   }
 
   const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
@@ -315,6 +539,7 @@ function gridHourBounds(dates, bookings) {
 }
 
 function renderTimeGrid(dates, bookings, employees) {
+  const isCobosuView = activeBrandView() === 'COBOSU';
   const selected = lookup('services',state.service), duration = selected.duration || 30;
   const { startHour, endHour } = gridHourBounds(dates, bookings);
   const totalHours = endHour - startHour;
@@ -350,7 +575,7 @@ function renderTimeGrid(dates, bookings, employees) {
       <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
       <strong>${C.parseDate(d.date).getDate()}</strong>
       <span>${prettyDate(d.date, { month: 'short' })}</span>
-      ${!sunday && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">＋</button>` : ''}
+      ${!sunday && !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">+</button>` : ''}
     </div>`;
   });
 
@@ -359,7 +584,7 @@ function renderTimeGrid(dates, bookings, employees) {
     const hasNextDay = dayIdx < dateLayouts.length - 1;
     if (d.dayEmps.length === 0) {
       html += `<div class="employee-heading empty-day-heading ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" style="grid-column:${d.startCol};grid-row:2">
-        ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-pill-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : '<span style="color:var(--muted);font-size:10px;">Sin turnos</span>'}
+        ${!isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-pill-btn" data-add-trainer-date="${d.date}">+ Añadir entrenador</button>` : '<span style="color:var(--muted);font-size:10px;">Sin turnos</span>'}
       </div>`;
     } else {
       d.dayEmps.forEach((employee, j) => {
@@ -367,10 +592,10 @@ function renderTimeGrid(dates, bookings, employees) {
         const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
         const periods = isParking ? [{ open: '00:00', close: '23:59' }] : isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = isParking ? 'Arrastrar a L–S' : isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Libre'));
+        const shiftText = isParking ? 'Arrastrar a L–S' : isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Sin turno'));
         const isOff = !isParking && !periods.length && employee.id !== '__unassigned';
-        const isEditable = serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
-        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        const isEditable = !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
           <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
@@ -387,7 +612,7 @@ function renderTimeGrid(dates, bookings, employees) {
       html += `<div class="time-column empty-day-column ${d.date === todayKey() ? 'is-today' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" style="grid-column:${d.startCol};grid-row:3;height:${gridHeight}px">
         <div class="empty-day-placeholder">
           <span>Sin turnos planificados</span>
-          ${serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="button secondary small-btn" data-add-trainer-date="${d.date}">＋ Añadir entrenador</button>` : ''}
+          ${!isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="button secondary small-btn" data-add-trainer-date="${d.date}">+ Añadir entrenador</button>` : ''}
         </div>
       </div>`;
     } else {
@@ -395,7 +620,8 @@ function renderTimeGrid(dates, bookings, employees) {
         const isCobosu = employee.id === COBOSU_ID;
         const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        const isOff = !isParking && employee.id !== '__unassigned' && (isCobosu ? C.hoursFor(d.date, data.schedule).closed : C.employeePeriods(employee, d.date, data.schedule).length === 0);
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
         const absent = !isCobosu && !isParking && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
         const serviceWorker = isCobosu || isParking || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
@@ -418,7 +644,7 @@ function renderTimeGrid(dates, bookings, employees) {
               const dur = Math.max(15, C.minutes(b.end) - C.minutes(b.start));
               const isDraggable = canDragBooking(b);
               const color = serviceObj.color || '#317b9b';
-              html += `<button class="event sunday-parking-card ${b.status} unassigned" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceObj.name)}<br>Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+              html += `<button class="event sunday-parking-card ${b.status} unassigned ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceObj.name)}</div><div class="event-meta">Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
             });
           }
           html += '</div>';
@@ -435,7 +661,7 @@ function renderTimeGrid(dates, bookings, employees) {
             const clientName = lookup('clients', b.clientId).name;
             const serviceName = lookup('services', b.serviceId).name;
             const isDraggable = canDragBooking(b);
-            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-meta">${escapeHTML(serviceName)}<br>${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceName)}</div><div class="event-meta">${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
           });
         }
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
@@ -462,7 +688,7 @@ function renderMonth(bookings) {
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
       const color = b.employeeId === COBOSU_ID ? '#dc2626' : (lookup('services', b.serviceId).color || '#317b9b');
       const isDraggable = canDragBooking(b);
-      return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''}" data-booking="${b.id}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
+      return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
   });
   return `${html}</div></div>`;
@@ -470,10 +696,15 @@ function renderMonth(bookings) {
 
 function render(updatePeriodTitle = false) {
   lookupIndexes.clear();
+  refreshBookingSessionLabels();
+  updateCalendarBrand();
   const dates = visibleDates();
   const bookings = visibleBookings();
-  let employees = state.employee === 'all' ? data.employees.filter(e => e.active !== false) : data.employees.filter(e => e.id === state.employee);
-  if(serverMode&&currentUser?.role!=='TRAINER'&&['all','__unassigned'].includes(state.employee))employees=[...employees,{id:'__unassigned',name:'Sin asignar',color:'#b86b00',schedule:data.schedule}];
+  const isCobosu = activeBrandView() === 'COBOSU';
+  let employees = isCobosu
+    ? [cobosuColumn()]
+    : (state.employee === 'all' ? data.employees.filter(e => e.active !== false) : data.employees.filter(e => e.id === state.employee));
+  if(!isCobosu && serverMode&&currentUser?.role!=='TRAINER'&&['all','__unassigned'].includes(state.employee))employees=[...employees,{id:'__unassigned',name:'Sin asignar',color:'#b86b00',schedule:data.schedule}];
   const queues=data.bookings.filter(b=>!b.employeeId&&['pending','confirmed'].includes(b.status));
   const reschedules=data.bookings.filter(b=>b.needsReschedule);
   $('planning-banner')?.classList.toggle('has-alerts', (queues.length + reschedules.length) > 0);
@@ -482,6 +713,7 @@ function render(updatePeriodTitle = false) {
   $('clear-filters').hidden=['employee','service'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
+  renderCalendarClientSearch();
   checkRepeatWeekButton();
   document.querySelectorAll('[data-view]').forEach(button => {
     const active = button.dataset.view === state.view;
@@ -497,15 +729,16 @@ function updateClientFields() {
   $('client-name').required = isNew;
   ['client-name','client-email','client-phone'].forEach(id => { $(id).disabled = !isNew; });
   $('view-client').hidden = isNew;
-  $('add-client').textContent = isNew ? '← Elegir un cliente existente' : '＋ Añadir nuevo cliente';
+  $('add-client').textContent = isNew ? '← Elegir un cliente existente' : '+ Añadir nuevo cliente';
   if (isNew) { $('client-search').value = ''; $('client-results').hidden = true; }
 }
 function availableClients() {
   return (serverMode && awsClientsLoaded ? awsClients : data.clients).filter(client => (client.status || 'ACTIVE') === 'ACTIVE');
 }
 function isDualService(serviceId = $('booking-service')?.value) {
+  if (!serviceId) return false;
   const srv = lookup('services', serviceId);
-  return srv?.modality === 'DUAL' || Number(srv?.capacity || 1) >= 2;
+  return Boolean(srv && (srv.modality === 'DUAL' || Number(srv?.capacity || 1) >= 2 || (srv?.name && /dual/i.test(srv.name))));
 }
 function renderClientResultsList(searchEl, resultsEl, attrName, excludeClientId = '') {
   const query = searchEl.value.trim().toLocaleLowerCase('es');
@@ -615,6 +848,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
   $('booking-form').reset();
   $('booking-error').hidden = true;
+  $('reschedule-panel').hidden = true;
   state.editing = id || null;
   const b = id ? data.bookings.find(item => item.id === id) : null;
   const partner = b?.sessionId ? data.bookings.find(item => item.id !== b.id && item.sessionId === b.sessionId && item.status !== 'cancelled') : null;
@@ -628,20 +862,36 @@ function showBooking(id, date = state.date, minute, employeeId) {
   if ($('dual-booking-client')) {
     fillSelect('dual-booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===partner?.clientId), '');
   }
-  const activeServicesForModal = data.services.filter(s=>s.active!==false||s.id===b?.serviceId);
+  const activeServicesForModal = sortedServices(data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
   fillSelect('booking-service', activeServicesForModal);
   if ($('no-package-service')) fillSelect('no-package-service', activeServicesForModal);
-  fillSelect('booking-employee', data.employees.filter(e=>e.active!==false||e.id===b?.employeeId), '<option value="__cobosu">Cobosu</option>' + (serverMode?'<option value="">Sin asignar</option>':''));
-  $('booking-client').insertAdjacentHTML('beforeend','<option value="new">＋ Añadir nuevo cliente</option>');
+  const isCobosuView = activeBrandView() === 'COBOSU';
+  const bookingEmployees = isCobosuView
+    ? [cobosuColumn()]
+    : data.employees.filter(e => e.id !== COBOSU_ID && (e.active !== false || e.id === b?.employeeId));
+  const bookingEmpOptions = (isCobosuView ? '<option value="__cobosu">Cobosu</option>' : '') + (serverMode ? '<option value="">Sin asignar</option>' : '');
+  fillSelect('booking-employee', bookingEmployees, bookingEmpOptions);
+  $('booking-client').insertAdjacentHTML('beforeend','<option value="new">+ Añadir nuevo cliente</option>');
   const hours = C.hoursFor(date, data.schedule);
   const sunday = isSunday(date);
   const start = minute ?? (sunday ? 540 : C.minutes(hours.open));
   const selectedService = data.services.find(s => s.id === state.service && s.active !== false);
-  const service = selectedService || data.services.find(s => s.active !== false) || data.services[0];
+  const service = selectedService || sortedServices(data.services.filter(s => s.active !== false))[0] || data.services[0];
   const duration = service.duration || 60;
-  const defaultEmp = (sunday || employeeId === '__unassigned') ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false).id : state.employee));
+  const defaultEmp = isCobosuView
+    ? COBOSU_ID
+    : ((sunday || employeeId === '__unassigned') ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false)?.id : state.employee)));
   const values = b || {clientId:'',employeeId:defaultEmp,serviceId:service.id,date,start:C.timeLabel(start),end:C.timeLabel(sunday ? Math.min(start+duration, 1410) : Math.min(start+duration,C.minutes(hours.close))),status:defaultEmp ? 'confirmed' : 'pending',notes:''};
+  if (isCobosuView && !values.employeeId) values.employeeId = COBOSU_ID;
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',date:'date',start:'start',end:'end',status:'status'})) $('booking-'+field).value = values[key] || '';
+  $('reschedule-date').value = values.date;
+  $('reschedule-start').value = values.start;
+  const detailService = lookup('services', values.serviceId);
+  const sessionText = b ? sessionDetail(b) : '';
+  $('booking-training-detail').hidden = !detailService?.name;
+  $('booking-training-detail').innerHTML = detailService?.name
+    ? `<strong>${escapeHTML(detailService.name)}</strong><span>${detailService.modality === 'DUAL' || Number(detailService.capacity || 1) >= 2 ? 'Entrenamiento dual' : 'Entrenamiento individual'}${sessionText ? ` · ${escapeHTML(sessionText)}` : ''}</span>`
+    : '';
   if ($('no-package-service')) $('no-package-service').value = values.serviceId || '';
   if ($('dual-booking-client')) $('dual-booking-client').value = partner?.clientId || '';
   const defaultDualMode = document.querySelector('input[name="dual-pkg-mode"][value="none"]');
@@ -672,15 +922,22 @@ function showBooking(id, date = state.date, minute, employeeId) {
   updateDebtDetail();
   updateRenewalDetail();
   $('booking-end').readOnly=serverMode;
+  const isCobosuBooking = isCobosuView || values.employeeId === COBOSU_ID;
+  if (isCobosuBooking) {
+    values.employeeId = COBOSU_ID;
+    if ($('booking-employee')) $('booking-employee').value = COBOSU_ID;
+  }
   const assignedEmp = values.employeeId ? lookup('employees', values.employeeId) : null;
   if (b) {
-    $('booking-title').textContent = 'Detalle de la reserva';
+    $('booking-title').textContent = isCobosuBooking ? 'Detalle de reserva · Cobosu (App)' : 'Detalle de la reserva';
   } else {
-    $('booking-title').textContent = (assignedEmp && assignedEmp.id !== '__unassigned') ? `Nueva cita con ${assignedEmp.name}` : 'Nueva reserva';
+    $('booking-title').textContent = isCobosuBooking ? 'Nueva reserva · Cobosu (App)' : ((assignedEmp && assignedEmp.id !== '__unassigned') ? `Nueva cita con ${assignedEmp.name}` : 'Nueva reserva');
   }
 
+  const summaryEmpLabel = $('summary-employee-label');
   const summaryEmp = $('summary-employee-name');
-  if (summaryEmp) summaryEmp.textContent = assignedEmp ? assignedEmp.name : 'Sin asignar';
+  if (summaryEmpLabel) summaryEmpLabel.textContent = isCobosuBooking ? 'Gestión' : 'Entrenador';
+  if (summaryEmp) summaryEmp.textContent = isCobosuBooking ? 'Cobosu (App)' : (assignedEmp ? assignedEmp.name : 'Sin asignar');
   const summaryDt = $('summary-datetime');
   if (summaryDt) summaryDt.textContent = `${prettyDate(values.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${values.start} a ${values.end}`;
   if ($('buy-package-result')) { $('buy-package-result').hidden = true; $('buy-package-result').textContent = ''; }
@@ -690,9 +947,10 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const saveBtn = $('booking-form').querySelector('button[type="submit"]');
   if (saveBtn) saveBtn.hidden = isTrainer;
   if ($('cancel-booking')) $('cancel-booking').hidden = isTrainer || !b || (b.status === 'cancelled'&&!b.needsReschedule);
+  if ($('open-reschedule')) $('open-reschedule').hidden = isTrainer || !b || !['pending', 'confirmed'].includes(b.status);
   if ($('add-client')) $('add-client').hidden = isTrainer;
   if ($('clear-dual-client-search')) $('clear-dual-client-search').hidden = isTrainer;
-  if ($('unassign-booking')) $('unassign-booking').hidden = isTrainer || !b || !b.employeeId;
+  if ($('unassign-booking')) $('unassign-booking').hidden = isTrainer || isCobosuBooking || !b || !b.employeeId;
   $('booking-dialog').querySelectorAll('input, select, textarea').forEach(el => {
     if (el.id !== 'client-search') el.disabled = isTrainer;
   });
@@ -864,7 +1122,7 @@ function updateBuyPackageServices() {
   const select = $('buy-package-service');
   if (!select) return;
   const currentServiceId = $('booking-service')?.value;
-  const activeServices = (data.services || []).filter(s => s.active !== false);
+  const activeServices = sortedServices((data.services || []).filter(s => s.active !== false));
   select.innerHTML = activeServices.map(s => {
     const isSelected = s.id === currentServiceId;
     const priceText = s.price ? `${s.price} €` : '0 €';
@@ -1300,6 +1558,169 @@ $('reschedule-booking').onclick=async()=>{
   if(!state.editingSnapshot||!confirm('¿Dejar pendiente de reprogramación? Se libera el hueco y se conserva el historial.'))return;
   try{await api('bookings/'+encodeURIComponent(state.editing),'PUT',{booking:toServer({...state.editingSnapshot,status:'cancelled',needsReschedule:true,version:state.editingVersion})});$('booking-dialog').close();await refreshServer(true);toast('Reserva pendiente de reprogramación.');}catch(e){formError('booking-error',e.message);}
 };
+let miniCalYear = 0, miniCalMonth = 0;
+
+function initMiniCalendar(targetDate = '') {
+  const baseDate = targetDate || $('reschedule-date')?.value || state.editingSnapshot?.date || todayKey();
+  const parts = (baseDate || '').split('-');
+  if (parts.length === 3) {
+    miniCalYear = parseInt(parts[0], 10);
+    miniCalMonth = parseInt(parts[1], 10) - 1;
+  } else {
+    const now = new Date();
+    miniCalYear = now.getFullYear();
+    miniCalMonth = now.getMonth();
+  }
+  renderMiniCalendar();
+  renderMiniCalTimeChips();
+}
+
+function renderMiniCalendar() {
+  const grid = $('mini-cal-grid');
+  const monthLabel = $('mini-cal-month-label');
+  if (!grid || !monthLabel) return;
+
+  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  monthLabel.textContent = `${monthNames[miniCalMonth]} ${miniCalYear}`;
+
+  const firstDay = new Date(miniCalYear, miniCalMonth, 1);
+  const lastDay = new Date(miniCalYear, miniCalMonth + 1, 0);
+  const totalDays = lastDay.getDate();
+
+  let startDayOfWeek = (firstDay.getDay() + 6) % 7; // Mon = 0 .. Sun = 6
+
+  const currentSelectedDate = $('reschedule-date')?.value || '';
+  const currentBookingDate = state.editingSnapshot?.date || '';
+  const todayStr = todayKey();
+
+  let html = '';
+  const prevMonthLastDay = new Date(miniCalYear, miniCalMonth, 0).getDate();
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const dayNum = prevMonthLastDay - i;
+    const prevM = miniCalMonth === 0 ? 11 : miniCalMonth - 1;
+    const prevY = miniCalMonth === 0 ? miniCalYear - 1 : miniCalYear;
+    const dStr = `${prevY}-${String(prevM + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    html += `<button type="button" class="mini-cal-day is-outside" data-mini-date="${dStr}">${dayNum}</button>`;
+  }
+
+  for (let day = 1; day <= totalDays; day++) {
+    const dStr = `${miniCalYear}-${String(miniCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isSelected = dStr === currentSelectedDate;
+    const isCurrent = dStr === currentBookingDate;
+    const isToday = dStr === todayStr;
+    const classes = [
+      'mini-cal-day',
+      isSelected ? 'is-selected' : '',
+      isCurrent ? 'is-current-booking' : '',
+      isToday ? 'is-today' : ''
+    ].filter(Boolean).join(' ');
+
+    html += `<button type="button" class="${classes}" data-mini-date="${dStr}" title="${isCurrent ? 'Día actual de la cita' : isToday ? 'Hoy' : ''}">${day}</button>`;
+  }
+
+  const filledCells = startDayOfWeek + totalDays;
+  const trailing = filledCells % 7 === 0 ? 0 : 7 - (filledCells % 7);
+  for (let t = 1; t <= trailing; t++) {
+    const nextM = miniCalMonth === 11 ? 0 : miniCalMonth + 1;
+    const nextY = miniCalMonth === 11 ? miniCalYear + 1 : miniCalYear;
+    const dStr = `${nextY}-${String(nextM + 1).padStart(2, '0')}-${String(t).padStart(2, '0')}`;
+    html += `<button type="button" class="mini-cal-day is-outside" data-mini-date="${dStr}">${t}</button>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function renderMiniCalTimeChips() {
+  const container = $('mini-cal-time-chips');
+  if (!container) return;
+  const selectedTime = $('reschedule-start')?.value || state.editingSnapshot?.start || '09:00';
+  
+  const times = [];
+  for (let h = 7; h <= 21; h++) {
+    for (const m of [0, 30]) {
+      if (h === 21 && m > 30) continue;
+      times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    }
+  }
+
+  container.innerHTML = times.map(time => {
+    const isSel = time === selectedTime;
+    return `<button type="button" class="mini-cal-chip ${isSel ? 'is-selected' : ''}" data-mini-time="${time}">${time}</button>`;
+  }).join('');
+}
+
+if ($('mini-cal-prev')) {
+  $('mini-cal-prev').addEventListener('click', () => {
+    miniCalMonth--;
+    if (miniCalMonth < 0) { miniCalMonth = 11; miniCalYear--; }
+    renderMiniCalendar();
+  });
+}
+if ($('mini-cal-next')) {
+  $('mini-cal-next').addEventListener('click', () => {
+    miniCalMonth++;
+    if (miniCalMonth > 11) { miniCalMonth = 0; miniCalYear++; }
+    renderMiniCalendar();
+  });
+}
+if ($('mini-cal-grid')) {
+  $('mini-cal-grid').addEventListener('click', e => {
+    const btn = e.target.closest('[data-mini-date]');
+    if (!btn) return;
+    $('reschedule-date').value = btn.dataset.miniDate;
+    const parts = btn.dataset.miniDate.split('-');
+    miniCalYear = parseInt(parts[0], 10);
+    miniCalMonth = parseInt(parts[1], 10) - 1;
+    renderMiniCalendar();
+  });
+}
+if ($('mini-cal-time-chips')) {
+  $('mini-cal-time-chips').addEventListener('click', e => {
+    const btn = e.target.closest('[data-mini-time]');
+    if (!btn) return;
+    $('reschedule-start').value = btn.dataset.miniTime;
+    renderMiniCalTimeChips();
+  });
+}
+if ($('cancel-reschedule')) {
+  $('cancel-reschedule').addEventListener('click', () => {
+    $('reschedule-panel').hidden = true;
+  });
+}
+if ($('reschedule-date')) {
+  $('reschedule-date').addEventListener('change', () => {
+    initMiniCalendar($('reschedule-date').value);
+  });
+}
+if ($('reschedule-start')) {
+  $('reschedule-start').addEventListener('change', () => {
+    renderMiniCalTimeChips();
+  });
+}
+
+if ($('open-reschedule')) {
+  $('open-reschedule').addEventListener('click', () => {
+    $('booking-error').hidden = true;
+    $('reschedule-date').value = state.editingSnapshot?.date || $('booking-date').value;
+    $('reschedule-start').value = state.editingSnapshot?.start || $('booking-start').value;
+    $('reschedule-panel').hidden = false;
+    initMiniCalendar($('reschedule-date').value);
+    $('reschedule-date').focus();
+  });
+  $('apply-reschedule').addEventListener('click', () => {
+    if (!$('reschedule-date').value || !$('reschedule-start').value) {
+      formError('booking-error', 'Selecciona el nuevo día y la hora.');
+      return;
+    }
+    $('booking-date').value = $('reschedule-date').value;
+    $('booking-start').value = $('reschedule-start').value;
+    const srv = lookup('services', $('booking-service').value);
+    const dur = srv?.duration || 60;
+    const startMin = C.minutes($('booking-start').value);
+    $('booking-end').value = C.timeLabel(Math.min(startMin + dur, 1439));
+    $('booking-form').requestSubmit();
+  });
+}
 if ($('defer-booking')) {
   $('defer-booking').onclick = async () => {
     if (!state.editingSnapshot || !confirm('¿Dejar esta sesión pendiente de recuperar? Se liberará el hueco y se generará un crédito de recuperación.')) return;
@@ -1394,7 +1815,7 @@ $('schedule-form').addEventListener('submit',async event => {
 function checkRepeatWeekButton() {
   const btn = $('repeat-week-btn');
   if (!btn) return;
-  if (!serverMode || currentUser?.role === 'TRAINER' || state.view !== 'week') {
+  if (!serverMode || currentUser?.role === 'TRAINER' || state.view !== 'week' || activeBrandView() === 'COBOSU') {
     btn.hidden = true;
     return;
   }
@@ -1407,12 +1828,12 @@ function checkRepeatWeekButton() {
   const isEmpty = !hasBookings && !hasCustomShifts;
   if (isEmpty) {
     btn.classList.add('is-empty-week');
-    btn.textContent = '⚡ Repetir misma semana anterior';
-    btn.title = 'Esta semana está vacía. Clic para clonar la planificación de turnos de la semana anterior.';
+    btn.textContent = '⚡ Repetir misma semana anterior (solo turnos)';
+    btn.title = 'Esta semana está vacía. Clic para clonar exclusivamente la planificación de turnos del equipo de la semana anterior (sin reservas de clientes).';
   } else {
     btn.classList.remove('is-empty-week');
-    btn.textContent = '🔄 Repetir semana anterior';
-    btn.title = 'Clonar la planificación de turnos de la semana anterior a esta semana.';
+    btn.textContent = '🔄 Repetir semana anterior (solo turnos)';
+    btn.title = 'Clonar exclusivamente los turnos de trabajo del equipo de la semana anterior a esta semana, sin arrastrar reservas de clientes.';
   }
 }
 
@@ -1432,13 +1853,13 @@ if ($('repeat-week-btn')) {
       return;
     }
 
-    if (!confirm(`¿Copiar la planificación de turnos de la semana anterior (${prevRange}) a esta semana (${curRange})?`)) return;
+    if (!confirm(`¿Copiar exclusivamente los turnos del equipo de la semana anterior (${prevRange}) a esta semana (${curRange})?\n\n✔ Clona los turnos y horarios de los entrenadores.\n✖ NO se arrastrarán citas ni reservas de clientes.`)) return;
 
     try {
       $('repeat-week-btn').disabled = true;
       await api('calendar/shifts/copy-week', 'POST', { fromMonday: prevMonday, toMonday: monday });
       await refreshServer(true);
-      toast('Planificación de turnos copiada de la semana anterior.');
+      toast('Turnos del equipo clonados correctamente desde la semana anterior (sin reservas de clientes).');
     } catch (err) {
       toast('No se pudo copiar la semana: ' + err.message);
     } finally {
@@ -1448,7 +1869,7 @@ if ($('repeat-week-btn')) {
 }
 
 function openShiftEditor(employeeId, date) {
-  if (currentUser?.role === 'TRAINER') return;
+  if (currentUser?.role === 'TRAINER' || activeBrandView() === 'COBOSU') return;
   $('shift-error').hidden = true;
   $('shift-date').value = date;
 
@@ -1604,8 +2025,62 @@ if ($('shift-delete-btn')) {
 
 document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click',() => $(button.dataset.close).close()));
 document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => {state.view = button.dataset.view;render(true);}));
+document.querySelectorAll('[data-brand-tab]').forEach(tab => tab.addEventListener('click', () => setBrandView(tab.dataset.brandTab)));
 for (const [id,key] of [['employee-filter','employee'],['service-filter','service']]) $(id).addEventListener('change',event => {state[key] = event.target.value;render();});
-$('clear-filters').addEventListener('click',() => { for (const key of ['employee','service']) {state[key] = 'all';$(key+'-filter').value='all';} render(); });
+$('clear-filters').addEventListener('click',() => {
+  state.calendarClientId = null;
+  if ($('calendar-client-search')) $('calendar-client-search').value = '';
+  if ($('calendar-client-results')) $('calendar-client-results').hidden = true;
+  if ($('clear-calendar-client-search')) $('clear-calendar-client-search').hidden = true;
+  for (const key of ['employee','service']) { state[key] = 'all'; $(key+'-filter').value='all'; }
+  render();
+});
+$('calendar-client-search').addEventListener('input', () => {
+  const wasFilteringClient = Boolean(state.calendarClientId);
+  state.calendarClientId = null;
+  if (wasFilteringClient) render();
+  else renderCalendarClientSearch();
+});
+$('calendar-client-search').addEventListener('focus', renderCalendarClientSearch);
+if ($('clear-calendar-client-search')) {
+  $('clear-calendar-client-search').addEventListener('click', () => {
+    state.calendarClientId = null;
+    $('calendar-client-search').value = '';
+    $('calendar-client-results').hidden = true;
+    $('clear-calendar-client-search').hidden = true;
+    render();
+  });
+}
+$('calendar-client-results').addEventListener('click', event => {
+  const clientOption = event.target.closest('[data-calendar-client]');
+  if (clientOption) {
+    state.calendarClientId = clientOption.dataset.calendarClient;
+    $('calendar-client-search').value = (availableClients().find(client => client.id === state.calendarClientId) || lookup('clients', state.calendarClientId)).name;
+    if ($('clear-calendar-client-search')) $('clear-calendar-client-search').hidden = false;
+    state.employee = currentUser?.role === 'TRAINER' ? currentUser.employeeId : 'all';
+    state.service = 'all';
+    $('employee-filter').value = state.employee;
+    $('service-filter').value = 'all';
+    render();
+    renderCalendarClientSearch();
+    return;
+  }
+  const bookingOption = event.target.closest('[data-calendar-booking]');
+  if (!bookingOption) return;
+  const booking = data.bookings.find(item => item.id === bookingOption.dataset.calendarBooking);
+  if (!booking) return;
+  state.date = booking.date;
+  state.view = 'day';
+  state.employee = currentUser?.role === 'TRAINER' ? currentUser.employeeId : 'all';
+  state.service = 'all';
+  $('employee-filter').value = state.employee;
+  $('service-filter').value = 'all';
+  render(true);
+  showBooking(booking.id);
+});
+document.addEventListener('click', event => {
+  if (!event.target.closest('.calendar-client-search-wrap')) $('calendar-client-results').hidden = true;
+});
 $('new-booking').addEventListener('click',() => showBooking(null));
 $('today').addEventListener('click',() => {state.date=todayKey();render(true);});
 $('jump-date').addEventListener('change',event => {if(C.validDate(event.target.value)){state.date=event.target.value;render(true);}});
@@ -1620,12 +2095,14 @@ $('calendar').addEventListener('click',event => {
   if (Date.now() < suppressClickUntil) return;
   const addTrainerBtn = event.target.closest('[data-add-trainer-date]');
   if (addTrainerBtn) {
+    if (activeBrandView() === 'COBOSU') return;
     event.stopPropagation();
     openShiftEditor(null, addTrainerBtn.dataset.addTrainerDate);
     return;
   }
   const empHeading = event.target.closest('[data-shift-employee]');
   if (empHeading) {
+    if (activeBrandView() === 'COBOSU') return;
     event.stopPropagation();
     openShiftEditor(empHeading.dataset.shiftEmployee, empHeading.dataset.shiftDate);
     return;

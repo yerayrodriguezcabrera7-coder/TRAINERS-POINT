@@ -6,6 +6,214 @@
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s,box-shadow .15s}.toast{animation:appear .2s ease-out}@keyframes appear{from{opacity:0;bottom:16px}to{opacity:1;bottom:26px}}}
 .client-picker-field{display:flex;flex-direction:column;gap:7px}.field-label{font-size:11px;font-weight:600;color:#667f8b}.client-picker{position:relative}.client-picker input{padding-right:38px}.client-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#84959d;font-size:19px;line-height:1;padding:4px 7px}.client-search-clear:hover{color:#d85c47}.client-results{display:flex;flex-direction:column;gap:5px;max-height:190px;overflow:auto;padding:5px;border:1px solid #dce4e9;border-radius:8px;background:#fbfcfd}.client-result{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:9px 11px;border:1px solid transparent;border-radius:6px;background:#fff;text-align:left}.client-result:hover,.client-result:focus-visible{border-color:#f0b2a5;background:#fff5f2}.client-result strong{font-size:12px;color:#29434f}.client-result span{font-size:10px;color:#8799a2;overflow:hidden;text-overflow:ellipsis;max-width:100%}.client-results-empty{margin:8px 6px;color:#8799a2;font-size:11px}.client-add-button{align-self:flex-start;padding:8px 12px;min-height:34px;font-size:11px}
 
+/* Entrenadores sin turno en gris oscuro */
+.employee-heading.is-off {
+  background: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #0f172a !important;
+}
+.employee-heading.is-off .employee-heading-name {
+  color: #94a3b8 !important;
+  font-weight: 650;
+}
+.employee-heading.is-off .employee-dot {
+  background: #64748b !important;
+}
+.employee-heading.is-off .employee-shift-tag,
+.employee-heading.is-off .employee-shift-tag.is-off {
+  background: #334155 !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #475569 !important;
+  font-weight: 600;
+}
+.time-column.is-off {
+  background: #1e293b !important;
+  border-left-color: #0f172a !important;
+  border-right-color: #0f172a !important;
+}
+.time-column.is-off .time-slot,
+.time-column.is-off .time-slot.closed {
+  background: repeating-linear-gradient(
+    135deg,
+    #1e293b,
+    #1e293b 8px,
+    #17202e 8px,
+    #17202e 9px
+  ) !important;
+  border-bottom-color: #273549 !important;
+  cursor: not-allowed !important;
+}
+.time-column.is-off .time-slot:nth-child(even),
+.time-column.is-off .time-slot.closed:nth-child(even) {
+  border-bottom-color: #222e40 !important;
+}
+.employee-heading.empty-day-heading {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+}
+.time-column.empty-day-column {
+  background: #1e293b !important;
+}
+
+/* Diferenciación visual Cobosu vs Trainers Point */
+.calendar-brand-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #edf2f5;
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d8e2e7;
+}
+.brand-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #556973;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.brand-tab:hover {
+  color: #172a32;
+  background: rgba(255, 255, 255, 0.7);
+}
+.brand-tab.active {
+  background: #fff;
+  color: #172a32;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  font-weight: 750;
+  border-color: #cbd5e1;
+}
+.brand-tab.active[data-brand-tab="TRAINERS_POINT"] {
+  border-color: #fbd5ce;
+  color: #eb5a46;
+  box-shadow: 0 2px 8px rgba(235, 90, 70, 0.12);
+}
+.brand-tab.active[data-brand-tab="COBOSU"] {
+  border-color: #fca5a5;
+  color: #dc2626;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.12);
+}
+.brand-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 850;
+  background: #eb5a46;
+  color: #fff;
+}
+.brand-tab-badge.cobosu {
+  background: #dc2626;
+  color: #fff;
+}
+
+body[data-calendar-brand="cobosu"] .calendar-panel {
+  border-top: 4px solid #dc2626;
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.08);
+}
+body[data-calendar-brand="cobosu"] .today-button {
+  border-color: #fca5a5;
+  color: #991b1b;
+  background: #fef2f2;
+}
+body[data-calendar-brand="cobosu"] .today-button:hover {
+  background: #fee2e2;
+}
+body[data-calendar-brand="cobosu"] .view-switch .selected {
+  color: #991b1b;
+  border-bottom: 2px solid #dc2626;
+}
+body[data-calendar-brand="cobosu"] .month-cell.today .month-date {
+  background: #dc2626;
+}
+/* En Cobosu NO hay gestión de entrenadores: el calendario funciona con la App */
+body[data-calendar-brand="cobosu"] #employee-filter-wrap,
+body[data-calendar-brand="cobosu"] .add-trainer-day-btn,
+body[data-calendar-brand="cobosu"] .add-trainer-pill-btn,
+body[data-calendar-brand="cobosu"] #repeat-week-btn {
+  display: none !important;
+}
+body[data-calendar-brand="trainers-point"] .calendar-panel {
+  border-top: 4px solid #eb5a46;
+}
+
+.calendar-brand-label{font-weight:800}.eyebrow #calendar-brand-label{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;background:#e0f2fe;color:#0369a1;font-weight:750;border:1px solid #bae6fd;letter-spacing:0.5px}.eyebrow #calendar-brand-label[data-brand="cobosu"]{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
+.calendar-brand-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase}.calendar-brand-badge.brand-cobosu{background:#fee2e2;color:#991b1b;border:1px solid #f87171}.calendar-brand-badge.brand-tp{background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4}
+
+/* Buscador de clientes */
+.calendar-client-search-wrap{position:relative}
+.calendar-client-input-wrap{position:relative;display:inline-flex;align-items:center}
+.calendar-client-input-wrap input{min-width:200px;max-width:260px;border:1px solid #e0e7e9;background:#fff;padding:8px 30px 8px 10px;border-radius:6px;font-size:11px;color:#425c67}
+.calendar-client-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1}
+.calendar-client-clear:hover{color:#ef4444}
+.calendar-client-results{position:absolute;top:calc(100% + 6px);left:0;z-index:25;display:flex;flex-direction:column;gap:4px;min-width:280px;max-width:min(380px,90vw);max-height:320px;overflow:auto;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,0.16)}
+.calendar-client-option{display:flex;flex-direction:column;gap:3px;width:100%;padding:8px 10px;border:0;border-radius:6px;background:#fff;text-align:left;font-size:11px;color:#29434f;cursor:pointer;transition:background .12s}
+.calendar-client-option:hover,.calendar-client-option:focus-visible{background:#f1f5f7}
+.calendar-appt-time{display:flex;align-items:baseline;gap:6px;font-size:11px}
+.calendar-appt-time strong{color:#0f172a}
+.calendar-appt-time span{color:#0284c7;font-weight:600}
+.calendar-appointment-option small{font-size:10px;color:#64748b}
+.calendar-client-result-heading{padding:6px 8px;font-size:11px;color:#0f172a;font-weight:700;border-bottom:1px solid #e2e8f0;margin-bottom:3px}
+.calendar-client-empty{margin:6px 8px;font-size:11px;color:#64748b}
+
+.client-search-match{outline:3px solid #0284c7!important;outline-offset:-1px;z-index:6!important;filter:none!important;box-shadow:0 0 0 4px rgba(2,132,199,0.25)!important}
+.client-search-muted{opacity:.22!important;filter:grayscale(.85)}
+
+/* Dual badges and session badges */
+.booking-dual-badge{display:inline-flex;align-items:center;gap:4px;width:max-content;max-width:100%;padding:3px 6px;margin:0 3px 3px 0;border-radius:5px;font-size:9px;font-weight:800;line-height:1.2;white-space:normal}
+.booking-dual-badge .dual-icon{font-size:11px}
+.booking-dual-badge.is-missing{background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;box-shadow:0 1px 3px rgba(245,158,11,0.2)}
+.booking-dual-badge.is-complete{background:#dcfce7;color:#166534;border:1.5px solid #22c55e}
+.booking-session-badge{display:inline-flex;align-items:center;gap:3px;width:max-content;max-width:100%;padding:2px 6px;margin:0 2px 3px 0;border-radius:4px;font-size:8.5px;font-weight:800;line-height:1.2;background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc;white-space:normal}
+.booking-session-badge.is-recovery{background:#f3e8ff;color:#6b21a8;border-color:#d8b4fe}
+.month-event .booking-dual-badge,.month-event .booking-session-badge{white-space:normal}
+
+/* Training type and details on appointment */
+.event-training-type{font-size:10px;font-weight:750;color:rgba(15,23,42,0.9);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.booking-training-detail{display:flex;flex-direction:column;gap:2px;padding:12px 14px;margin:0 0 12px;border-left:3px solid #638391;border-radius:5px;background:#f1f5f7;color:#29434f;font-size:12px}.booking-training-detail span{font-size:11px;color:#657b86}
+
+/* Mini-calendario para reagendar */
+.reschedule-panel{display:flex;flex-direction:column;gap:12px;padding:16px;margin:14px 0;border:1.5px solid #38bdf8;border-radius:12px;background:#f0f9ff;box-shadow:0 6px 18px rgba(14,165,233,0.08)}
+.reschedule-panel-header{display:flex;justify-content:space-between;align-items:center}
+.reschedule-panel-header strong{font-size:13px;color:#0369a1;display:flex;align-items:center;gap:6px}
+.reschedule-close-btn{border:0;background:#e0f2fe;color:#0284c7;border-radius:50%;width:26px;height:26px;font-size:18px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.reschedule-close-btn:hover{background:#bae6fd;color:#0369a1}
+.reschedule-subtitle{font-size:11px;color:#475569;margin:0}
+.mini-calendar-widget{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px;box-shadow:0 2px 6px rgba(0,0,0,0.03)}
+.mini-cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.mini-cal-nav strong{font-size:12px;color:#1e293b;text-transform:capitalize}
+.mini-cal-btn{border:1px solid #cbd5e1;background:#f8fafc;color:#334155;border-radius:6px;width:28px;height:28px;font-size:16px;display:grid;place-items:center;cursor:pointer}
+.mini-cal-btn:hover{background:#e2e8f0}
+.mini-cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10px;font-weight:700;color:#64748b;padding-bottom:6px;border-bottom:1px solid #f1f5f9}
+.mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:6px}
+.mini-cal-day{border:1px solid transparent;background:#fff;color:#1e293b;border-radius:6px;padding:6px 2px;font-size:11px;font-weight:600;text-align:center;cursor:pointer;transition:all 0.12s}
+.mini-cal-day:hover:not(:disabled){background:#e0f2fe;color:#0369a1}
+.mini-cal-day.is-outside{color:#cbd5e1;background:#fafafa}
+.mini-cal-day.is-today{border-color:#0284c7;font-weight:800}
+.mini-cal-day.is-current-booking{background:#f1f5f9;color:#475569;text-decoration:underline}
+.mini-cal-day.is-selected{background:#0284c7!important;color:#fff!important;font-weight:800;box-shadow:0 2px 6px rgba(2,132,199,0.35)}
+.mini-cal-time-section{display:flex;flex-direction:column;gap:6px}
+.mini-cal-time-heading{font-size:11px;font-weight:700;color:#334155}
+.mini-cal-time-chips{display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:4px;background:#fff;border:1px solid #e2e8f0;border-radius:8px}
+.mini-cal-chip{border:1px solid #cbd5e1;background:#f8fafc;color:#334155;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.1s}
+.mini-cal-chip:hover{background:#e0f2fe;border-color:#38bdf8;color:#0369a1}
+.mini-cal-chip.is-selected{background:#0284c7;border-color:#0284c7;color:#fff;font-weight:700;box-shadow:0 2px 4px rgba(2,132,199,0.25)}
+.reschedule-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.reschedule-fields label{display:flex;flex-direction:column;gap:4px;font-size:10px;font-weight:700;color:#475569}
+.reschedule-fields input{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:12px}
+.reschedule-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+@media(max-width:760px){.calendar-client-input-wrap input{min-width:0;max-width:none;width:100%}.calendar-client-results{min-width:min(270px,80vw)}.reschedule-fields{grid-template-columns:1fr 1fr}}
 .status-no_show{background:#e9e2f5;border-color:#8b65aa;color:#54376b}
 
 .planning-alerts{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}.planning-alerts a{padding:14px 20px;border:1px solid #bd7c19;border-radius:8px;background:#fff3d5;color:#65450c;font-weight:700}.planning-alerts a[hidden]{display:none}.event.unassigned{outline:2px dashed #bd7c19;outline-offset:-2px}#booking-history{font-size:12px;color:#58656b;max-height:180px;overflow:auto}

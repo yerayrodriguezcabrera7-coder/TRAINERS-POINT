@@ -33,8 +33,12 @@ const booking=(client=client1,employee=people[1],extra={})=>({clientId:client.id
 test('Integración: planificar y repetir semana persiste la plantilla compartida y protege citas de otras sedes',async()=>{
  await store.updateEmployeeShift(B.id,people[1].id,'2031-07-07',[{open:'09:00',close:'12:00'}]);
  assert.deepEqual((await store.state(A.id)).employees.find(e=>e.id===people[1].id).shifts.find(s=>s.date==='2031-07-07').periods,[{open:'09:00',close:'12:00'}]);
+ const existingBooking=await store.save(A.id,booking(client1,people[1],{date:'2031-07-14'}));
  await store.copyWeekShifts(C.id,'2031-07-07','2031-07-14');
- await store.save(A.id,booking(client1,people[1],{date:'2031-07-14'}));
+ assert.equal((await store.state(A.id)).bookings.filter(item=>item.id===existingBooking.id).length,1);
+ const copiedState=await store.state(C.id);
+ assert.equal(copiedState.centers.find(center=>center.id===C.id).brand,'COBOSU');
+ assert.equal(copiedState.bookings.filter(item=>item.date==='2031-07-14').length,0);
  await assert.rejects(store.updateEmployeeShift(C.id,people[1].id,'2031-07-14',[{open:'15:00',close:'18:00'}]),/horario|turno/);
  await store.updateEmployeeShift(B.id,people[1].id,'2031-07-07',[{open:'15:00',close:'18:00'}]);
  await assert.rejects(store.copyWeekShifts(C.id,'2031-07-07','2031-07-14'),/horario|turno/);
@@ -62,6 +66,8 @@ test('Red: una recuperación TP se usa una vez desde otra sede y conserva el bon
  const recovered=attempts.find(r=>r.status==='fulfilled').value;
  assert.equal(recovered.chargeAmount,0);assert.equal(recovered.paymentDue,false);
  assert.equal((await db.booking.findUnique({where:{id:recovered.id}})).packageId,pkg.id);
+ const calendarBooking=(await store.state(B.id)).bookings.find(b=>b.id===recovered.id);
+ assert.equal(calendarBooking.packageSessionNumber,1);assert.equal(calendarBooking.packageSessionTotal,1);
  assert.equal((await store.recoveries(B.id)).find(r=>r.id===credit.id).status,'SCHEDULED');
 });
 

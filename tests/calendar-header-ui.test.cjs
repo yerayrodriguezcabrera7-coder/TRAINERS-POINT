@@ -24,9 +24,12 @@ test('Calendario: sin tarjetas de resumen ni barra de estado, con navegación, f
     timezone: 'Europe/Madrid',
     packagesEnabled: false,
     schedule: Array.from({ length: 7 }, () => ({ closed: false, open: '07:00', close: '22:00' })),
-    gyms: [{ id: gymId, name: 'Centro Principal' }],
+    centers: [{ id: gymId, name: 'Cobosu Bilbao', brand: 'COBOSU' }],
     rooms: [{ id: 'r1', name: 'Sala 1' }],
-    services: [{ id: serviceId, name: 'Entrenamiento Personal', duration: 60, price: 45, active: true, color: '#2b6cb0' }],
+    services: [
+      { id: serviceId, name: 'Entrenamiento Personal', duration: 60, price: 45, active: true, color: '#2b6cb0', modality: 'INDIVIDUAL', trainingCount: 4 },
+      { id: 'dual-service', name: 'Entrenamiento Dual', duration: 60, price: 45, active: true, color: '#2b6cb0', modality: 'DUAL', capacity: 2, trainingCount: 4 }
+    ],
     employees: [{
       id: employeeId,
       name: 'Carlos',
@@ -35,7 +38,10 @@ test('Calendario: sin tarjetas de resumen ni barra de estado, con navegación, f
       shifts: Array.from({ length: 7 }, (_, day) => ({ day, open: '08:00', close: '20:00' }))
     }],
     clients: [{ id: clientId, name: 'Lucía Pérez', email: 'lucia@example.com', phone: '600000000' }],
-    bookings: [],
+    bookings: [{
+      id: 'existing-booking', clientId, employeeId, serviceId, packageId: 'test-package',
+      date: today, start: '09:00', end: '10:00', status: 'confirmed', version: 1, centerId: gymId
+    }],
     blocks: []
   };
 
@@ -78,6 +84,13 @@ test('Calendario: sin tarjetas de resumen ni barra de estado, con navegación, f
       const saved = { ...payload, id: payload.id || randomUUID(), version: 1 };
       state.bookings.push(saved);
       result = { booking: saved };
+    } else if (path.startsWith('/api/bookings/') && options.method === 'PUT') {
+      const id = decodeURIComponent(path.slice('/api/bookings/'.length));
+      const payload = JSON.parse(options.body).booking;
+      const index = state.bookings.findIndex(booking => booking.id === id);
+      if (index < 0) throw Error('Reserva desconocida');
+      state.bookings[index] = { ...payload, id, version: state.bookings[index].version + 1 };
+      result = { booking: state.bookings[index] };
     } else if (path.startsWith('/api/slots?')) {
       result = [{ start: '10:00', end: '11:00' }];
     } else if (path.startsWith('/api/recoveries')) {
@@ -93,6 +106,9 @@ test('Calendario: sin tarjetas de resumen ni barra de estado, con navegación, f
     w.eval(fs.readFileSync('web/calendar/app.js', 'utf8'));
 
     await until(() => d.getElementById('period-label')?.textContent.trim().length > 0 && d.querySelectorAll('#employee-filter option').length > 1);
+    assert.match(d.getElementById('calendar-brand-label').textContent, /COBOSU · Cobosu Bilbao/);
+    assert.equal(d.querySelector('#booking-service option').value, 'dual-service');
+    assert.equal(d.querySelector('#service-filter option:nth-child(2)').value, 'dual-service');
 
     // 1. Elementos eliminados
     for (const id of [
@@ -154,8 +170,24 @@ test('Calendario: sin tarjetas de resumen ni barra de estado, con navegación, f
     });
     await until(() => d.getElementById('booking-dialog').open === false);
 
-    assert.equal(state.bookings.length, 1);
-    assert.equal(state.bookings[0].clientId, clientId);
+    assert.equal(state.bookings.length, 2);
+    assert.equal(state.bookings[1].clientId, clientId);
+
+    const calendarSearch = d.getElementById('calendar-client-search');
+    calendarSearch.value = 'Lucía';
+    calendarSearch.dispatchEvent(new w.Event('input', { bubbles: true }));
+    d.querySelector('[data-calendar-client]').click();
+    assert.equal(d.querySelectorAll('[data-calendar-booking]').length, 2);
+    d.querySelector('[data-calendar-booking="existing-booking"]').click();
+    assert.match(d.getElementById('booking-training-detail').textContent, /Entrenamiento individual · Sesión 1\/4/);
+    d.getElementById('open-reschedule').click();
+    assert.equal(d.getElementById('reschedule-panel').hidden, false);
+    const movedDate = w.CalendarCore.addDays(today, 1);
+    d.getElementById('reschedule-date').value = movedDate;
+    d.getElementById('reschedule-start').value = '11:30';
+    d.getElementById('apply-reschedule').click();
+    await until(() => state.bookings.find(booking => booking.id === 'existing-booking').date === movedDate && !d.getElementById('booking-dialog').open);
+    assert.equal(state.bookings.find(booking => booking.id === 'existing-booking').start, '11:30');
     assert.deepEqual(errors, []);
   } finally {
     dom.window.close();
