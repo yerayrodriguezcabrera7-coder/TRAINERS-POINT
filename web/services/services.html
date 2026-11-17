@@ -120,12 +120,6 @@
           </label>
 
           <label class="form-field">
-            <span>Precio por sesión (€) <b>*</b></span>
-            <input name="price" id="field-price" type="number" min="0" max="99999999.99" step="0.01" required="" placeholder="0,00">
-            <span class="field-hint">Importe por sesión individual.</span>
-          </label>
-
-          <label class="form-field">
             <span>Duración (minutos) <b>*</b></span>
             <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
             <span class="field-hint">Minutos de la sesión en el calendario.</span>
@@ -139,29 +133,11 @@
             </select>
           </label>
 
-          <label class="form-field">
-            <span>Validez (semanas)</span>
-            <div class="validity-input-wrap">
-              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4">
-              <span class="validity-badge">semanas</span>
-            </div>
-            <span class="field-hint">Se aplica a los bonos vinculados.</span>
-          </label>
-
-          <label class="form-field">
-            <span>Frecuencia semanal recomendada (días/sem)</span>
-            <input name="recommendedWeeklyFrequency" id="field-frequency" type="number" min="1" max="14" step="1" placeholder="Ej. 2 (opcional)">
-          </label>
-
           <label class="form-field form-field-wide">
             <span>Descripción del servicio</span>
             <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe los objetivos, enfoque o detalles de esta sesión…"></textarea>
           </label>
 
-          <label class="form-field form-field-wide">
-            <span>Condiciones y políticas</span>
-            <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación…"></textarea>
-          </label>
         </div>
 
         <p class="form-error" id="form-error" role="alert" hidden=""></p>

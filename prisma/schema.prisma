@@ -549,6 +549,8 @@ model RestockRequest {
 model StockMovement {
   id         String            @id @default(uuid()) @db.Uuid
   productId  String            @db.Uuid
+  actorId    String?
+  actorName  String?
   type       StockMovementType
   quantity   Int
   unitCost   Decimal?          @db.Decimal(10, 2)

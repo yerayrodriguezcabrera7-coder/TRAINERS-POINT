@@ -50,9 +50,15 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
       const receiptAction = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(refunds|verify-payment)$/i);
       const reversal = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/(cancel|return)$/i);
       const stockMovements = url.pathname.match(/^\/api\/inventory\/stock-movements$/i);
-      const action = request.method === 'GET' ? 'read' : restock ? 'restock' : url.pathname === '/api/inventory/sales' || payment || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin';
+      const providers = url.pathname === '/api/inventory/providers';
+      const stockAdjustment = url.pathname === '/api/inventory/stock-adjustments';
+      const action = request.method === 'GET' ? 'read' : restock || stockAdjustment ? 'restock' : url.pathname === '/api/inventory/sales' || payment || receiptAction?.[2] === 'verify-payment' ? 'sell' : reversal?.[2] === 'return' || receiptAction?.[2] === 'refunds' ? 'return' : 'admin';
       inventoryPermission(actor, action);
-      if (stockMovements && request.method === 'GET')
+      if (stockAdjustment && request.method === 'POST')
+        sendJson(response, 201, await inventory.recordStockLoss(gym, actor!, await readJsonBody(request)));
+      else if (providers && request.method === 'GET')
+        sendJson(response, 200, { providers: await inventory.providers(gym) });
+      else if (stockMovements && request.method === 'GET')
         sendJson(response, 200, { movements: await inventory.stockMovements(gym, Object.fromEntries(url.searchParams)) });
       else if (restock && request.method === 'GET' && !restock[1])
         sendJson(response, 200, { requests: await inventory.restockRequests(gym, url.searchParams.get('status') || undefined) });

@@ -4,7 +4,7 @@
   const $=id=>document.getElementById(id), form=$('product-form');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const eur=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));
-  let products=[], me, editing=null, imageData=null, imageVersion=0, readingImage=false;
+  let products=[], providers=[], me, editing=null, imageData=null, imageVersion=0, readingImage=false;
   async function api(path='',method='GET',body) {
     const response=await fetch('/api/inventory/products'+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
     const data=await response.json(); if(!response.ok)throw Error(data.error||'No se pudo guardar el producto.'); return data;
@@ -22,7 +22,7 @@
   function render() {
     const q=$('search').value.trim().toLocaleLowerCase('es');
     $('products').innerHTML=products.filter(p=>[p.name,p.description,p.barcode,p.sku].join(' ').toLocaleLowerCase('es').includes(q)).map(p=>
-      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${(me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html')))&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con esta búsqueda.</td></tr>';
+      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}${p.provider?.name?`<small>Proveedor: ${esc(p.provider.name)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${(me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html')))&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con esta búsqueda.</td></tr>';
     const count=products.filter(p=>p.isActive&&p.trackStock!==false&&p.stock===0).length;
     $('stats').innerHTML=`<article><span>Sin stock</span><strong>${count}</strong><small>Productos activos con seguimiento de stock</small></article>`;
   }
@@ -35,7 +35,9 @@
   function preview(){ $('product-image-preview').innerHTML=photo(imageData,'Vista previa del producto',true);$('remove-image').disabled=!imageData; }
   function edit(p){
     editing=p||null;imageVersion++;readingImage=false;imageData=p?.imageData||null;form.reset();
-    for(const [key,value]of Object.entries({name:p?.name||'',barcode:p?.barcode||'',description:p?.description||'',price:p?.unitPrice??0,costPrice:p?.costPrice??0,taxRate:p?.taxRate??21,stock:p?.stock??0}))form.elements[key].value=value;
+    form.elements.providerId.innerHTML='<option value="">Sin proveedor asignado</option>'+providers.map(v=>`<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('');
+    for(const [key,value]of Object.entries({name:p?.name||'',barcode:p?.barcode||'',providerId:p?.providerId||'',description:p?.description||'',price:p?.unitPrice??0,costPrice:p?.costPrice??0,taxRate:p?.taxRate??21,stock:p?.stock??0}))form.elements[key].value=value;
+    form.elements.stock.disabled=me.role!=='ADMIN';
     form.elements.trackStock.checked=p?.trackStock!==false;$('save-product').disabled=false;$('product-error').textContent='';$('product-title').textContent=p?'Editar producto':'Nuevo producto';
     preview();pricing();$('product-dialog').showModal();
   }
@@ -59,7 +61,7 @@
   form.onsubmit=async event=>{
     event.preventDefault();if(readingImage)return;const fields=form.elements,button=$('save-product');button.disabled=true;
     try{
-      await api(editing?'/'+editing.id:'',editing?'PUT':'POST',{name:fields.name.value,description:fields.description.value,barcode:fields.barcode.value,imageData,trackStock:fields.trackStock.checked,costPrice:Number(fields.costPrice.value),taxRate:Number(fields.taxRate.value),price:Number(fields.price.value),stock:Number(fields.stock.value),revision:editing?.revision});
+      await api(editing?'/'+editing.id:'',editing?'PUT':'POST',{name:fields.name.value,description:fields.description.value,providerId:fields.providerId.value||null,barcode:fields.barcode.value,imageData,trackStock:fields.trackStock.checked,costPrice:Number(fields.costPrice.value),taxRate:Number(fields.taxRate.value),price:Number(fields.price.value),stock:Number(fields.stock.value),revision:editing?.revision});
       $('product-dialog').close();await load();$('notice').textContent='Producto guardado con su imagen, precios y existencias.';
     }catch(error){$('product-error').textContent=error.message;}finally{button.disabled=false;}
   };
@@ -68,7 +70,7 @@
     if(button.dataset.edit)edit(p);
     if(button.dataset.detail){
       $('product-detail-title').textContent=p.name;const pricing=priceBreakdown(p.unitPrice,p.costPrice||0,p.taxRate||0);
-      $('product-detail-content').innerHTML=`${photo(p.imageData,p.name,true)}<p>${esc(p.description||'Sin descripción.')}</p><dl class="product-detail-data"><dt>Código</dt><dd>${esc(p.barcode||'Sin código')}</dd><dt>PVP con IVA</dt><dd>${eur(p.unitPrice)}</dd><dt>Coste sin IVA</dt><dd>${eur(p.costPrice||0)}</dd><dt>Base imponible</dt><dd>${eur(pricing.base)}</dd><dt>IVA (${Number(p.taxRate||0)} %)</dt><dd>${eur(pricing.tax)}</dd><dt>Margen por unidad</dt><dd>${eur(pricing.margin)}</dd><dt>Stock</dt><dd>${p.stock} unidades</dd><dt>Seguimiento de stock</dt><dd>${p.trackStock===false?'Desactivado':'Activado'}</dd></dl>`;
+      $('product-detail-content').innerHTML=`${photo(p.imageData,p.name,true)}<p>${esc(p.description||'Sin descripción.')}</p><dl class="product-detail-data"><dt>Proveedor</dt><dd>${esc(p.provider?.name||'Sin indicar')}</dd><dt>Código</dt><dd>${esc(p.barcode||'Sin código')}</dd><dt>PVP con IVA</dt><dd>${eur(p.unitPrice)}</dd><dt>Coste sin IVA</dt><dd>${eur(p.costPrice||0)}</dd><dt>Base imponible</dt><dd>${eur(pricing.base)}</dd><dt>IVA (${Number(p.taxRate||0)} %)</dt><dd>${eur(pricing.tax)}</dd><dt>Margen por unidad</dt><dd>${eur(pricing.margin)}</dd><dt>Stock</dt><dd>${p.stock} unidades</dd><dt>Seguimiento de stock</dt><dd>${p.trackStock===false?'Desactivado':'Activado'}</dd></dl>`;
       $('product-detail').showModal();
     }
     if(button.dataset.delete&&confirm('¿Retirar este producto? Se conservará su historial.')){button.disabled=true;try{await api('/'+p.id,'DELETE');await load();}catch(error){$('notice').textContent=error.message;button.disabled=false;}}
@@ -80,6 +82,8 @@
     const canProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)?me.pagePermissions.includes('productos.html'):['ADMIN','RECEPTION'].includes(me.role));
     if(!canProducts)throw Error('Tu perfil no permite acceder a productos.');
     const canEditProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html'));
-    $('new-product').hidden=!canEditProducts;await load();
+    $('new-product').hidden=!canEditProducts;
+    const providerResponse=await fetch('/api/inventory/providers');if(providerResponse.ok)providers=(await providerResponse.json()).providers||[];
+    await load();
   }catch(error){$('notice').textContent=error.message;}
 })();

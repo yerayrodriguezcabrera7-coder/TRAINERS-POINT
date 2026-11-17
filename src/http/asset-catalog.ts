@@ -85,6 +85,9 @@ export const staticFiles: Record<string, {
   "/services.html": { file: "web/services/services.html", contentType: "text/html; charset=utf-8" },
   "/services.css": { file: "web/services/services.css", contentType: "text/css; charset=utf-8" },
   "/services.js": { file: "web/services/services.js", contentType: "text/javascript; charset=utf-8" },
+  "/packs": { file: "web/services/packs.html", contentType: "text/html; charset=utf-8" },
+  "/packs.html": { file: "web/services/packs.html", contentType: "text/html; charset=utf-8" },
+  "/packs.js": { file: "web/services/packs.js", contentType: "text/javascript; charset=utf-8" },
   '/permisos-pagina.html': { file: 'web/admin/permisos-pagina.html', contentType: 'text/html; charset=utf-8' },
   '/permisos-pagina.js': { file: 'web/admin/permisos-pagina.js', contentType: 'text/javascript; charset=utf-8' },
 };

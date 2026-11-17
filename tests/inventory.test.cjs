@@ -542,32 +542,32 @@ test('Asistencia sin bono: deuda única, pagos parciales idempotentes, Caja y ca
  const drawer=await cash.current(f.gym.id);assert.equal(drawer.session.summary.expectedCash,110);
 });
 
-test('Recordatorios: día anterior, canal de ficha, procesos concurrentes y reprogramación sin duplicados',async()=>{
+test('Recordatorios: dos horas antes, canal de ficha, procesos concurrentes y reprogramación sin duplicados',async()=>{
  const {ReminderWorker}=require('../dist/reminders/worker');const f=await appointmentFixture('WHATSAPP');
  const b=await f.store.save(f.gym.id,{...f.input,date:'2031-01-15'});
- const now=new Date('2031-01-14T09:00:30Z'),sent=[];
+ const now=new Date('2031-01-15T07:00:30Z'),sent=[];
  const provider={send:async m=>{sent.push(m);await new Promise(r=>setTimeout(r,20));return 'SM-test';}};
  await Promise.all([new ReminderWorker(pool,provider).run(now),new ReminderWorker(pool,provider).run(now)]);
  assert.equal(sent.length,1);assert.equal(sent[0].channel,'WHATSAPP');assert.equal(sent[0].trainer,'Entrenadora Julia');assert.equal(sent[0].service,'Sesión de fuerza');assert.equal(sent[0].date,'15/01/2031');
  await new ReminderWorker(pool,provider).run(now);assert.equal(sent.length,1);
  const moved=await f.store.save(f.gym.id,{...b,date:'2031-01-16'},b.id);
  await db.client.update({where:{id:f.client.id},data:{contactPreference:'SMS'}});
- await new ReminderWorker(pool,provider).run(new Date('2031-01-15T09:00:30Z'));
+ await new ReminderWorker(pool,provider).run(new Date('2031-01-16T07:00:30Z'));
  assert.equal(sent.length,2);assert.equal(sent[1].channel,'SMS');
  await f.store.save(f.gym.id,{...moved,status:'CANCELLED'},b.id);
- await new ReminderWorker(pool,provider).run(new Date('2031-01-15T09:01:00Z'));assert.equal(sent.length,2);
+ await new ReminderWorker(pool,provider).run(new Date('2031-01-16T07:01:00Z'));assert.equal(sent.length,2);
 });
 
 test('Recordatorios: fallo ambiguo no repite; rechazo temporal se reintenta; modo desactivado no envía',async()=>{
  const {ReminderWorker}=require('../dist/reminders/worker'),{DeliveryError}=require('../dist/reminders/provider');
  const f=await appointmentFixture();await f.store.save(f.gym.id,{...f.input,date:'2032-01-15'});
- const now=new Date('2032-01-14T09:00:30Z');let calls=0;
+ const now=new Date('2032-01-15T07:00:30Z');let calls=0;
  const worker=new ReminderWorker(pool,{send:async()=>{calls++;throw new DeliveryError('UNKNOWN','Sin respuesta');}});
  await worker.run(now);await worker.run(now);assert.equal(calls,1);
  const g=await appointmentFixture();await g.store.save(g.gym.id,{...g.input,date:'2033-01-15'});
  let retries=0;const retry=new ReminderWorker(pool,{send:async()=>{retries++;if(retries===1)throw new DeliveryError('RETRY','Límite');return 'SM-retry';}});
- await retry.run(new Date('2033-01-14T09:00:30Z'));await retry.run(new Date('2033-01-14T09:01:00Z'));assert.equal(retries,1);
- await retry.run(new Date('2033-01-14T09:06:00Z'));assert.equal(retries,2);
+ await retry.run(new Date('2033-01-15T07:00:30Z'));await retry.run(new Date('2033-01-15T07:01:00Z'));assert.equal(retries,1);
+ await retry.run(new Date('2033-01-15T07:06:00Z'));assert.equal(retries,2);
  await new ReminderWorker({query:()=>{throw Error('No debe consultar ni enviar');}},null).run(now);
 });
 

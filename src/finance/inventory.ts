@@ -14,8 +14,9 @@ import { accessibleClient, saleScope } from '../network/scope';
 import { recordAudit } from '../audit/log';
 type FinanceActor = string | Pick<Identity, 'id' | 'name' | 'role' | 'username'>;
 const actorId = (actor: FinanceActor) => typeof actor === 'string' ? actor : actor.id;
+const actorName = (actor: FinanceActor) => typeof actor === 'string' ? actor : actor.name || actor.username || actor.id;
 const productMoney = z.number().min(0).max(1000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
-const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), price: productMoney,
+const productInput = z.object({ name: z.string().trim().min(1).max(200), description: z.string().trim().max(2000).default(''), providerId: z.string().uuid().nullable().optional(), price: productMoney,
   costPrice: productMoney.optional(), taxRate: z.number().min(0).max(100).refine(v => Math.abs(v*100-Math.round(v*100))<1e-6).optional(),
   barcode: z.string().trim().max(80).regex(/^[\p{L}\p{N} ._/-]*$/u).transform(v => v || null).nullable().optional(),
   imageData: z.string().refine(validProductImage,'Selecciona una imagen PNG, JPEG o WebP válida de hasta 550 KB.').nullable().optional(),
@@ -28,6 +29,7 @@ const returnInput = z.object({ reason: z.string().trim().min(3).max(500).default
 const restockStatusEnum = z.enum(['PENDIENTE', 'PEDIDO', 'RECIBIDO', 'CANCELADO']);
 const restockInput = z.object({ productId: z.string().uuid().nullable().optional(), productName: z.string().trim().min(1).max(200).optional(), quantity: z.number().int().min(1).max(10000).default(1), notes: z.string().trim().max(1000).default('') });
 const restockUpdateInput = z.object({ status: restockStatusEnum.optional(), quantity: z.number().int().min(1).max(10000).optional(), notes: z.string().trim().max(1000).optional(), addToStock: z.boolean().default(false) });
+const stockAdjustmentInput = z.object({ productId: z.string().uuid(), type: z.enum(['DANO', 'SALIDA']), quantity: z.number().int().min(1).max(10000), notes: z.string().trim().min(3).max(500) });
 export function saleBalance(sale: any) {
   const original = cents(sale.totalAmount);
   const returned = sale.lines.reduce((sum: number, l: any) => sum + cents(l.unitPrice) * (l.returnedQuantity || 0), 0);
@@ -47,7 +49,10 @@ export class Inventory {
   constructor(private db: PrismaClient) { }
   private transaction<T>(gym: string, fn: (tx: Prisma.TransactionClient) => Promise<T>) { return financeTransaction(this.db, gym, fn); }
   async products(gym: string) {
-    return (await this.db.product.findMany({ where: { gymKey: gym }, orderBy: { name: 'asc' } })).map(p => ({ ...p, pricing: productPricing(p.unitPrice,p.costPrice,p.taxRate) }));
+    return (await this.db.product.findMany({ where: { gymKey: gym }, include: { provider: { select: { id: true, name: true } } }, orderBy: { name: 'asc' } })).map(p => ({ ...p, pricing: productPricing(p.unitPrice,p.costPrice,p.taxRate) }));
+  }
+  async providers(gym: string) {
+    return this.db.provider.findMany({ where: { isActive: true, OR: [{ gymKey: gym }, { gymKey: null }] }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
   }
   async saveProduct(gym: string, raw: unknown, id?: string, actor: FinanceActor = 'system') {
     const v = productInput.parse(raw);
@@ -59,11 +64,12 @@ export class Inventory {
         throw new ApiError(409, 'El stock ha cambiado. Actualiza antes de guardar.');
       const oldStock = old?.stock ?? 0;
       const difference = v.stock - oldStock;
-      if (difference !== 0 && typeof actor === 'object') {
-        if (actor.role !== 'ADMIN')
-          throw new ApiError(403, 'Solo los administradores pueden modificar las existencias.');
-      }
+      if (difference !== 0 && typeof actor === 'object' && actor.role !== 'ADMIN')
+        throw new ApiError(403, 'Solo los administradores pueden modificar las existencias. Registra entradas y salidas desde Pedidos / Albaranes.');
+      if (v.providerId && !await tx.provider.findFirst({ where: { id: v.providerId, isActive: true, OR: [{ gymKey: gym }, { gymKey: null }] } }))
+        throw new ApiError(400, 'Selecciona un proveedor activo de este centro.');
       const details = { name: v.name, description: v.description, unitPrice: v.price, stock: v.stock,
+        providerId: v.providerId || null,
         ...(v.costPrice !== undefined ? { costPrice: v.costPrice } : {}), ...(v.taxRate !== undefined ? { taxRate: v.taxRate } : {}),
         ...(v.barcode !== undefined ? { barcode: v.barcode } : {}), ...(v.imageData !== undefined ? { imageData: v.imageData } : {}),
         ...(v.trackStock !== undefined ? { trackStock: v.trackStock } : {}) };
@@ -71,7 +77,7 @@ export class Inventory {
         throw new ApiError(409, 'Ya hay un producto con ese código de barras en este centro.');
       const product = old ? await tx.product.update({ where: { id: old.id }, data: { ...details, revision: { increment: 1 } } }) : await tx.product.create({ data: { gymKey: gym, ...details } });
       if (difference)
-        await tx.stockMovement.create({ data: { productId: product.id, type: old ? 'AJUSTE' : 'ENTRADA', quantity: difference, reference: 'Inventario', notes: old ? 'Ajuste manual de existencias' : 'Stock inicial' } });
+        await tx.stockMovement.create({ data: { productId: product.id, type: old ? 'AJUSTE' : 'ENTRADA', quantity: difference, reference: 'Inventario', notes: old ? 'Ajuste manual de existencias' : 'Stock inicial', actorId: actorId(actor), actorName: actorName(actor) } });
       await recordAudit(tx, { gymKey: gym, actor, action: difference ? 'PRODUCT_STOCK_ADJUSTED' : old ? 'PRODUCT_UPDATED' : 'PRODUCT_CREATED', entityType: 'Product', entityId: product.id, detail: `${old ? 'Producto actualizado' : 'Producto creado'}: ${product.name}.${difference ? ` Stock ${difference > 0 ? '+' : ''}${difference}; total ${product.stock}.` : ''}`, metadata: { stockBefore: old?.stock ?? 0, stockAfter: product.stock, difference } });
       return product;
     });
@@ -124,7 +130,7 @@ export class Inventory {
       const sale = await tx.sale.create({ data: { cashSessionId, paymentTracking: true, requestFingerprint: fingerprint, gymKey: gym, requestKey: v.requestKey, sellerAccountId: actorId(actor), clientId: v.clientId, status: 'COMPLETADA', soldAt: new Date(), subtotal: (total-taxCents) / 100, taxAmount: taxCents / 100, totalAmount: total / 100, lines: { create: lines }, ...(v.paymentMode === 'PAID' && total > 0 ? { payments: { create: { cashSessionId, requestKey: v.requestKey, actorAccountId: actorId(actor), method: v.paymentMethod, status: 'PAGADO', amount: total / 100, paidAt: new Date() } } } : {}) }, include: { lines: true, payments: true } });
       for (const l of v.lines)
         await tx.product.update({ where: { id: l.productId }, data: { stock: { decrement: l.quantity }, revision: { increment: 1 } } });
-      await tx.stockMovement.createMany({ data: v.lines.map(l => ({ productId: l.productId, type: 'VENTA' as const, quantity: -l.quantity, reference: sale.id })) });
+      await tx.stockMovement.createMany({ data: v.lines.map(l => ({ productId: l.productId, type: 'VENTA' as const, quantity: -l.quantity, reference: sale.id, actorId: actorId(actor), actorName: actorName(actor) })) });
       await recordAudit(tx, { gymKey: gym, actor, action: 'SALE_COMPLETED', entityType: 'Sale', entityId: sale.id, requestKey: v.requestKey, detail: `Venta registrada por ${(total / 100).toFixed(2)} € (${v.paymentMode === 'PAID' ? v.paymentMethod : 'pago pendiente'}).`, metadata: { total: total / 100, paymentMode: v.paymentMode, paymentMethod: v.paymentMethod, clientId: v.clientId } });
       return saleBalance(sale);
     });
@@ -154,7 +160,7 @@ export class Inventory {
         await tx.saleLine.update({ where: { id: line.id }, data: { returnedQuantity: { increment: item.quantity } } });
         if (!('restock' in item) || item.restock) {
           await tx.product.update({ where: { id: line.productId }, data: { stock: { increment: item.quantity }, revision: { increment: 1 } } });
-          await tx.stockMovement.create({ data: { productId: line.productId, type: 'DEVOLUCION', quantity: item.quantity, reference: sale.id, notes: cancel ? 'Anulación de venta' : requested!.reason } });
+          await tx.stockMovement.create({ data: { productId: line.productId, type: 'DEVOLUCION', quantity: item.quantity, reference: sale.id, notes: cancel ? 'Anulación de venta' : requested!.reason, actorId: actorId(actor), actorName: actorName(actor) } });
         }
       }
       const cashSessionId = await cashSessionFor(tx, gym);
@@ -355,7 +361,9 @@ export class Inventory {
               type: 'ENTRADA',
               quantity: qtyToAdd,
               reference: `Reposición recibida: ${existing.id}`,
-              notes: `Pedido recibido y repuesto en mostrador por ${actor.name || actor.id}`
+              notes: `Pedido recibido y repuesto en mostrador por ${actor.name || actor.id}`,
+              actorId: actor.id,
+              actorName: actor.name || actor.id,
             }
           });
           await recordAudit(tx, { gymKey: gym, actor, action: 'PRODUCT_STOCK_ADJUSTED', entityType: 'Product', entityId: existing.productId, detail: `Reposición recibida: +${qtyToAdd} unidades de ${existing.product.name}.`, metadata: { difference: qtyToAdd, source: 'RESTOCK_REQUEST', restockRequestId: existing.id } });
@@ -386,6 +394,19 @@ export class Inventory {
     if (!existing) throw new ApiError(404, 'Aviso de reposición no encontrado.');
     await (this.db as any).restockRequest.delete({ where: { id } });
     return { success: true };
+  }
+  async recordStockLoss(gym: string, actor: Identity, raw: unknown) {
+    const input = stockAdjustmentInput.parse(raw);
+    return this.transaction(gym, async tx => {
+      const changed = await tx.product.updateMany({ where: { id: input.productId, gymKey: gym, isActive: true, stock: { gte: input.quantity } }, data: { stock: { decrement: input.quantity }, revision: { increment: 1 } } });
+      if (!changed.count) throw new ApiError(409, 'No hay stock suficiente o el producto ya no está activo. Actualiza la pantalla.');
+      const product = await tx.product.findUnique({ where: { id: input.productId } });
+      if (!product) throw new ApiError(404, 'Producto desconocido.');
+      const quantity = -input.quantity;
+      const movement = await tx.stockMovement.create({ data: { productId: product.id, type: input.type, quantity, reference: 'Merma / salida', notes: input.notes, actorId: actor.id, actorName: actor.name || actor.username || actor.id } });
+      await recordAudit(tx, { gymKey: gym, actor, action: 'PRODUCT_STOCK_LOSS', entityType: 'Product', entityId: product.id, detail: `${input.type === 'DANO' ? 'Daño/merma' : 'Salida'}: ${input.quantity} unidades de ${product.name}.`, metadata: { reason: input.notes, quantity: input.quantity } });
+      return { movement, stock: product.stock };
+    });
   }
   async stockMovements(gym: string, filters: { product?: string; type?: string; from?: string; to?: string; search?: string }) {
     const where: any = { product: { gymKey: gym } };
@@ -418,7 +439,7 @@ export function inventoryPermission(actor: Identity | undefined, action: string)
     const perms = actor.pagePermissions;
     const allowed = action === 'admin'
       ? (perms.includes('productos.html') || perms.includes('caja.html'))
-      : ['read', 'sell', 'return', 'restock'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html'].some(p => perms.includes(p));
+      : ['read', 'sell', 'return', 'restock'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html', 'pedidos.html', 'historial-stock.html'].some(p => perms.includes(p));
     if (!allowed)
       throw new ApiError(403, 'No tienes permiso para esta operación.');
     return;

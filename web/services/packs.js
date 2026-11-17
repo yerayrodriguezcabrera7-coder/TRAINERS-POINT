@@ -64,7 +64,7 @@
 
       const [servicesRes, packsRes] = await Promise.all([
         api('services?all=true&includeInactive=true'),
-        api('services/packs'),
+        api('services/packs?all=true'),
       ]);
 
       services = Array.isArray(servicesRes.services) ? servicesRes.services : [];
@@ -131,8 +131,19 @@
     if (!select) return;
     const activeServices = services.filter(s => s.isActive && s.type === 'SESION_INDIVIDUAL');
     select.innerHTML = activeServices.map(s =>
-      `<option value="${esc(s.id)}" style="background:#${s.color.replace('#','')};color:${s.color === '#ffffff' ? '#000' : '#fff'}">${esc(s.name)}${s.modality === 'DUAL' ? ' · Dual' : ''}</option>`
+      `<option value="${esc(s.id)}" data-modality="${esc(s.modality)}" data-duration="${Number(s.durationMin)}" data-category="${esc(s.category)}" data-color="${esc(s.color)}">${esc(s.name)}${s.modality === 'DUAL' ? ' · Dual' : ' · Individual'}</option>`
     ).join('');
+    updateInheritedService();
+  }
+
+  function updateInheritedService() {
+    const service = services.find(item => item.id === $('field-service')?.value);
+    if (!service) return;
+    $('field-modality').value = service.modality;
+    $('field-durationMin').value = service.durationMin;
+    $('field-category').value = service.category;
+    const info = $('inherited-service-info');
+    if (info) info.innerHTML = `<span class="service-color-dot" style="background:${esc(service.color)}"></span> Color de calendario: <strong>${esc(service.color)}</strong> · ${service.modality === 'DUAL' ? '2 personas' : '1 persona'} · ${service.durationMin} min`;
   }
 
   function renderPacks() {
@@ -280,6 +291,7 @@
     $('field-isActive').value = 'true';
     $('field-description').value = '';
     $('field-conditions').value = '';
+    updateInheritedService();
     updateCalculatedPrice();
     dialog.showModal();
   }
@@ -306,6 +318,7 @@
     $('field-isActive').value = String(pack.isActive !== false);
     $('field-description').value = pack.description || '';
     $('field-conditions').value = pack.conditions || '';
+    updateInheritedService();
     updateCalculatedPrice();
     dialog.showModal();
   }
@@ -369,6 +382,7 @@
     loadData();
 
     $('open-pack-create')?.addEventListener('click', openCreateDialog);
+    $('field-service')?.addEventListener('change', updateInheritedService);
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
 

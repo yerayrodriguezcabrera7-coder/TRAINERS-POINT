@@ -214,7 +214,7 @@ async function start(): Promise<void> {
   const stopReminders = new ReminderWorker(pool, configuredProvider()).start();
 
   // Weekly planning reminder cron: runs every minute, only executes on Friday 10:00-10:30 (Madrid timezone)
-  const weeklyPlanning = new WeeklyPlanningReminder(pool);
+  const weeklyPlanning = new WeeklyPlanningReminder(pool, configuredProvider());
   setInterval(async () => {
     try {
       const sent = await weeklyPlanning.run();
