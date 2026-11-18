@@ -12,7 +12,7 @@ import { authorize } from './http/authorize';
 import { sendError, sendJson } from "./http/json";
 import { serveRuntime } from "./http/runtime";
 import { prisma } from "./lib/prisma";
-import { databaseOptimization } from "./database/optimization";
+import { calendarDatabaseOptimization, crmDatabaseOptimization } from "./database/optimization";
 import { progressMigration } from "./progress-migration";
 import { centersRoutes } from './routes/centers';
 import { trainingPlansRoutes } from './routes/training-plans';
@@ -147,14 +147,6 @@ async function start(): Promise<void> {
     : new Pool(databaseConfig(process.env.DATABASE_URL).pg);
   calendarPool = pool;
   
-  // Aplicar optimizaciones de base de datos
-  try {
-    await pool.query(databaseOptimization);
-    console.log("Optimizaciones de base de datos aplicadas");
-  } catch (error) {
-    console.warn("Advertencia al aplicar optimizaciones de DB:", error);
-  }
-  
   const trainerTopicArn = process.env.SNS_TOPIC_AVISOS_ARN || process.env.SNS_TRAINER_TOPIC_ARN ||
     (process.env.SNS_IOS_PLATFORM_APPLICATION_ARN || process.env.SNS_ANDROID_PLATFORM_APPLICATION_ARN
       ? "arn:aws:sns:eu-south-2:704043378842:trainerspoint-avisos" : undefined);
@@ -172,6 +164,13 @@ async function start(): Promise<void> {
   await pool.query(pushMigration);
   await pool.query(accessMigration);
   await crmPool.query(progressMigration);
+  try {
+    await pool.query(calendarDatabaseOptimization);
+    await crmPool.query(crmDatabaseOptimization);
+    console.log("Optimizaciones de base de datos aplicadas");
+  } catch (error) {
+    console.warn("Advertencia al aplicar optimizaciones de DB:", error);
+  }
   const activeGyms = await prisma.gym.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   const configuredGym = activeGyms[0]?.id || "trainers-point-bizkaia";
   const developmentGyms = activeGyms.length ? activeGyms : [{ id: configuredGym, name: "Trainers Point" }];
