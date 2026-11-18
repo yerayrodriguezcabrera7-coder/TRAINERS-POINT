@@ -30,6 +30,7 @@ test('la cuenta móvil muestra el acceso al abrirla', () => {
       if (request === '../../shared/config') return { apiBaseUrl: () => '' };
       if (request === '../../shared/cognito') return { mobileCognito: () => undefined };
       if (request === '../../shared/api') return { ApiClient: class {} };
+      if (request === './trainer-push') return { unregisterTrainerPush: async () => {} };
     }
     return previousLoad.call(this, request, parent, isMain);
   };

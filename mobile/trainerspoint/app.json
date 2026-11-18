@@ -24,7 +24,8 @@
           "locationWhenInUsePermission": "Tu ubicación se usa al fichar para verificar que estás en el centro."
         }
       ],
-      ["expo-audio", { "recordAudioAndroid": false, "enableBackgroundPlayback": false }]
+      ["expo-audio", { "recordAudioAndroid": false, "enableBackgroundPlayback": false }],
+      ["expo-notifications", { "enableBackgroundRemoteNotifications": false }]
     ],
     "web": {
       "bundler": "metro"

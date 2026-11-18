@@ -28,12 +28,14 @@ import { ReminderWorker } from "./reminders/worker";
 import { WeeklyPlanningReminder } from "./reminders/weekly-planning";
 import { createCognitoVerifier } from "./cloud/cognito";
 import { databaseConfig } from "./cloud/database";
+import { SnsTrainerPush, pushMigration } from "./cloud/sns-trainer-push";
 const deployment = runtimeConfig();
 const host = deployment.host, port = deployment.port;
 let calendarHandler: ((request: IncomingMessage, response: ServerResponse) => unknown) | undefined;
 let calendarBootstrapToken = "";
 let calendarAccess: Access | undefined;
 let calendarPool: Pool | undefined;
+let calendarStore: Store | undefined;
 let currentConfiguredGym = "trainers-point-bizkaia";
 function isLocalRequest(request: IncomingMessage): boolean {
   if (deployment.production)
@@ -49,7 +51,7 @@ function hasTrustedOrigin(request: IncomingMessage, port: number): boolean {
   return origin === `http://localhost:${port}` || origin === `http://127.0.0.1:${port}` || origin === deployment.publicOrigin;
 }
 async function handleApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
-  const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, hasTrustedOrigin };
+  const context = { port, calendarAccess, calendarHandler, calendarBootstrapToken, currentConfiguredGym, calendarPool, calendarStore, hasTrustedOrigin };
   if (await authorize(request, response, url, context))
     return;
   for (const route of [trainingPlansRoutes, businessRoutes, financeRoutes, servicesRoutes, packagesRoutes, centersRoutes, clientsRoutes, permissionsTemplatesRoutes])
@@ -153,9 +155,20 @@ async function start(): Promise<void> {
     console.warn("Advertencia al aplicar optimizaciones de DB:", error);
   }
   
-  const store = new Store(pool, prisma);
+  const trainerTopicArn = process.env.SNS_TRAINER_TOPIC_ARN ||
+    (process.env.SNS_IOS_PLATFORM_APPLICATION_ARN || process.env.SNS_ANDROID_PLATFORM_APPLICATION_ARN
+      ? "arn:aws:sns:eu-south-2:704043378842:trainerspoint-avisos" : undefined);
+  const trainerPush = trainerTopicArn
+    ? new SnsTrainerPush(pool, {
+      topicArn: trainerTopicArn,
+      iosArn: process.env.SNS_IOS_PLATFORM_APPLICATION_ARN,
+      androidArn: process.env.SNS_ANDROID_PLATFORM_APPLICATION_ARN,
+    }) : undefined;
+  const store = new Store(pool, prisma, trainerPush);
+  calendarStore = store;
   calendarAccess = new Access(pool, prisma);
   await pool.query(calendarMigration);
+  await pool.query(pushMigration);
   await pool.query(accessMigration);
   await crmPool.query(progressMigration);
   const activeGyms = await prisma.gym.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } });

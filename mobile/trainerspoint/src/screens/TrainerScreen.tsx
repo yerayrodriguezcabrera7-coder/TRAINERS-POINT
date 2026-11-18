@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Location from "expo-location";
 import { useAudioPlayer } from "expo-audio";
+import * as Notifications from "expo-notifications";
 import type { ApiClient } from "../../../shared/api";
 import type { Booking, CalendarData, Identity } from "../../../shared/types";
 import type { AttendanceData, TrainerClientDetail } from "../../../shared/trainer-types";
@@ -9,6 +10,7 @@ import { localDay } from "../../../shared/calendar";
 import { detectTrainerAgendaAlerts, groupTrainerBookings, type TrainerAgendaAlert } from "../../../shared/trainer-agenda";
 import { CalendarDatePicker } from "./CalendarDatePicker";
 import { TrainerRoster } from "./TrainerRoster";
+import { registerTrainerPush } from "../trainer-push";
 
 const ink="#1d302e", orange="#ed691d", green="#287449", red="#ab332b", paper="#f6f6f0";
 type Feeling="GOOD"|"TIRED"|"EASY"|"ADEQUATE"|"LIMIT"|"PAIN"|null;
@@ -67,6 +69,7 @@ export function TrainerScreen({api,user,onLogout}:{api:ApiClient;user:Identity;o
   const detailSequence=useRef(0);
   const previousBookings=useRef<Booking[]|null>(null);
   const suppressAlerts=useRef(false);
+  const pushEnabled=useRef(false);
   const alertPlayer=useAudioPlayer(require("../../assets/agenda-alert.wav"));
 
   const load=useCallback(async(show=true)=>{
@@ -75,7 +78,7 @@ export function TrainerScreen({api,user,onLogout}:{api:ApiClient;user:Identity;o
     try {
       const [calendar,clock]=await Promise.all([api.getStaffCalendar(),api.getAttendance(localDay())]);
       if(sequence===loadSequence.current){
-        if(previousBookings.current && !suppressAlerts.current){
+        if(previousBookings.current && !suppressAlerts.current && !pushEnabled.current){
           const found=detectTrainerAgendaAlerts(previousBookings.current,calendar.bookings,new Date());
           if(found.length){
             setAlerts(current=>[...found,...current].slice(0,5));
@@ -95,6 +98,12 @@ export function TrainerScreen({api,user,onLogout}:{api:ApiClient;user:Identity;o
     const subscription=AppState.addEventListener("change",state=>{if(state==="active")void load(false);});
     return()=>{clearInterval(clockTimer);clearInterval(pollTimer);subscription.remove();};
   },[load]);
+  useEffect(()=>{
+    let mounted=true;
+    void registerTrainerPush(api).then(enabled=>{if(mounted)pushEnabled.current=enabled;}).catch(()=>{});
+    const subscription=Notifications.addNotificationReceivedListener(()=>{void load(false);});
+    return()=>{mounted=false;subscription.remove();};
+  },[api,load]);
 
   const bookings=data?.bookings||[];
   const currentBooking=bookingId?bookings.find(b=>b.id===bookingId)||null:null;

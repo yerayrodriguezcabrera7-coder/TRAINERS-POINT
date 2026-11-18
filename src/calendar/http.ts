@@ -121,6 +121,16 @@ export function server(
             send(res,200,{packages:store.clientsDb ? await pendingPackages(store.clientsDb,gym) : []});return;
           }
           if (req.method === "POST" && path === "/api/logout") { await access.logout(bearer); send(res,200,{ok:true}); return; }
+          if (path === "/api/mobile/push") {
+            if (!trainer || !identity.employeeId) throw new ApiError(403,"Solo el entrenador puede registrar avisos de su dispositivo.");
+            const push = store.trainerPush;
+            if (req.method === "GET") { send(res,200,{ios:!!push?.supports("ios"),android:!!push?.supports("android")}); return; }
+            if (req.method !== "POST" && req.method !== "DELETE") throw new ApiError(405,"Método no permitido.");
+            if (!push) throw new ApiError(503,"Los avisos push no están configurados.");
+            const input=z.object({platform:z.enum(["ios","android"]),token:z.string().min(16).max(4096)}).parse(await body(req));
+            if (req.method === "POST") { await push.register(gym,identity.employeeId,input.platform,input.token);send(res,200,{ok:true});return; }
+            if (req.method === "DELETE") { await push.unregister(gym,identity.employeeId,input.platform,input.token);send(res,200,{ok:true});return; }
+          }
           if (req.method === "POST" && path === "/api/password/change") {
             send(res,200,await access.changePassword(gym,bearer,await body(req)));
             return;

@@ -104,6 +104,9 @@ export class ApiClient {
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }
   getClientHome() { return this.request<{profile:{id:string;firstName:string;lastName:string;email:string;phone:string;status:string;objective?:string|null};packages:ServicePackage[];measurements:Measurement[];trainingPlans:TrainingPlan[]}>("/api/mobile/client/home"); }
   getStaffCalendar() { return this.request<CalendarData>("/api/mobile/calendar"); }
+  getTrainerPushAvailability() { return this.request<{ios:boolean;android:boolean}>("/api/mobile/push"); }
+  registerTrainerPush(platform:"ios"|"android", token:string) { return this.request<{ok:boolean}>("/api/mobile/push",{method:"POST",body:JSON.stringify({platform,token})}); }
+  unregisterTrainerPush(platform:"ios"|"android", token:string) { return this.request<{ok:boolean}>("/api/mobile/push",{method:"DELETE",body:JSON.stringify({platform,token})}); }
   getAttendance(day: string) { return this.request<AttendanceData>(`/api/attendance?from=${encodeURIComponent(day)}&to=${encodeURIComponent(day)}`); }
   clock(employeeId: string, action: "IN" | "OUT", geo: {latitude:number;longitude:number;accuracy:number|null}) {
     return this.request<{clockIn:string;clockOut:string|null;geoIn?:{inGeofence:boolean};geoOut?:{inGeofence:boolean}}>("/api/attendance/clock",{method:"POST",body:JSON.stringify({employeeId,action,geo})});

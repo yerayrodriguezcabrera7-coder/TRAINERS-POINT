@@ -7,6 +7,7 @@ import { accessMigration, type Identity } from "./access";
 import { sharedStaffMigration, sharedStaff, saveStaff, saveSharedLeave, networkLock } from "./shared-staff";
 import { clientScope } from "../network/scope";
 import { queryCache } from "../cache/query-cache";
+import { agendaPushEvent, pushMigration, type SnsTrainerPush } from "../cloud/sns-trainer-push";
 import {
 ApiError,
 Booking,
@@ -85,7 +86,7 @@ function appendBookingHistory(old: Booking, b: Booking, actorId: string) {
   ];
 }
 export class Store {
-  constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
+  constructor(public pool: Pool, public clientsDb?: PrismaClient, public trainerPush?: SnsTrainerPush) {}
 
   private async audit(db: PoolClient, gym: string, actorId: string, action: string, entityType: string, entityId: string, detail: string, metadata: Record<string, unknown> = {}) {
     if (!this.clientsDb) return;
@@ -181,6 +182,7 @@ export class Store {
   }
   async migrate() {
     await this.pool.query(migration);
+    await this.pool.query(pushMigration);
     await this.pool.query(sharedStaffMigration);
     await this.pool.query(accessMigration);
     if (this.clientsDb) {
@@ -414,7 +416,8 @@ export class Store {
   }
   async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string, syncSession=false) {
     const input = bookingSchema.parse(raw);
-    return this.transaction(gym, async (db, c, bookings) => {
+    let notification: ReturnType<typeof agendaPushEvent> = null;
+    const saved = await this.transaction(gym, async (db, c, bookings) => {
       const old = id ? bookings.find((b) => b.id === id) : undefined;
       if(expectedEmployeeId && old?.employeeId!==expectedEmployeeId)throw new ApiError(404,"Reserva desconocida.");
       if (id && !old) throw new ApiError(404, "Reserva desconocida.");
@@ -530,8 +533,14 @@ export class Store {
       await this.audit(db, gym, actorId, !old ? 'BOOKING_CREATED' : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? 'BOOKING_CANCELLED' : 'BOOKING_UPDATED', 'Booking', b.id,
         !old ? `Reserva creada para ${b.date}, ${b.start}–${b.end}.` : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? `Reserva cancelada del ${old.date}, ${old.start}–${old.end}.` : `Reserva modificada: ${old.date} ${old.start} → ${b.date} ${b.start}.`,
         { clientId: b.clientId, serviceId: b.serviceId, employeeId: b.employeeId, previousStatus: old?.status || null, status: b.status });
+      notification = agendaPushEvent(old,b,c.timezone);
       return b;
     });
+    if (notification && this.trainerPush) {
+      try { await this.trainerPush.publish(gym,notification); }
+      catch (error) { console.error("No se pudo publicar el aviso de agenda en SNS:", error); }
+    }
+    return saved;
   }
   async workerAction(gym:string,id:string,actor:{id:string;employeeId:string|null},raw:unknown){
     const input=workerActionSchema.parse(raw);
@@ -559,21 +568,29 @@ export class Store {
     return (await this.pool.query("SELECT data,gym_id FROM calendar.recoveries WHERE gym_id=$1 OR data->>'clientId'=ANY($2::text[]) ORDER BY data->>'createdAt' DESC",[gym,await this.sharedRecoveryClients(gym)])).rows.map(r=>({...r.data,originCenterId:r.gym_id}));
   }
   async deferBooking(gym: string, id: string, actor: {id:string;role:string;employeeId:string|null}, exception = false) {
-    return this.transaction(gym,async(db,c,bookings)=>{
+    let notification: ReturnType<typeof agendaPushEvent> = null;
+    const credit = await this.transaction(gym,async(db,c,bookings)=>{
       const b = bookings.find(b=>b.id===id);
       if (!b || (actor.role === "TRAINER" && b.employeeId !== actor.employeeId)) throw new ApiError(404,"Reserva desconocida.");
       if (!["CONFIRMED"].includes(b.status) || b.recoveryId) throw new ApiError(409,"Solo una sesión confirmada original puede dejarse pendiente.");
       const remaining = DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toMillis()-Date.now();
       if (remaining <= 0) throw new ApiError(409,"La sesión ya ha comenzado.");
       if (remaining < 2*3600000 && !(actor.role === "ADMIN" && exception)) throw new ApiError(409,"Se requieren dos horas de antelación o una excepción de administración.");
+      const previous = {...b};
       const credit = {id:randomUUID(), originalId:b.id, clientId:b.clientId, serviceId:b.serviceId, employeeId:b.employeeId, status:"PENDING", bookingId:null, createdAt:new Date().toISOString(), actorId:actor.id, exception:remaining<2*3600000};
       await db.query("INSERT INTO calendar.recoveries(gym_id,id,original_id,data) VALUES($1,$2,$3,$4)",[gym,credit.id,b.id,credit]);
       b.status="CANCELLED"; b.version++;
       await this.syncPackageBooking(db,gym,b,c);
       await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.id,b]);
       await this.audit(db, gym, actor.id, 'BOOKING_CANCELLED', 'Booking', b.id, `Reserva cancelada y convertida en recuperación pendiente para ${b.date}, ${b.start}–${b.end}.`, { clientId: b.clientId, serviceId: b.serviceId, recoveryId: credit.id, exception: credit.exception });
+      notification = agendaPushEvent(previous,b,c.timezone);
       return credit;
     });
+    if (notification && this.trainerPush) {
+      try { await this.trainerPush.publish(gym,notification); }
+      catch (error) { console.error("No se pudo publicar el aviso de agenda en SNS:", error); }
+    }
+    return credit;
   }
   async configure(gym: string, raw: unknown, revision: number) {
     const config = configSchema.parse(raw);

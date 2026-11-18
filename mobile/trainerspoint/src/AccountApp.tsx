@@ -11,6 +11,7 @@ import ClientHomeScreen from "./screens/ClientHomeScreen";
 import { apiBaseUrl } from "../../shared/config";
 import { mobileCognito } from "../../shared/cognito";
 import { Platform } from "react-native";
+import { unregisterTrainerPush } from "./trainer-push";
 
 /* ------------------------------------------------------------------ */
 /*  Main App                                                           */
@@ -43,13 +44,14 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
 
   const handleLogout = useCallback(async () => {
     try {
+      if (currentUser?.role === "TRAINER") await unregisterTrainerPush(api).catch(() => {});
       await api.logout();
     } catch {
       /* Local logout still succeeds offline */
     } finally {
       setCurrentUser(null);
     }
-  }, [api]);
+  }, [api,currentUser]);
 
   const handleLoginSuccess = useCallback((user: Identity) => {
     setCurrentUser(user);
