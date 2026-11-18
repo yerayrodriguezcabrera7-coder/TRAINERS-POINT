@@ -1,4 +1,4 @@
-import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery } from "./types";
+import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery, ServicePackage, Measurement, TrainingPlan } from "./types";
 import type { AttendanceData, TrainerClientDetail } from "./trainer-types";
 import type { CognitoAuth } from "./cognito";
 export { CognitoPasswordRequired } from "./cognito";
@@ -102,6 +102,7 @@ export class ApiClient {
     return this.request("/api/password/change", { method: "POST", body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
   }
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }
+  getClientHome() { return this.request<{profile:{id:string;firstName:string;lastName:string;email:string;phone:string;status:string;objective?:string|null};packages:ServicePackage[];measurements:Measurement[];trainingPlans:TrainingPlan[]}>("/api/mobile/client/home"); }
   getStaffCalendar() { return this.request<CalendarData>("/api/mobile/calendar"); }
   getAttendance(day: string) { return this.request<AttendanceData>(`/api/attendance?from=${encodeURIComponent(day)}&to=${encodeURIComponent(day)}`); }
   clock(employeeId: string, action: "IN" | "OUT", geo: {latitude:number;longitude:number;accuracy:number|null}) {

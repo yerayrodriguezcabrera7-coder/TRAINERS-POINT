@@ -6,6 +6,8 @@ Aplicación con entrada a cuentas de clientes y trabajadores, construida sobre e
 
 La cuenta real del entrenador abre una pantalla propia con fichaje, pausas y horas trabajadas del día. `expo-location` solicita ubicación al fichar; el servidor comprueba el radio del centro configurado y devuelve un error si la precisión es insuficiente o se está fuera. El fichaje de la web sigue admitiendo operaciones sin GPS para los usos ya existentes.
 
+La cuenta real del cliente consulta `/api/client-calendar` y `/api/mobile/client/home` para mostrar sus propias reservas, bonos, medidas, plan activo y perfil. El servidor obtiene la ficha desde la identidad autenticada; no acepta un identificador de cliente enviado en la URL para esta consulta.
+
 La agenda diaria muestra las citas asignadas. Al abrir una cita se pueden registrar asistencia, medidas, cargas, sensaciones y el objetivo de la siguiente sesión. El objetivo anterior aparece arriba al abrir la próxima cita del mismo cliente. «Pendiente de reubicar» libera el horario y deja la cita visible a recepción. La pestaña «Mis clientes» permite buscar, consultar el bono, las últimas sesiones, la evolución de peso y dejar un aviso interno. El servidor comprueba la asignación antes de devolver la ficha o guardar medidas.
 
 Para activar las medidas de grasa corporal hay que aplicar la migración Prisma `20261118000100_body_fat_measurement` junto con el despliegue del backend. Para fichar desde el móvil, cada centro necesita coordenadas y radio configurados. La demostración sigue siendo ficticia y no escribe en estos endpoints.
@@ -73,13 +75,13 @@ Para una revisión visual desde el navegador del teléfono, se puede arrancar `n
 ## Trabajo pendiente para la primera fase real
 
 - Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. Actualmente la sesión se mantiene en memoria; al cerrar o recargar se debe iniciar sesión de nuevo. No se guardan contraseñas.
-- Integrar bonos en la cuenta real; las reservas ya se consultan en el mismo backend de la web, sin duplicar bases de datos.
+- Validar el recorrido de la cuenta real en teléfonos Android y iOS; la vista web y las pruebas de integración no sustituyen esa comprobación.
 - Configurar proveedor de cobro aprobado por la empresa. Confirmar pagos en el servidor mediante eventos firmados e idempotentes antes de activar bonos o marcar deudas como pagadas. La app no debe poder declarar un pago recibido.
 - Integrar notificaciones: permisos del dispositivo, tokens, tareas programadas, preferencias y control de duplicados.
 - Mantener las dependencias de SDK 58 y los parches de herramientas transitivas alineados; los overrides de glob/minimatch corrigen avisos de seguridad del empaquetador.
 - Probar en Android/iOS reales, accesibilidad, recuperación de cuenta y errores de red.
 
-Rutinas, nutrición, medidas y actividades aparecen únicamente como futuras ampliaciones.
+Nutrición y actividades siguen como futuras ampliaciones.
 
 ## Comprobaciones realizadas en esta entrega
 

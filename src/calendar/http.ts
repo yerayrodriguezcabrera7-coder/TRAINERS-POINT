@@ -13,6 +13,7 @@ import { attendanceCsv } from "./attendance-export";
 import { mobileStaffView, staffClientIds } from "./mobile-view";
 import type { CognitoVerifier } from "../cloud/cognito";
 import { pendingPackages } from "../planning/pending-packages";
+import { clientScope } from "../network/scope";
 async function body(req: IncomingMessage) {
   let text = "";
   for await (const part of req) {
@@ -155,6 +156,31 @@ export function server(
           }
           if(path === "/api/client-slots" && client && req.method === "GET") {
             send(res,200,await store.slots(gym,Object.fromEntries(url.searchParams)));return;
+          }
+          if (path === "/api/mobile/client/home" && client && req.method === "GET") {
+            if (!identity.clientId) throw new ApiError(403,"Cuenta sin cliente asociado.");
+            if (!store.clientsDb) throw new ApiError(503,"La ficha del cliente no está disponible.");
+            const db=store.clientsDb;
+            const own=await db.client.findFirst({where:{id:identity.clientId,AND:[await clientScope(db,gym)]},select:{id:true,firstName:true,lastName:true,email:true,phone:true,status:true,objective:true}});
+            if (!own) throw new ApiError(404,"Tu ficha no está disponible en este centro.");
+            const [rawPackages,rawMeasurements,rawPlans,available]=await Promise.all([
+              db.clientServicePackage.findMany({where:{clientId:own.id},orderBy:{purchasedAt:"desc"},take:30,select:{id:true,sessionsBought:true,purchasedAt:true,paymentStatus:true,service:{select:{name:true,validityWeeks:true}}}}),
+              db.clientMeasurement.findMany({where:{clientId:own.id},orderBy:{measuredAt:"desc"},take:52}),
+              db.trainingPlan.findMany({where:{clientId:own.id,status:"ACTIVO"},orderBy:{updatedAt:"desc"},take:10,select:{id:true,clientId:true,name:true,goals:true,details:true,status:true,startsAt:true,endsAt:true}}),
+              pendingPackages(db,gym),
+            ]);
+            const availability=new Map(available.filter(item=>item.clientId===own.id).map(item=>[item.packageId,item.sessionsToSchedule]));
+            const today=Date.now();
+            send(res,200,{
+              profile:own,
+              packages:rawPackages.map(pkg=>{
+                const expiresAt=new Date(pkg.purchasedAt.getTime()+(pkg.service.validityWeeks||4)*7*86400000);
+                const remainingSessions=availability.get(pkg.id)||0;
+                return {id:pkg.id,clientId:own.id,serviceName:pkg.service.name,totalSessions:pkg.sessionsBought,remainingSessions,expiresAt:expiresAt.toISOString().slice(0,10),isActive:pkg.paymentStatus==='PAGADO'&&expiresAt.getTime()>today};
+              }),
+              measurements:rawMeasurements.map(m=>({id:m.id,clientId:own.id,measuredAt:m.measuredAt.toISOString().slice(0,10),weight:m.weight==null?undefined:Number(m.weight),bodyFat:m.bodyFat==null?undefined:Number(m.bodyFat),waist:m.waist==null?undefined:Number(m.waist),hip:m.hip==null?undefined:Number(m.hip),chest:m.chest==null?undefined:Number(m.chest),arm:m.arm==null?undefined:Number(m.arm),leg:m.leg==null?undefined:Number(m.leg),notes:m.notes||undefined})),
+              trainingPlans:rawPlans.map(plan=>({...plan,startsAt:plan.startsAt?.toISOString().slice(0,10),endsAt:plan.endsAt?.toISOString().slice(0,10)})),
+            });return;
           }
           if (client) {
             throw new ApiError(403, "Tu perfil no tiene acceso a las funciones de gestión.");
