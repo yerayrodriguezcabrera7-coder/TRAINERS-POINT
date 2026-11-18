@@ -81,8 +81,11 @@ export function enhancedReminderText(
     bonusExpiring?: boolean;
     cancellationPolicy: string;
   },
+  isRecovery = false,
 ): string {
   let text = `Hola ${clientName}. Te recordamos tu cita del ${date} a las ${time}: ${service}, con ${trainer}.`;
+
+  if (isRecovery) text += ' Sesión de recuperación.';
 
   if (info.sessionNumber && info.totalSessions) {
     text += ` Sesión ${info.sessionNumber} de ${info.totalSessions} de tu bono.`;

@@ -1103,6 +1103,25 @@ body > main.main-content {
   border-top: 1px solid #eef2f6;
 }
 
+/* La identidad visual la determina siempre el servicio; el estado se conserva
+   en sus insignias y etiquetas, sin sustituir el color configurado. */
+.event,
+.month-event {
+  background: color-mix(in srgb, var(--event-color) 13%, white);
+  border-color: color-mix(in srgb, var(--event-color) 38%, white);
+  border-left-color: var(--event-color);
+  color: color-mix(in srgb, var(--event-color) 68%, #17242a);
+}
+
+/* El centro puede conservar una marca visual propia, pero nunca reemplaza
+   el color del tipo de servicio configurado en el catálogo. */
+.month-event.is-cobosu {
+  background: color-mix(in srgb, var(--event-color) 13%, white);
+  border-color: color-mix(in srgb, var(--event-color) 38%, white);
+  border-left-color: var(--event-color);
+  color: color-mix(in srgb, var(--event-color) 68%, #17242a);
+}
+
 @media (max-width: 760px) {
   body > main.main-content {
     padding: 16px 12px;

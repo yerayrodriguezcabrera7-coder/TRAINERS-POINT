@@ -6,7 +6,7 @@ import { enhancedReminderText } from './session-text';
 
 type Candidate = {
   gym_id: string; id: string; data: any; config: any;
-  client_name: string; phone: string; preference: string;
+  client_name: string; phone: string | null; email: string | null; preference: string;
   service_name: string; employee_name: string | null;
   service_id: string; client_id: string; package_id: string | null;
 };
@@ -16,7 +16,7 @@ type Candidate = {
  * The Prisma Booking model only exposes `packageId` as a scalar, not a relation.
  */
 async function fetchSessionInfos(bookingIds: string[]) {
-  const map = new Map<string, { sessionNumber?: number; isLastSession?: boolean; bonusExpiring?: boolean }>();
+  const map = new Map<string, { sessionNumber?: number; totalSessions?: number; isLastSession?: boolean; bonusExpiring?: boolean }>();
   if (!bookingIds.length) return map;
 
   // Get packageId for each booking
@@ -66,6 +66,7 @@ async function fetchSessionInfos(bookingIds: string[]) {
 
     map.set(b.id, {
       sessionNumber: used + 1,
+      totalSessions: total,
       isLastSession: isLast,
       bonusExpiring,
     });
@@ -76,21 +77,21 @@ async function fetchSessionInfos(bookingIds: string[]) {
 
 export function prepareReminder(row: Candidate, now: Date): { startsAt: string; message: ReminderMessage } | null {
   if (!['PENDING', 'CONFIRMED'].includes(row.data.status) || row.data.needsReschedule || !row.data.employeeId) return null;
-  if (!['WHATSAPP', 'SMS'].includes(row.preference)) return null;
-  const phone = row.phone.replace(/[\s()-]/g, '');
-  if (!/^\+[1-9]\d{7,14}$/.test(phone)) return null;
+  if (!['WHATSAPP', 'SMS', 'EMAIL'].includes(row.preference)) return null;
+  const phone = (row.phone || '').replace(/[\s()-]/g, '');
+  if (row.preference !== 'EMAIL' && !/^\+[1-9]\d{7,14}$/.test(phone)) return null;
+  if (row.preference === 'EMAIL' && !row.email) return null;
   const start = DateTime.fromISO(`${row.data.date}T${row.data.start}`, { zone: row.config.timezone || 'Europe/Madrid' });
   if (!start.isValid) return null;
-  // Previous calendar day at the same local time, also across daylight-saving changes.
-  const due = start.minus({ days: 1 }).toMillis(), elapsed = now.getTime() - due;
-  if (elapsed < 0 || elapsed > 2 * 3600000 || start.toMillis() <= now.getTime()) return null;
+  const due = start.minus({ hours: 2 }).toMillis(), elapsed = now.getTime() - due;
+  if (elapsed < 0 || elapsed > 10 * 60000 || start.toMillis() <= now.getTime()) return null;
   const trainer = row.employee_name || row.config.employees?.find((e: any) => e.id === row.data.employeeId)?.name;
   if (!trainer) return null;
   return {
     startsAt: start.toUTC().toISO()!,
     message: {
-      channel: row.preference as 'WHATSAPP' | 'SMS',
-      phone,
+      channel: row.preference as 'WHATSAPP' | 'SMS' | 'EMAIL',
+      ...(row.preference === 'EMAIL' ? { email: row.email! } : { phone }),
       client: row.client_name,
       date: start.setLocale('es').toFormat('dd/MM/yyyy'),
       time: start.toFormat('HH:mm'),
@@ -102,7 +103,7 @@ export function prepareReminder(row: Candidate, now: Date): { startsAt: string; 
 
 const query = `SELECT b.gym_id,b.id,b.data,g.config,
   concat_ws(' ',c."firstName",c."lastName") AS client_name,
-  c.phone,c."contactPreference" AS preference,
+  c.phone,c.email,c."contactPreference" AS preference,
   s.name AS service_name,
   s.id AS service_id,
   c.id AS client_id,
@@ -130,13 +131,13 @@ export class ReminderWorker {
     const candidates = await this.pool.query<Candidate>(
       query + ` WHERE b.data->>'status' IN ('PENDING','CONFIRMED')
         AND b.data->>'date' BETWEEN $1 AND $2
-        AND ((concat(b.data->>'date','T',b.data->>'start')::timestamp - interval '1 day')
+        AND ((concat(b.data->>'date','T',b.data->>'start')::timestamp - interval '2 hours')
             AT TIME ZONE COALESCE(g.config->>'timezone','Europe/Madrid'))
-            BETWEEN $3::timestamptz - interval '2 hours' AND $3::timestamptz
+            BETWEEN $3::timestamptz - interval '10 minutes' AND $3::timestamptz
         ORDER BY b.data->>'date',b.data->>'start',b.id`,
       [
-        DateTime.fromJSDate(now).toUTC().minus({ days: 1 }).toISODate(),
-        DateTime.fromJSDate(now).toUTC().plus({ days: 2 }).toISODate(),
+        DateTime.fromJSDate(now).setZone('Europe/Madrid').toISODate(),
+        DateTime.fromJSDate(now).setZone('Europe/Madrid').plus({ days: 2 }).toISODate(),
         now,
       ],
     );
@@ -144,7 +145,7 @@ export class ReminderWorker {
     if (!candidates.rows.length) return;
 
     // Pre-fetch session info for all candidates (may fail under concurrency; gracefully degrade)
-    let sessionInfoMap: Map<string, { sessionNumber?: number; isLastSession?: boolean; bonusExpiring?: boolean }> = new Map();
+    let sessionInfoMap: Map<string, { sessionNumber?: number; totalSessions?: number; isLastSession?: boolean; bonusExpiring?: boolean }> = new Map();
     try {
       const bookingIds = candidates.rows.map((r) => r.id);
       sessionInfoMap = await fetchSessionInfos(bookingIds);
@@ -185,15 +186,20 @@ export class ReminderWorker {
         } else {
           // Build enhanced message body with session info
           const info = sessionInfoMap.get(row.id);
-          if (info && info.sessionNumber) {
-            current.message.body = enhancedReminderText(
+          const isRecovery = Boolean(row.data.recoveryId);
+          current.message.body = enhancedReminderText(
               current.message.client,
               current.message.date,
               current.message.time,
               current.message.service,
               current.message.trainer,
-              { ...info, cancellationPolicy: 'Recuerda que debes cancelar con mínimo 2 horas de antelación y dentro del horario laboral del centro.' },
+              { ...info, cancellationPolicy: 'Recuerda cancelar con al menos 2 horas de antelación y dentro del horario laboral del centro.' },
+              isRecovery,
             );
+          if (current.message.channel === 'WHATSAPP') {
+            const extras = [info?.sessionNumber && info.totalSessions ? `Sesión ${info.sessionNumber} de ${info.totalSessions} de tu bono.` : '', isRecovery ? 'Sesión de recuperación.' : '', info?.isLastSession ? '⚠️ ¡Esta es tu última sesión! Toca renovar tu bono.' : '', info?.bonusExpiring ? 'Tu bono está próximo a caducar.' : ''].filter(Boolean).join(' ');
+            current.message.templateSid = process.env.TWILIO_WHATSAPP_REMINDER_CONTENT_SID;
+            current.message.templateVariables = { '1': current.message.client, '2': current.message.date, '3': current.message.time, '4': current.message.service, '5': current.message.trainer, '6': extras || 'Sesión incluida en tu agenda.', '7': 'Cancela con al menos 2 horas de antelación y dentro del horario laboral del centro.' };
           }
 
           const providerId = await this.provider.send(current.message);

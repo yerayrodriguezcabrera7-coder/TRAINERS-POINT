@@ -218,11 +218,12 @@ test('Interfaz y archivos: Comprobar existencia y estructura de la página de se
 });
 
 
-test('Integración: servicios compartidos actualizan el calendario y conservan su color y disponibilidad', async () => {
+test('Integración: el calendario solo carga servicios base y no incorpora packs comerciales', async () => {
   const { Store } = require('../dist/calendar/store');
   const gym = await prisma.gym.create({ data: { name: 'Centro integración servicios' } });
-  const service = await prisma.service.create({ data: { name: 'Servicio compartido', color: '#ab1234', category: 'CABIN', validityWeeks: 8, price: 55, durationMin: 45, modality: 'DUAL', type: 'PACK', trainingCount: 8 } });
-  createdServiceIds.push(service.id);
+  const service = await prisma.service.create({ data: { name: 'Dual', color: '#ab1234', category: 'CABIN', price: 0, durationMin: 45, modality: 'DUAL', type: 'SESION_INDIVIDUAL', trainingCount: 1 } });
+  const pack = await prisma.service.create({ data: { name: 'Bono Dual 8', color: '#000000', category: 'TRAINING', validityWeeks: 8, price: 55, durationMin: 60, modality: 'INDIVIDUAL', type: 'PACK', trainingCount: 8, serviceId: service.id } });
+  createdServiceIds.push(service.id, pack.id);
   const schedule = Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00', closed: false }));
   const store = new Store(pool, prisma);
   await store.seed(gym.id, { timezone: 'Europe/Madrid', schedule,
@@ -231,21 +232,22 @@ test('Integración: servicios compartidos actualizan el calendario y conservan s
     services: [{ id: service.id, name: 'Nombre anterior', duration: 60, capacity: 1, price: 30,
       color: '#778899', schedule, employeeIds: ['e1'] }] });
   const synced = (await store.state(gym.id)).services.find(item => item.id === service.id);
-  assert.equal(synced.name, 'Servicio compartido');
+  assert.equal(synced.name, 'Dual');
   assert.equal(synced.duration, 45);
-  assert.equal(synced.price, 55);
+  assert.equal(synced.price, 0);
   assert.equal(synced.capacity, 2);
-  assert.equal(synced.trainingCount, 8);
+  assert.equal(synced.trainingCount, 1);
   assert.equal(synced.color, '#ab1234');
-  assert.equal(synced.validityWeeks, 8);
   assert.equal(synced.category, 'CABIN');
+  assert.equal((await store.state(gym.id)).services.some(item => item.id === pack.id), false);
   assert.deepEqual(synced.employeeIds, ['e1']);
   assert.deepEqual(synced.schedule, schedule);
   await prisma.service.update({ where: { id: service.id }, data: { isActive: false } });
+  require('../dist/cache/query-cache').queryCache.clear();
   assert.equal((await store.state(gym.id)).services.find(item => item.id === service.id).active, false);
 });
 
-test('Formulario: catálogo de campos, validez editable con cuatro semanas por defecto', () => {
+test('Formulario de Servicios: campos de agenda separados de precio y validez de los packs', () => {
   const htmlPath = path.join(__dirname, '..', 'web', 'services', 'services.html');
   const jsPath = path.join(__dirname, '..', 'web', 'services', 'services.js');
   const cssPath = path.join(__dirname, '..', 'web', 'services', 'services.css');
@@ -254,20 +256,15 @@ test('Formulario: catálogo de campos, validez editable con cuatro semanas por d
   const js = fs.readFileSync(jsPath, 'utf8');
   const css = fs.readFileSync(cssPath, 'utf8');
 
-  // Comprobar los campos requeridos en el HTML del formulario
-  // (los servicios gestionan SESION_INDIVIDUAL: no hay selector de tipo ni campo de número de sesiones)
+  // El servicio base solo contiene parámetros de sesión y agenda.
   const expectedFields = [
     'field-name',          // 1. Nombre del servicio
     'field-description',   // 2. Descripción
     'field-color',         // 3. Color en calendario
     'field-category',      // 4. Categoría (Entrenamiento / Cabina)
     'field-modality',      // 5. Modalidad (Individual / Dual)
-    'field-price',         // 6. Precio por sesión
-    'field-durationMin',   // 7. Duración por sesión
-    'field-validityWeeks', // 8. Validez
-    'field-frequency',     // 9. Frecuencia semanal recomendada
-    'field-conditions',    // 10. Condiciones
-    'field-isActive',      // 11. Estado
+    'field-durationMin',   // 6. Duración por sesión
+    'field-isActive',      // 7. Estado
   ];
 
   for (const fieldId of expectedFields) {
@@ -277,11 +274,11 @@ test('Formulario: catálogo de campos, validez editable con cuatro semanas por d
   // No debe contener campos eliminados (tipo y número de sesiones)
   assert.ok(!html.includes('id="field-type"'), 'No debe existir el campo "type" (servicio siempre SESION_INDIVIDUAL)');
   assert.ok(!html.includes('id="field-trainingCount"'), 'No debe existir el campo "trainingCount" (siempre 1)');
+  for (const commercialField of ['field-price', 'field-validityWeeks', 'field-frequency', 'field-conditions']) assert.ok(!html.includes(`id="${commercialField}"`));
 
   const { JSDOM } = require('jsdom');
   const document = new JSDOM(html).window.document;
-  const weeks = document.getElementById('field-validityWeeks');
-  assert.equal(weeks.value, '4'); assert.equal(weeks.readOnly, false); assert.equal(weeks.min, '1');
+  assert.equal(document.getElementById('field-validityWeeks'), null);
   assert.ok(document.getElementById('field-color')); assert.ok(document.getElementById('field-category'));
   assert.equal(document.querySelectorAll('.stats-grid').length, 0);
 
@@ -292,8 +289,7 @@ test('Formulario: catálogo de campos, validez editable con cuatro semanas por d
   assert.ok(css.includes('.is-invalid'), 'Debe incluir estilos para el estado visual de error en los campos');
 
   // Comprobar validaciones en frontend
-  assert.ok(js.includes('El precio por sesión es obligatorio'), 'Debe validar precio obligatorio');
-  assert.ok(js.includes('El precio no puede ser negativo'), 'Debe validar precios negativos');
+  assert.ok(!js.includes('El precio por sesión es obligatorio'), 'El precio se configura en Packs.');
   assert.ok(js.includes('El nombre del servicio es obligatorio'), 'Debe validar servicios sin nombre');
   assert.ok(js.includes('setFieldError'), 'Debe marcar campos erróneos y alertar al usuario');
 
@@ -382,7 +378,7 @@ test('Backend: Verificación de reglas de validación en parseServiceInput (vali
   assert.ok(src.includes('120'), 'Debe validar longitud máxima del nombre a 120');
 
   // Validación de precios negativos
-  assert.ok(src.includes('price < 0'), 'Debe validar precios negativos');
+  assert.ok(src.includes('rawPrice < 0'), 'Debe validar precios negativos cuando el campo se proporciona');
   assert.ok(src.includes('El precio total es obligatorio, no puede ser negativo'), 'Debe emitir mensaje claro de precio no negativo');
 
   // Validación de sesión individual (siempre trainingCount >= 1)

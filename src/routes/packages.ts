@@ -40,7 +40,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     }
     const packages = await prisma.clientServicePackage.findMany({
       where: { clientId },
-      include: { service: { select: { id: true, name: true, durationMin: true, validityWeeks: true } }, sale: { include: { lines: true, payments: true } } },
+      include: { service: { select: { id: true, name: true, durationMin: true, validityWeeks: true, serviceId: true, color: true, modality: true } }, sale: { include: { lines: true, payments: true } } },
       orderBy: { purchasedAt: "desc" },
     });
     const [bookings, bookingCounts, sales, debtSales] = await Promise.all([
@@ -99,6 +99,9 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
         },
       }),
     ]);
+    const baseIds = [...new Set(packages.map(pkg => pkg.service?.serviceId).filter((id): id is string => Boolean(id)))];
+    const baseServices = baseIds.length ? await prisma.service.findMany({ where: { id: { in: baseIds }, type: { not: 'PACK' } }, select: { id: true, name: true, color: true, modality: true, durationMin: true, category: true } }) : [];
+    const baseServiceById = new Map(baseServices.map(service => [service.id, service]));
     const debtByCurrency = new Map<string, number>();
     for (const servicePackage of packages) {
       if (!servicePackage.saleId && (servicePackage.paymentStatus === PaymentStatus.PENDIENTE ||
@@ -143,6 +146,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
       }
       return {
         ...servicePackage,
+        bookingService: servicePackage.service?.serviceId ? baseServiceById.get(servicePackage.service.serviceId) || null : null,
         sale: servicePackage.sale ? saleBalance(servicePackage.sale) : null,
         sessionsUsed,
         sessionsScheduled,

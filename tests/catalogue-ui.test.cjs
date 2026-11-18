@@ -39,7 +39,7 @@ test('Catálogo: solo alerta operativa, búsqueda por código, miniaturas y deta
   }finally{p.dom.window.close();}
 });
 
-test('Servicios: sin dashboards, categoría Cabina, duración de 45 minutos y color se editan y guardan',async()=>{
+test('Servicios: categoría, duración, modalidad y color se editan sin campos comerciales de bonos',async()=>{
   const service={id:randomUUID(),name:'Bono cabina',category:'CABIN',color:'#235678',type:'SESION_INDIVIDUAL',modality:'INDIVIDUAL',trainingCount:1,price:100,durationMin:45,validityWeeks:8,isActive:true};let saved;
   const p=page('web/services/services.html','web/services/services.js',(url,options)=>{
     if(url.pathname==='/api/me')return {role:'ADMIN'};
@@ -49,10 +49,11 @@ test('Servicios: sin dashboards, categoría Cabina, duración de 45 minutos y co
   try{
     await until(()=>p.d.querySelector('[data-edit-id]'));
     assert.equal(p.d.querySelector('.stats-grid'),null);assert.match(p.d.querySelector('.service-card').textContent,/45 min/);
-    p.d.querySelector('[data-edit-id]').click();assert.equal(p.d.getElementById('field-category').value,'CABIN');assert.equal(p.d.getElementById('field-validityWeeks').value,'8');assert.equal(p.d.getElementById('field-color').value,'#235678');
-    p.d.getElementById('field-name').value='Valoración cabina';p.d.getElementById('field-validityWeeks').value='2';p.d.getElementById('field-color').value='#ab2345';
+    p.d.querySelector('[data-edit-id]').click();assert.equal(p.d.getElementById('field-category').value,'CABIN');assert.equal(p.d.getElementById('field-color').value,'#235678');
+    assert.equal(p.d.getElementById('field-price'),null);assert.equal(p.d.getElementById('field-validityWeeks'),null);assert.equal(p.d.getElementById('field-trainingCount'),null);
+    p.d.getElementById('field-name').value='Valoración cabina';p.d.getElementById('field-color').value='#ab2345';
     p.d.getElementById('service-form').requestSubmit(p.d.getElementById('submit-dialog'));await until(()=>saved);
-    assert.equal(saved.validityWeeks,2);assert.equal(saved.color,'#ab2345');assert.equal(saved.category,'CABIN');assert.equal(saved.name,'Valoración cabina');
+    assert.equal(saved.color,'#ab2345');assert.equal(saved.category,'CABIN');assert.equal(saved.name,'Valoración cabina');assert.equal(saved.type,'SESION_INDIVIDUAL');
     await until(()=>p.d.querySelector('.service-card').textContent.includes('Valoración cabina'));assert.deepEqual(p.errors,[]);
   }finally{p.dom.window.close();}
 });

@@ -6,7 +6,7 @@
   const typeLabels = {ENTRADA:'Entrada',VENTA:'Venta',DEVOLUCION:'Devolución',AJUSTE:'Ajuste',DANO:'Daño',SALIDA:'Salida (merma)'};
   let movements = [], me, allProducts = [];
   async function api(path, method = 'GET', body) {
-    const url = '/api/inventory/stock-movements' + path;
+    const url = '/api/inventory' + path;
     const response = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : undefined});
     const data = await response.json();
     if (!response.ok) throw Error(data.error || 'No se pudo completar la operación.');
@@ -37,15 +37,16 @@
       const photo = m.product?.imageData
         ? `<img class="movement-product-photo" src="${esc(m.product.imageData)}" alt="${esc(m.product.name)}" loading="lazy">`
         : `<span class="movement-product-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m4 17 5-5 4 4 3-3 5 6"/></svg></span>`;
-      return `<tr>
+      return `<tr data-movement-id="${esc(m.id)}">
         <td>${formatDate(m.occurredAt)}</td>
         <td><div class="movement-product-identity">${photo}<div><strong>${esc(m.product?.name || m.productName)}</strong></div></div></td>
         <td>${typeBadge(m.type)}</td>
         <td><strong style="color:${m.quantity > 0 ? '#2e7d32' : '#c62828'}">${formatQty(m.quantity)}</strong></td>
         <td><small>${esc(m.reference) || '—'}</small></td>
         <td><small>${esc(m.notes) || '—'}</small></td>
+        <td><small>${esc(m.actorName || 'Sistema')}</small></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6">No hay movimientos de stock con estos criterios.</td></tr>';
+    }).join('') || '<tr><td colspan="7">No hay movimientos de stock con estos criterios.</td></tr>';
 
     const entradas = movements.filter(m => m.type === 'ENTRADA').reduce((s,m) => s + m.quantity, 0);
     const ventas = movements.filter(m => m.type === 'VENTA').reduce((s,m) => s + m.quantity, 0);
@@ -72,7 +73,7 @@
   }
 
   async function load() {
-    movements = (await api('/' + (buildFilterUrl() ? '?' + buildFilterUrl() : ''))).movements || [];
+    movements = (await api('/stock-movements' + (buildFilterUrl() ? '?' + buildFilterUrl() : ''))).movements || [];
     render();
   }
 
@@ -99,13 +100,26 @@
   $('filter-from').onchange = render;
   $('filter-to').onchange = render;
   $('refresh').onclick = () => load().catch(error => $('notice').textContent = error.message);
+  $('new-stock-loss').onclick = () => {
+    const select = $('stock-loss-form').elements.productId;
+    select.innerHTML = allProducts.filter(p => p.isActive).map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.stock} disponibles</option>`).join('');
+    $('stock-loss-error').textContent = '';
+    $('stock-loss-dialog').showModal();
+  };
+  $('stock-loss-form').onsubmit = async event => {
+    event.preventDefault(); const form = event.currentTarget, button = form.querySelector('button.primary'); button.disabled = true;
+    try {
+      await api('/stock-adjustments', 'POST', { productId: form.elements.productId.value, type: form.elements.type.value, quantity: Number(form.elements.quantity.value), notes: form.elements.notes.value });
+      $('stock-loss-dialog').close(); form.reset(); await Promise.all([load(), loadProducts()]); $('notice').textContent = 'Salida registrada y stock actualizado.';
+    } catch (error) { $('stock-loss-error').textContent = error.message; } finally { button.disabled = false; }
+  };
 
   $('movements').onclick = async event => {
-    const row = event.target.closest('tr');
+    if (event.target.closest('button')) return;
+    const row = event.target.closest('tr[data-movement-id]');
     if (!row) return;
     const cells = row.querySelectorAll('td');
-    const idx = Array.from(cells[0].parentNode.children).indexOf(cells[0]);
-    const m = movements[idx];
+    const m = movements.find(item => item.id === row.dataset.movementId);
     if (!m) return;
     $('movement-title').textContent = `${typeLabels[m.type]} — ${m.product?.name || m.productName}`;
     $('movement-content').innerHTML = `
@@ -115,6 +129,7 @@
         <dt>Producto</dt><dd>${esc(m.product?.name || m.productName)}</dd>
         <dt>Cantidad</dt><dd><strong style="color:${m.quantity > 0 ? '#2e7d32' : '#c62828'}">${formatQty(m.quantity)} unidades</strong></dd>
         <dt>Referencia</dt><dd><code>${esc(m.reference) || '—'}</code></dd>
+        <dt>Registrado por</dt><dd>${esc(m.actorName || 'Sistema')}</dd>
         <dt>Stock tras el movimiento</dt><dd>${m.product != null ? m.product.stock + ' unidades' : '—'}</dd>
         ${m.notes ? `<dt style="grid-column:1/-1">Notas / Motivo</dt><dd style="grid-column:1/-1">${esc(m.notes)}</dd>` : ''}
         ${m.unitCost ? `<dt>Coste unitario</dt><dd>${new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(m.unitCost))}</dd>` : ''}
@@ -130,6 +145,8 @@
     me = await response.json();
     const canHistory = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('historial-stock.html') : ['ADMIN','RECEPTION'].includes(me.role));
     if (!canHistory) throw Error('Tu perfil no permite acceder al historial de stock.');
+    const canRecordLoss = me.role === 'ADMIN' || (Array.isArray(me.pagePermissions) ? me.pagePermissions.includes('historial-stock.html') || me.pagePermissions.includes('pedidos.html') : me.role === 'RECEPTION');
+    $('new-stock-loss').hidden = !canRecordLoss;
     await Promise.all([load(), loadProducts()]);
   } catch (error) {
     $('notice').textContent = error.message;

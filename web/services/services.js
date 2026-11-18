@@ -110,7 +110,6 @@
         const haystack = [
           service.name,
           service.description,
-          service.conditions,
           service.modality,
           service.category === "CABIN" ? "cabina" : "entrenamiento",
         ].filter(Boolean).join(' ').toLowerCase();
@@ -141,7 +140,6 @@
     }
 
     grid.innerHTML = filtered.map(service => {
-      const priceNum = Number(service.price) || 0;
       const isDual = service.modality === 'DUAL';
       const color = /^#[0-9a-f]{6}$/i.test(service.color) ? service.color : '#317b9b';
 
@@ -155,24 +153,11 @@
               <span class="badge-pill badge-modality">
                 ${isDual ? 'Dual (2 personas)' : 'Individual'}
               </span>
-              <span class="badge-pill badge-type">
-                Sesión única
-              </span>
             </div>
           </div>
 
           <h3 class="service-name"><span class="service-color-dot" style="background:${color}" aria-hidden="true"></span>${esc(service.name)}</h3><p class="service-category">${service.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
           <p class="service-description">${esc(service.description || 'Sin descripción detallada.')}</p>
-
-          <div class="service-price-box">
-            <div>
-              <span class="spec-label">Precio por sesión</span>
-              <div class="price-main">${eur.format(priceNum)}</div>
-            </div>
-            <div class="price-subtitle">
-              ${service.durationMin} min / sesión
-            </div>
-          </div>
 
           <div class="service-specs">
             <div class="spec-item">
@@ -183,20 +168,7 @@
               <span class="spec-label">Color en calendario</span>
               <span class="spec-value"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1);"></span>${service.color}</span>
             </div>
-            ${service.recommendedWeeklyFrequency ? `
-            <div class="spec-item">
-              <span class="spec-label">Frecuencia rec.</span>
-              <span class="spec-value">🔄 ${service.recommendedWeeklyFrequency} días / sem</span>
-            </div>
-            ` : ''}
           </div>
-
-          ${service.conditions ? `
-            <div class="service-conditions-box">
-              <span class="conditions-label">Condiciones</span>
-              <p class="conditions-text">${esc(service.conditions)}</p>
-            </div>
-          ` : ''}
 
           <div class="service-card-footer">
             <button class="button-toggle-status" type="button" data-toggle-id="${esc(service.id)}" data-active="${service.isActive}">
@@ -246,12 +218,8 @@
     $('field-color').value = ['#317b9b','#b85c38','#63805b','#885b9c','#a67a18'][services.length % 5];
     $('field-modality').value = 'INDIVIDUAL';
     $('field-durationMin').value = '60';
-    $('field-price').value = '';
-    $('field-validityWeeks').value = '4';
-    $('field-frequency').value = '';
     $('field-isActive').value = 'true';
     $('field-description').value = '';
-    $('field-conditions').value = '';
     dialog.showModal();
   }
 
@@ -268,13 +236,9 @@
     $('field-category').value = service.category || 'TRAINING';
     $('field-color').value = service.color || '#317b9b';
     $('field-modality').value = service.modality || 'INDIVIDUAL';
-    $('field-price').value = service.price != null ? Number(service.price).toFixed(2) : '';
     $('field-durationMin').value = service.durationMin || 60;
-    $('field-validityWeeks').value = String(service.validityWeeks || 4);
-    $('field-frequency').value = service.recommendedWeeklyFrequency ?? '';
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
-    $('field-conditions').value = service.conditions || '';
     dialog.showModal();
   }
 
@@ -349,49 +313,13 @@
         return setFieldError('field-durationMin', 'La duración debe ser un entero entre 5 y 720 minutos.');
       }
 
-      // 5. Precio por sesión
-      const priceRaw = $('field-price').value.trim();
-      if (!priceRaw) {
-        return setFieldError('field-price', 'El precio por sesión es obligatorio.');
-      }
-      const price = Number(priceRaw);
-      if (!Number.isFinite(price) || price < 0) {
-        return setFieldError('field-price', 'El precio no puede ser negativo.');
-      }
-      if (price > 99999999.99) {
-        return setFieldError('field-price', 'El precio no puede superar los 99.999.999,99 €.');
-      }
-
-      // 6. Validez
-      const weeksRaw = $('field-validityWeeks').value.trim();
-      const validityWeeks = Number(weeksRaw);
-      if (!Number.isSafeInteger(validityWeeks) || validityWeeks < 1 || validityWeeks > 5200) {
-        return setFieldError('field-validityWeeks', 'Indica una validez entre 1 y 5200 semanas.');
-      }
-
-      // 7. Frecuencia semanal recomendada (opcional)
-      const freqRaw = $('field-frequency').value.trim();
-      let recommendedWeeklyFrequency = null;
-      if (freqRaw) {
-        recommendedWeeklyFrequency = Number(freqRaw);
-        if (!Number.isInteger(recommendedWeeklyFrequency) || recommendedWeeklyFrequency < 1 || recommendedWeeklyFrequency > 14) {
-          return setFieldError('field-frequency', 'La frecuencia semanal recomendada debe ser un entero entre 1 y 14 días.');
-        }
-      }
-
-      // 8. Descripción (opcional)
+      // 5. Descripción (opcional)
       const description = $('field-description').value.trim();
       if (description.length > 2000) {
         return setFieldError('field-description', 'La descripción no puede tener más de 2000 caracteres.');
       }
 
-      // 9. Condiciones (opcional)
-      const conditions = $('field-conditions').value.trim();
-      if (conditions.length > 5000) {
-        return setFieldError('field-conditions', 'Las condiciones no pueden tener más de 5000 caracteres.');
-      }
-
-      // 10. Estado del servicio
+      // 6. Estado del servicio
       const isActive = $('field-isActive').value === 'true';
 
       const submitBtn = $('submit-dialog');
@@ -404,13 +332,10 @@
         modality,
         type: 'SESION_INDIVIDUAL',
         trainingCount: 1,
-        price,
+        price: 0,
         durationMin,
-        validityWeeks,
         category: $('field-category').value,
         color,
-        recommendedWeeklyFrequency,
-        conditions: conditions || null,
         isActive,
       };
 

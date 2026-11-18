@@ -109,6 +109,9 @@ export class Store {
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
     });
     const servicesQuery = this.clientsDb.service.findMany({
+      // Packs are commercial products, not schedulable session types. A booking
+      // uses the base service linked from its pack.
+      where: { type: { not: "PACK" } },
       orderBy: { name: "asc" },
       select: {
         id: true,

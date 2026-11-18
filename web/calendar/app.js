@@ -686,7 +686,7 @@ function renderMonth(bookings) {
     const dayBookings = byDay.get(date)||[];
     const active = dayBookings.filter(b => b.status !== 'cancelled');
     html += `<div class="month-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}" data-month-cell="${date}"><div class="month-cell-header"><span class="day-number">${C.parseDate(date).getDate()}</span>${active.length ? `<span class="month-badge">${active.length}</span>` : ''}</div><div class="month-events">${dayBookings.slice(0, 3).map(b => {
-      const color = b.employeeId === COBOSU_ID ? '#dc2626' : (lookup('services', b.serviceId).color || '#317b9b');
+      const color = lookup('services', b.serviceId).color || '#317b9b';
       const isDraggable = canDragBooking(b);
       return `<button class="month-event ${b.status} ${b.employeeId === COBOSU_ID ? 'is-cobosu' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" title="${escapeHTML(eventLabel(b))}"><span class="month-event-dot"></span><span>${b.start} ${escapeHTML(lookup('clients', b.clientId).name)}${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<small>${escapeHTML(lookup('services',b.serviceId).name)} · ${escapeHTML(b.centerName||'Centro actual')}${!b.employeeId?' · SIN ASIGNAR':''}${b.needsReschedule?' · REPROGRAMAR':''}</small></span></button>`;
     }).join('')}${dayBookings.length > 3 ? `<div class="month-more">+${dayBookings.length - 3} más</div>` : ''}</div></div>`;
@@ -1032,12 +1032,13 @@ function renderDualPackages(selected = undefined) {
   const list = dualClientPackages.filter(p => (p.paymentStatus === 'PAGADO' && p.sessionsRemaining > 0) || p.id === old || p.id === partnerPkgId);
 
   select.innerHTML = '<option value="">Sin bono · pago pendiente</option>' + list.map(p => {
-    const isMatching = p.service.id === currentServiceId;
-    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(p.service.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus === 'PAGADO' ? 'Pagado' : 'Pago pendiente'}</option>`;
+    const bookingService = p.bookingService || p.service;
+    const isMatching = bookingService.id === currentServiceId;
+    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(bookingService.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus === 'PAGADO' ? 'Pagado' : 'Pago pendiente'}</option>`;
   }).join('');
 
   if (selected === undefined && !old && availablePaid.length > 0) {
-    const matching = availablePaid.find(p => p.service.id === currentServiceId);
+    const matching = availablePaid.find(p => (p.bookingService || p.service).id === currentServiceId);
     if (matching) select.value = matching.id;
   } else {
     select.value = list.some(p => p.id === old) ? old : '';
@@ -1155,15 +1156,16 @@ function renderPackages(selected){
   const availablePaid = clientPackages.filter(p=>p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0);
   const list=clientPackages.filter(p=>(p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0)||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
   select.innerHTML='<option value="">Reservar sin bono · pago pendiente</option>'+list.map(p=>{
-    const isMatching = p.service.id === currentServiceId;
-    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(p.service.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`;
+    const bookingService = p.bookingService || p.service;
+    const isMatching = bookingService.id === currentServiceId;
+    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(bookingService.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`;
   }).join('');
 
   if (!old && availablePaid.length > 0) {
-    const matching = availablePaid.find(p => p.service.id === currentServiceId) || availablePaid[0];
+    const matching = availablePaid.find(p => (p.bookingService || p.service).id === currentServiceId) || availablePaid[0];
     select.value = matching.id;
-    if (matching.service?.id) {
-      syncSelectedService(matching.service.id, { updateBuySelect: true, refreshPackages: true });
+    if ((matching.bookingService || matching.service)?.id) {
+      syncSelectedService((matching.bookingService || matching.service).id, { updateBuySelect: true, refreshPackages: true });
     }
   } else {
     select.value=list.some(p=>p.id===old)?old:'';
@@ -1202,7 +1204,7 @@ function renderPackages(selected){
 
 $('booking-package').onchange=()=>{
   const p=clientPackages.find(p=>p.id===$('booking-package').value);
-  if(p?.service?.id) syncSelectedService(p.service.id);
+  if((p?.bookingService || p?.service)?.id) syncSelectedService((p.bookingService || p.service).id);
   renderPackages();
 };
 
@@ -1519,7 +1521,7 @@ document.addEventListener('click', event => {
 $('booking-service').addEventListener('change', () => {
   const service = lookup('services', $('booking-service').value);
   const selectedPackage=clientPackages.find(p=>p.id===$('booking-package').value);
-  if(selectedPackage&&selectedPackage.service.id!==service.id)$('booking-package').value='';
+  if(selectedPackage&&(selectedPackage.bookingService || selectedPackage.service).id!==service.id)$('booking-package').value='';
   syncSelectedService(service.id);
   renderPackages();
 });

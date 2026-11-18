@@ -114,11 +114,11 @@
           <label class="form-field"><span>Categoría</span><select id="field-category" name="category"><option value="TRAINING">Entrenamiento</option><option value="CABIN">Cabina</option></select></label>
           <label class="form-field">
             <span>Modalidad <b>*</b></span>
-            <select name="modality" id="field-modality" required="">
+            <select name="modality" id="field-modality" disabled>
               <option value="INDIVIDUAL">Individual (1 persona)</option>
               <option value="DUAL">Dual (2 personas / pareja)</option>
             </select>
-            <span class="field-hint">Coincide con el servicio vinculado por defecto.</span>
+            <span class="field-hint">La modalidad se hereda del servicio.</span>
           </label>
 
           <label class="form-field">
@@ -152,8 +152,8 @@
 
           <label class="form-field">
             <span>Duración por sesión (minutos) <b>*</b></span>
-            <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
-            <span class="field-hint">Minutos de reserva en calendario.</span>
+            <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" readonly value="60">
+            <span class="field-hint">La duración se hereda del servicio.</span>
           </label>
 
           <label class="form-field">
@@ -190,6 +190,7 @@
             <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación…"></textarea>
           </label>
         </div>
+        <p class="field-hint" id="inherited-service-info" aria-live="polite"></p>
 
         <p class="form-error" id="form-error" role="alert" hidden=""></p>
 

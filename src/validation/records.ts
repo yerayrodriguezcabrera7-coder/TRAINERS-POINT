@@ -424,16 +424,17 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
   const color = value.color ?? "#317b9b";
   if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) return "Selecciona un color válido para el servicio.";
   const durationMin = typeof value.durationMin === "number" ? value.durationMin : Number(value.durationMin);
-  const price = typeof value.price === "number" ? value.price : Number(value.price);
+  const rawPrice = typeof value.price === "number" ? value.price : Number(value.price);
+
+  if (value.price !== undefined && value.price !== null && value.price !== "" && (!Number.isFinite(rawPrice) || rawPrice < 0 || rawPrice > 99999999.99)) {
+    return "El precio no puede ser negativo y debe ser válido.";
+  }
 
   if (!name || name.length > 120) {
     return "El nombre del servicio es obligatorio y debe tener como máximo 120 caracteres.";
   }
   if (value.durationMin === undefined || value.durationMin === null || value.durationMin === "" || !Number.isInteger(durationMin) || durationMin < 5 || durationMin > 1440) {
     return "La duración por sesión es obligatoria y debe estar entre 5 y 1440 minutos.";
-  }
-  if (value.price === undefined || value.price === null || value.price === "" || !Number.isFinite(price) || price < 0 || price > 99999999.99) {
-    return "El precio total es obligatorio, no puede ser negativo y debe tener un valor válido (hasta 99.999.999,99 €).";
   }
   if (description.length > 2000) {
     return "La descripción debe tener como máximo 2000 caracteres.";
@@ -451,13 +452,16 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
   }
   const type: "PACK" | "SESION_INDIVIDUAL" = rawType as "PACK" | "SESION_INDIVIDUAL";
 
-  if (value.trainingCount === undefined || value.trainingCount === null || value.trainingCount === "") {
-    return "Indica el número de sesiones del servicio.";
+  if (type === "PACK" && (value.price === undefined || value.price === null || value.price === "")) {
+    return "El precio total es obligatorio, no puede ser negativo y debe ser válido.";
   }
-  const rawTrainingCount = Number(value.trainingCount);
-  if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) {
-    return "El número de sesiones debe ser un entero entre 1 y 500.";
+  const price = Number.isFinite(rawPrice) && rawPrice >= 0 ? rawPrice : 0;
+
+  if (type === "PACK" && (value.trainingCount === undefined || value.trainingCount === null || value.trainingCount === "")) {
+    return "Indica el número de sesiones del pack.";
   }
+  const rawTrainingCount = Number(value.trainingCount ?? 1);
+  if (!Number.isInteger(rawTrainingCount) || rawTrainingCount < 1 || rawTrainingCount > 500) return "El número de sesiones debe ser un entero entre 1 y 500.";
   const trainingCount = rawTrainingCount;
 
   let validityWeeks: number = 4;

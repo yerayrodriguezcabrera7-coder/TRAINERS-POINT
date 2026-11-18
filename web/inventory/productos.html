@@ -9,6 +9,7 @@
 </section></main></div>
 <dialog id="product-dialog" aria-labelledby="product-title"><form id="product-form"><header class="dialog-heading"><h2 id="product-title">Producto</h2><button type="button" data-close="product-dialog" aria-label="Cerrar">×</button></header><div class="form-grid">
 <label>Nombre<input name="name" required maxlength="200"></label><label>Código de barras / referencia<input name="barcode" maxlength="80" placeholder="EAN o referencia del artículo" autocomplete="off"></label>
+<label>Proveedor<select name="providerId"><option value="">Sin proveedor asignado</option></select></label>
 <label>Coste de adquisición sin IVA (€)<input name="costPrice" type="number" min="0" max="1000000" step="0.01" required></label>
 <label>IVA (%)<input name="taxRate" type="number" min="0" max="100" step="0.01" list="tax-rates" required><datalist id="tax-rates"><option value="21"><option value="10"><option value="4"><option value="0"></datalist></label>
 <label>PVP con IVA (€)<input name="price" type="number" min="0" max="1000000" step="0.01" required></label><label>Unidades en stock<input name="stock" type="number" min="0" max="1000000" step="1" required></label>
