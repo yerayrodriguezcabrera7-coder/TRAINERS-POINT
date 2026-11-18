@@ -55,7 +55,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
     }
     if (identity.role !== "ADMIN" && Array.isArray(identity.pagePermissions)) {
       const perms = identity.pagePermissions;
-      if (url.pathname.startsWith("/api/clients") && !perms.includes("clientes")) {
+      if (url.pathname.startsWith("/api/clients") && !perms.includes("clientes") && !(identity.role === "TRAINER" && /^\/api\/clients\/[^/]+\/measurements$/.test(url.pathname))) {
         sendError(response, 403, "No tienes permiso para acceder a la gestión de clientes.");
         return true;
       }
@@ -95,11 +95,11 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
           sendError(response, 403, "Tu perfil no permite modificar servicios.");
           return true;
         }
-        if (url.pathname.startsWith("/api/clients") && request.method !== "GET" && !/^\/api\/clients\/[^/]+\/training-plans$/.test(url.pathname)) {
+        if (url.pathname.startsWith("/api/clients") && request.method !== "GET" && !/^\/api\/clients\/[^/]+\/(training-plans|measurements)$/.test(url.pathname)) {
           sendError(response, 403, "Tu perfil no permite modificar fichas de clientes.");
           return true;
         }
-        if (url.pathname.startsWith("/api/service-packages") || /^\/api\/bookings\/[^/]+\/attendance$/.test(url.pathname)) {
+        if (url.pathname.startsWith("/api/service-packages")) {
           sendError(response, 403, "Tu perfil no permite modificar bonos ni asistencia de clientes.");
           return true;
         }

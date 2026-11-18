@@ -231,6 +231,7 @@ model ClientMeasurement {
   clientId  String   @db.Uuid
   measuredAt DateTime @db.Date
   weight    Decimal? @db.Decimal(6, 2)
+  bodyFat   Decimal? @db.Decimal(5, 2)
   hip       Decimal? @db.Decimal(6, 2)
   waist     Decimal? @db.Decimal(6, 2)
   leg       Decimal? @db.Decimal(6, 2)

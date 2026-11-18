@@ -7,14 +7,16 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.trainerspoint.app"
+      "bundleIdentifier": "com.trainerspoint.app",
+      "infoPlist": { "NSLocationWhenInUseUsageDescription": "Tu ubicación se usa al fichar para verificar que estás en el centro." }
     },
     "android": {
       "package": "com.trainerspoint.app"
     },
     "plugins": [
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      ["expo-location", { "locationWhenInUsePermission": "Tu ubicación se usa al fichar para verificar que estás en el centro." }]
     ],
     "web": {
       "bundler": "metro"

@@ -170,6 +170,35 @@ export function server(
             return;
           }
 
+          const mobileClient = path.match(/^\/api\/mobile\/clients\/([0-9a-f-]{36})(?:\/(reception-note))?$/i);
+          if (mobileClient) {
+            if (!store.clientsDb) throw new ApiError(503, 'La ficha de clientes no está disponible.');
+            const s = await store.state(gym);
+            const clientId = mobileClient[1];
+            if (!staffClientIds(s, identity).has(clientId)) throw new ApiError(404, 'Cliente no asignado.');
+            const client = await store.clientsDb.client.findUnique({ where:{id:clientId}, select:{id:true,firstName:true,lastName:true,injuries:true,injuryNotes:true,notes:true,status:true,clientNotes:{orderBy:{createdAt:'desc'},take:5,select:{id:true,content:true,createdAt:true,category:true}}} });
+            if (!client) throw new ApiError(404, 'Cliente desconocido.');
+            if (req.method==='POST' && mobileClient[2]==='reception-note') {
+              const input=z.object({content:z.string().trim().min(1).max(1000)}).parse(await body(req));
+              const note=await store.clientsDb.clientNote.create({data:{clientId,authorId:identity.employeeId && /^[0-9a-f-]{36}$/i.test(identity.employeeId)?identity.employeeId:null,category:'SEGUIMIENTO',content:`Recepción · ${input.content}`}});
+              send(res,201,{note:{id:note.id,content:note.content,createdAt:note.createdAt}});return;
+            }
+            if (req.method==='GET' && !mobileClient[2]) {
+              const [measurements,packages]=await Promise.all([
+                store.clientsDb.clientMeasurement.findMany({where:{clientId},orderBy:{measuredAt:'desc'},take:52}),
+                store.clientsDb.clientServicePackage.findMany({where:{clientId},orderBy:{purchasedAt:'desc'},take:10,select:{id:true,sessionsBought:true,purchasedAt:true,paymentStatus:true,service:{select:{name:true,validityWeeks:true}},bookings:{select:{attendance:true,status:true}}}}),
+              ]);
+              const packageSummary=packages.map(pkg=>{
+                const used=pkg.bookings.filter(b=>b.status!=='CANCELADA' && (b.attendance==='ASISTIO'||b.attendance==='NO_ASISTIO')).length;
+                const committed=pkg.bookings.filter(b=>b.status!=='CANCELADA' && b.attendance==='PENDIENTE').length;
+                const expiresAt=new Date(pkg.purchasedAt.getTime()+(pkg.service.validityWeeks||4)*7*86400000).toISOString();
+                return {id:pkg.id,serviceName:pkg.service.name,sessionsRemaining:Math.max(0,pkg.sessionsBought-used-committed),sessionsBought:pkg.sessionsBought,expiresAt,paymentStatus:pkg.paymentStatus};
+              });
+              send(res,200,{client,measurements:measurements.map(m=>({...m,weight:m.weight==null?null:Number(m.weight),bodyFat:m.bodyFat==null?null:Number(m.bodyFat),waist:m.waist==null?null:Number(m.waist),hip:m.hip==null?null:Number(m.hip),chest:m.chest==null?null:Number(m.chest),arm:m.arm==null?null:Number(m.arm),leg:m.leg==null?null:Number(m.leg)})),packages:packageSummary});return;
+            }
+            throw new ApiError(405,'Operación no permitida.');
+          }
+
           if (req.method === "GET" && path === "/api/manage") {
             const s = await store.state(gym);
           const [clientDebts, clientPackageAlertsMap] = await Promise.all([
@@ -346,6 +375,22 @@ export function server(
           if (!["ADMIN","RECEPTION"].includes(identity.role) && raw.employeeId !== identity.employeeId) throw new ApiError(403,"Solo puedes registrar tus propios fichajes.");
           send(res, 201, await store.clock(gym, raw, identity));
           return;
+        }
+        if (req.method === 'POST' && path === '/api/attendance/pause') {
+          const input=z.object({employeeId:z.string().min(1),action:z.enum(['START','END'])}).parse(await body(req));
+          send(res,200,await store.pause(gym,input.employeeId,input.action,identity));return;
+        }
+        const mobileAttendance=path.match(/^\/api\/bookings\/([^/]+)\/attendance$/);
+        if (req.method==='PATCH' && mobileAttendance && identity.role === 'TRAINER') {
+          const input=z.object({attendance:z.enum(['ASISTIO','NO_ASISTIO','REPROGRAMAR']),version:z.number().int().positive()}).parse(await body(req));
+          const s=await store.state(gym),previous=s.bookings.find((b:any)=>b.id===decodeURIComponent(mobileAttendance[1])&&b.employeeId===identity.employeeId);
+          if(!previous)throw new ApiError(404,'Reserva desconocida.');
+          const updated=await store.save(gym,{...previous,version:input.version,status:input.attendance==='ASISTIO'?'COMPLETED':input.attendance==='NO_ASISTIO'?'NO_SHOW':'CANCELLED',needsReschedule:input.attendance==='REPROGRAMAR'},previous.id,undefined,identity.id,identity.employeeId!);
+          send(res,200,workerBooking(updated));return;
+        }
+        const mobileSession=path.match(/^\/api\/bookings\/([^/]+)\/session$/);
+        if (req.method==='PATCH' && mobileSession && identity.role === 'TRAINER') {
+          send(res,200,workerBooking(await store.saveSessionLog(gym,decodeURIComponent(mobileSession[1]),identity,await body(req))));return;
         }
         if (req.method === "GET" && path === "/api/clients") {
           if (!hasPage("clientes")) throw new ApiError(403, "No tienes permiso para consultar clientes.");

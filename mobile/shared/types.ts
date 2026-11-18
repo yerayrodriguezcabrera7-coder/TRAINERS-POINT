@@ -54,6 +54,8 @@ export interface Booking {
   needsReschedule?: boolean;
   status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
   notes?: string;
+  sessionLog?: { exercises: string; feeling: "GOOD" | "TIRED" | "PAIN" | null };
+  nextSessionPlan?: string;
 }
 
 export interface CalendarData {
@@ -63,6 +65,7 @@ export interface CalendarData {
   rooms: Array<{ id: string; name: string }>;
   clients?: Array<{ id: string; name: string; email?: string; phone?: string; status?: string }>;
   centers?: Array<{ id: string; name: string }>;
+  pendingPackages?: Array<{clientId:string;sessionsToSchedule:number;expiresAt:string;serviceName:string}>;
 }
 
 export interface SlotQuery {
@@ -141,6 +144,7 @@ export interface Measurement {
   clientId: string;
   measuredAt: string;
   weight?: number;
+  bodyFat?: number;
   waist?: number;
   hip?: number;
   chest?: number;

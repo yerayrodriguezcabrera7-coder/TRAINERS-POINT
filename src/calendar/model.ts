@@ -149,6 +149,8 @@ export const bookingSchema = z.object({
   end: time.optional(),
   status: z.enum(statuses),
   notes: z.string().max(2000).default(""),
+  sessionLog: z.object({ exercises: z.string().max(2000).default(""), feeling: z.enum(["GOOD", "TIRED", "PAIN"]).nullable().default(null) }).optional(),
+  nextSessionPlan: z.string().max(2000).optional(),
   recoveryId: id.nullable().optional(),
   chargeAmount: z.number().nonnegative().optional(),
   sessionId: id.nullable().optional(),
@@ -350,11 +352,11 @@ export function assertTransition(old: Booking, next: Booking, c: Config) {
     throw new ApiError(409, "Una cita cerrada no puede modificarse.");
   if (
     ["COMPLETED", "NO_SHOW"].includes(next.status) &&
-    DateTime.fromISO(`${next.date}T${next.end}`, {
+    DateTime.fromISO(`${next.date}T${next.status === "COMPLETED" ? next.start : next.end}`, {
       zone: c.timezone,
     }).toMillis() > Date.now()
   )
-    throw new ApiError(409, "La cita todavía no ha terminado.");
+    throw new ApiError(409, next.status === "COMPLETED" ? "La cita todavía no ha terminado ni comenzado." : "La cita todavía no ha terminado.");
 }
 
 export const workerActionSchema=z.object({action:z.enum(["COMPLETE","INCIDENT"]),version:z.number().int().positive(),message:z.string().trim().max(1000).optional()});

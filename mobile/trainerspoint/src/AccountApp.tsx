@@ -6,6 +6,7 @@ import { ApiClient } from "../../shared/api";
 import { Identity } from "../../shared/types";
 import { LoginScreen } from "./screens/LoginScreen";
 import { StaffScreen } from "./screens/StaffScreen";
+import { TrainerScreen } from "./screens/TrainerScreen";
 import ClientHomeScreen from "./screens/ClientHomeScreen";
 import { apiBaseUrl } from "../../shared/config";
 import { mobileCognito } from "../../shared/cognito";
@@ -103,7 +104,11 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
       );
     }
 
-    // TRAINER, RECEPTION, ADMIN → StaffScreen
+    if (currentUser.role === "TRAINER") {
+      return <TrainerScreen key={currentUser.id} api={api} user={currentUser} onLogout={handleLogout} />;
+    }
+
+    // RECEPTION, ADMIN → StaffScreen
     return (
       <StaffScreen key={currentUser.id} api={api} user={currentUser} onLogout={handleLogout} />
     );
