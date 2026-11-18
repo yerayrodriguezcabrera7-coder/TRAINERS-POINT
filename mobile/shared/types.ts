@@ -52,6 +52,9 @@ export interface Booking {
   centerAddress?: string;
   centerId?: string;
   needsReschedule?: boolean;
+  packageId?: string | null;
+  recoveryId?: string | null;
+  sessionId?: string | null;
   status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
   notes?: string;
   sessionLog?: { exercises: string; feeling: "GOOD" | "TIRED" | "PAIN" | null };

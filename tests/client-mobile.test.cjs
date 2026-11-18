@@ -131,3 +131,24 @@ test('Cuenta cliente: el servidor principal entrega la ficha propia y mantiene l
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
   }
 });
+
+test('Recepción móvil: organiza un bono y conserva su vínculo al mover la cita', async () => {
+  await api.login({ username: 'admin.movil', password: 'AdminMobilePassword123!', portal: 'OFFICE' });
+  const pending = await api.getPendingPackages();
+  assert.ok(Array.isArray(pending));
+  const pkg = pending.find(item => item.clientId === own.id);
+  assert.ok(pkg);
+  const date = DateTime.now().setZone('Europe/Madrid').plus({ days: 3 }).toISODate();
+  const created = await api.createOfficeBooking({
+    clientId: own.id, serviceId: service.id, packageId: pkg.packageId,
+    employeeId: employee.id, roomId: 'r1', date, start: '11:00',
+    status: 'CONFIRMED', notes: '', needsReschedule: false,
+  });
+  assert.equal(created.packageId, pkg.packageId);
+  const visible = (await api.getStaffCalendar()).bookings.find(item => item.id === created.id);
+  assert.equal(visible.packageId, pkg.packageId);
+  const moved = await api.updateOfficeBooking({ ...visible, start: '12:00' });
+  assert.equal(moved.start, '12:00');
+  assert.equal(moved.packageId, pkg.packageId);
+  assert.equal(moved.version, visible.version + 1);
+});

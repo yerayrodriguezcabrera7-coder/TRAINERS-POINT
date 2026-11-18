@@ -592,9 +592,8 @@ export default function ClientHomeScreen({
               .map(plan => {
                 const days = plan.details?.days ?? [];
                 return (
-                  <Pressable
+                  <View
                     key={plan.id}
-                    onPress={() => setSelectedPlan(plan)}
                     style={s.planCard}
                   >
                     {/* Header del plan */}
@@ -633,6 +632,8 @@ export default function ClientHomeScreen({
                       return (
                         <View key={idx} style={s.planDay}>
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`${expanded ? "Ocultar" : "Mostrar"} ejercicios de ${day.name}`}
                             onPress={() => toggleDay(plan.id, String(idx))}
                             style={s.planDayHeader}
                           >
@@ -663,7 +664,10 @@ export default function ClientHomeScreen({
                         No hay días de rutina disponibles todavía.
                       </Text>
                     )}
-                  </Pressable>
+                    <Pressable accessibilityRole="button" onPress={() => setSelectedPlan(plan)} style={s.planOpen}>
+                      <Text style={s.planOpenText}>Ver plan completo</Text>
+                    </Pressable>
+                  </View>
                 );
               })}
 
@@ -1428,6 +1432,8 @@ const s = StyleSheet.create({
     fontStyle: "italic",
     marginTop: 8,
   },
+  planOpen: { marginTop: 14, minHeight: 44, justifyContent: "center", alignItems: "center" },
+  planOpenText: { color: COLORS.primaryDark, fontSize: 14, fontWeight: "700" },
 
   /* ═══════════════════════════════════════════
      Perfil

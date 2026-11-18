@@ -166,6 +166,27 @@ test('worker attendance retains the booking version for concurrent change protec
   assert.equal(calls[1].url, 'https://gym.example/api/clients/client/progress');
 });
 
+test('reception pending packages and booking writes match the server contract', async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
+    return json(url.endsWith('/api/pending-packages') ? { packages: [{ packageId: 'pkg-1' }] } : { id: 'booking-1' });
+  };
+  const api = new ApiClient({ baseUrl: 'https://gym.example' });
+  assert.deepEqual(await api.getPendingPackages(), [{ packageId: 'pkg-1' }]);
+  await api.createOfficeBooking({ clientId: 'client-1', packageId: 'pkg-1', status: 'CONFIRMED' });
+  await api.updateOfficeBooking({ id: 'booking-1', version: 3, packageId: 'pkg-1', end: '12:00' });
+  assert.deepEqual(calls.map(call => [call.method || 'GET', call.url]), [
+    ['GET', 'https://gym.example/api/pending-packages'],
+    ['POST', 'https://gym.example/api/bookings'],
+    ['PUT', 'https://gym.example/api/bookings/booking-1'],
+  ]);
+  assert.equal(calls[1].body.booking.packageId, 'pkg-1');
+  assert.equal(calls[2].body.booking.version, 3);
+  assert.equal(calls[2].body.booking.packageId, 'pkg-1');
+  assert.equal(calls[2].body.booking.end, undefined);
+});
+
 test('the agenda excludes cancelled, finished and past sessions and sorts upcoming ones', () => {
   const now = new Date(2026, 10, 6, 12, 0);
   const make = (id, date, start, end, status) => ({ id, date, start, end, status });

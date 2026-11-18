@@ -130,24 +130,14 @@ export class ApiClient {
   // Clients have no cancellation endpoint: direct them to reception.
   // Office changes retain the version so the server rejects stale edits.
   updateOfficeBooking(booking: Booking) {
+    const { end: _derivedEnd, ...input } = booking;
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(booking.id)}`, {
-      method: "PUT", body: JSON.stringify({ booking }),
+      method: "PUT", body: JSON.stringify({ booking: input }),
     });
   }
-  // Assign/update a booking (for office/reception)
-  assignBooking(bookingId: string, data: {
-    clientId?: string;
-    serviceId?: string;
-    employeeId?: string;
-    date?: string;
-    start?: string;
-    end?: string;
-    roomId?: string;
-    status?: string;
-    needsReschedule?: boolean;
-  }) {
-    return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}`, {
-      method: "PUT", body: JSON.stringify({ booking: data }),
+  createOfficeBooking(booking: Record<string, unknown>) {
+    return this.request<Booking>("/api/bookings", {
+      method: "POST", body: JSON.stringify({ booking }),
     });
   }
   // Query available slots
@@ -163,7 +153,7 @@ export class ApiClient {
   }
   // Get pending packages (to contract/schedule)
   getPendingPackages() {
-    return this.request<any[]>("/api/pending-packages");
+    return this.request<{ packages: any[] }>("/api/pending-packages").then(result => result.packages);
   }
   // Get recovery credits
   getRecoveries() {
