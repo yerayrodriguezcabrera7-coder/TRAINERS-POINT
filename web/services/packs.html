@@ -97,21 +97,99 @@
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
 
-        <div class="form-grid">
-          <!-- 1. Servicio vinculado: se escoge primero, la modalidad Individual o Dual viene de aquí -->
-          <label class="form-field form-field-wide">
-            <span>1. Servicio que se usa (Individual o Dual) <b>*</b></span>
-            <div id="service-quick-pills" class="service-quick-pills" role="radiogroup" aria-label="Elegir servicio vinculado"></div>
-            <select name="serviceId" id="field-service" required>
-              <option value="">— Selecciona primero si es para Individual o Dual —</option>
-            </select>
-            <span class="field-hint">Escoge primero qué servicio se usa. La modalidad (Individual o Dual) y la duración se heredan automáticamente de aquí.</span>
+        <div class="dialog-body-layout">
+          <!-- Columna Izquierda: Configuración del pack y servicio vinculado -->
+          <div class="dialog-col">
+            <!-- 1. Servicio vinculado -->
+            <div class="form-field form-field-wide">
+              <span>1. Servicio vinculado (Individual o Dual) <b>*</b></span>
+              <div id="service-quick-pills" class="service-cards-selector" role="radiogroup" aria-label="Elegir servicio vinculado"></div>
+              <select name="serviceId" id="field-service" required style="margin-top:6px;">
+                <option value="">— O selecciona del desplegable de servicios —</option>
+              </select>
+              <span class="field-hint">Escoge primero qué servicio se usa. La modalidad y duración se heredan automáticamente.</span>
+            </div>
 
+            <!-- Hidden inputs populated automatically from linked service -->
+            <input type="hidden" name="category" id="field-category" value="TRAINING">
+            <input type="hidden" name="modality" id="field-modality" value="INDIVIDUAL">
+            <input type="hidden" name="durationMin" id="field-durationMin" value="60">
+
+            <!-- 2. Nombre del pack -->
+            <label class="form-field form-field-wide">
+              <span>2. Nombre del pack comercial <b>*</b></span>
+              <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 sesiones, Pack mensual 8 sesiones">
+              <div class="quick-suggest-chips" aria-label="Sugerencias de nombres de packs">
+                <span style="font-size:11px;color:var(--tp-muted);align-self:center;">Rápido:</span>
+                <button type="button" class="suggest-chip" data-pack-name="Bono 10 sesiones">Bono 10 sesiones</button>
+                <button type="button" class="suggest-chip" data-pack-name="Pack mensual 8 sesiones">Pack mensual 8 sesiones</button>
+                <button type="button" class="suggest-chip" data-pack-name="Bono 4 sesiones">Bono 4 sesiones</button>
+                <button type="button" class="suggest-chip" data-pack-name="Bono 12 sesiones">Bono 12 sesiones</button>
+              </div>
+              <span class="field-hint">ej. Bono 10 sesiones, Pack mensual 8 sesiones.</span>
+            </label>
+
+            <!-- 3. Sesiones y Validez en 2 columnas -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <label class="form-field">
+                <span>Número de sesiones <b>*</b></span>
+                <input name="trainingCount" id="field-trainingCount" type="number" min="1" max="500" step="1" required="" value="10" placeholder="Ej. 4, 8, 10, 12…">
+                <div class="quick-suggest-chips" aria-label="Sugerencias de sesiones">
+                  <button type="button" class="suggest-chip" data-pack-sessions="4">4</button>
+                  <button type="button" class="suggest-chip" data-pack-sessions="8">8</button>
+                  <button type="button" class="suggest-chip is-active" data-pack-sessions="10">10</button>
+                  <button type="button" class="suggest-chip" data-pack-sessions="12">12</button>
+                  <button type="button" class="suggest-chip" data-pack-sessions="16">16</button>
+                </div>
+              </label>
+
+              <label class="form-field">
+                <span>Validez en semanas <b>*</b></span>
+                <div class="validity-input-wrap">
+                  <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4" required="" placeholder="4">
+                  <span class="validity-badge">sem</span>
+                </div>
+                <div class="quick-suggest-chips" aria-label="Sugerencias de validez">
+                  <button type="button" class="suggest-chip is-active" data-pack-validity="4">4 sem (1 mes)</button>
+                  <button type="button" class="suggest-chip" data-pack-validity="8">8 sem (2 m.)</button>
+                </div>
+              </label>
+            </div>
+
+            <!-- Frecuencia y Estado -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <label class="form-field">
+                <span>Estado del pack <b>*</b></span>
+                <select name="isActive" id="field-isActive" required="">
+                  <option value="true">Activo (a la venta)</option>
+                  <option value="false">Inactivo (desactivado)</option>
+                </select>
+              </label>
+
+              <label class="form-field">
+                <span>Frecuencia semanal</span>
+                <input name="recommendedWeeklyFrequency" id="field-frequency" type="number" min="1" max="14" step="1" placeholder="Ej. 2 días/sem (opcional)">
+              </label>
+            </div>
+
+            <label class="form-field form-field-wide">
+              <span>Descripción del pack (opcional)</span>
+              <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe las características de este bono…"></textarea>
+            </label>
+
+            <label class="form-field form-field-wide">
+              <span>Condiciones y políticas (opcional)</span>
+              <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h…"></textarea>
+            </label>
+          </div>
+
+          <!-- Columna Derecha: Tarificación, Herencia y Desglose comercial -->
+          <div class="dialog-col-side">
             <!-- Herencia automática visible -->
             <div id="service-inheritance-box" class="service-inheritance-box" aria-live="polite">
               <div class="inheritance-header">
-                <span class="inheritance-tag">✨ Herencia de servicio</span>
-                <span class="inheritance-note">Modalidad y duración provienen del servicio elegido</span>
+                <span class="inheritance-tag">✨ SERVICIO VINCULADO</span>
+                <span class="inheritance-note">Modalidad y duración</span>
               </div>
               <div class="inheritance-content">
                 <div class="inheritance-item">
@@ -119,87 +197,36 @@
                   <strong id="inherited-modality-text">Selecciona un servicio</strong>
                 </div>
                 <div class="inheritance-item">
-                  <span class="inheritance-label">Duración sesión:</span>
+                  <span class="inheritance-label">Duración:</span>
                   <strong id="inherited-duration-text">—</strong>
                 </div>
               </div>
             </div>
-          </label>
 
-          <!-- Hidden inputs populated automatically from linked service -->
-          <input type="hidden" name="category" id="field-category" value="TRAINING">
-          <input type="hidden" name="modality" id="field-modality" value="INDIVIDUAL">
-          <input type="hidden" name="durationMin" id="field-durationMin" value="60">
+            <!-- Precio total -->
+            <label class="form-field" style="margin-top:4px;">
+              <span style="font-size:13px;font-weight:700;">Precio total del bono (€) <b>*</b></span>
+              <input name="price" id="field-price" type="number" min="0" max="99999999.99" step="0.01" required="" placeholder="0,00" style="font-size:22px;font-weight:800;padding:12px 14px;background:#fff;border:2px solid #dcd5ca;">
+              <span class="field-hint" id="hint-price">Precio total del pack que abona el cliente.</span>
+            </label>
 
-          <!-- 2. Nombre del pack -->
-          <label class="form-field form-field-wide">
-            <span>2. Nombre del pack <b>*</b></span>
-            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 sesiones, Pack mensual 8 sesiones">
-            <span class="field-hint">ej. Bono 10 sesiones, Pack mensual 8 sesiones.</span>
-          </label>
-
-          <label class="form-field">
-            <span>Número de sesiones <b>*</b></span>
-            <input name="trainingCount" id="field-trainingCount" type="number" min="1" max="500" step="1" required="" value="10" placeholder="Ej. 4, 8, 10, 12…">
-            <span class="field-hint">ej. 4, 8, 10, 12...</span>
-          </label>
-
-          <label class="form-field">
-            <span>Precio total (€) <b>*</b></span>
-            <input name="price" id="field-price" type="number" min="0" max="99999999.99" step="0.01" required="" placeholder="0,00">
-            <span class="field-hint" id="hint-price">Precio total del bono/pack.</span>
-          </label>
-
-          <!-- Cálculo automático del precio por sesión -->
-          <div class="form-field form-field-wide calculated-rate-panel" id="calculated-rate-panel" aria-live="polite">
-            <div class="calc-panel-inner">
-              <div class="calc-label-col">
-                <span class="calc-badge">⚡ CÁLCULO AUTOMÁTICO</span>
-                <span class="calc-label-title">A cuánto sale la sesión</span>
-              </div>
-              <div class="calc-display-col">
-                <div class="calc-figure-wrap">
-                  <strong class="calc-figure" id="calc-session-price">—</strong>
-                  <span class="calc-unit">/ sesión</span>
+            <!-- Cálculo automático del precio por sesión -->
+            <div class="calculated-rate-panel" id="calculated-rate-panel" aria-live="polite" style="margin-top:4px;">
+              <div class="calc-panel-inner" style="flex-direction:column;align-items:flex-start;gap:10px;">
+                <div class="calc-label-col">
+                  <span class="calc-badge">⚡ CÁLCULO EN TIEMPO REAL</span>
+                  <span class="calc-label-title" style="font-size:14px;">Coste por sesión</span>
                 </div>
-                <span class="calc-formula" id="calc-formula">Introduce precio total y número de sesiones para calcular el desglose.</span>
+                <div class="calc-display-col" style="align-items:flex-start;">
+                  <div class="calc-figure-wrap">
+                    <strong class="calc-figure" id="calc-session-price" style="font-size:28px;">—</strong>
+                    <span class="calc-unit" style="font-size:14px;font-weight:700;">/ sesión</span>
+                  </div>
+                  <span class="calc-formula" id="calc-formula" style="text-align:left;max-width:none;margin-top:4px;font-size:12px;line-height:1.4;">Introduce precio total y número de sesiones para calcular el desglose.</span>
+                </div>
               </div>
             </div>
           </div>
-
-          <label class="form-field">
-            <span>Validez en semanas <b>*</b></span>
-            <div class="validity-input-wrap">
-              <input name="validityWeeks" id="field-validityWeeks" type="number" min="1" max="5200" step="1" value="4" required="" placeholder="4">
-              <span class="validity-badge">semanas</span>
-            </div>
-            <span class="field-hint">ej. 4 semanas.</span>
-          </label>
-
-          <label class="form-field">
-            <span>Estado del pack <b>*</b></span>
-            <select name="isActive" id="field-isActive" required="">
-              <option value="true">Activo (disponible para venta y reservas)</option>
-              <option value="false">Inactivo (desactivado temporalmente)</option>
-            </select>
-            <span class="field-hint">Controla si está disponible para venta.</span>
-          </label>
-
-          <label class="form-field">
-            <span>Frecuencia semanal recomendada</span>
-            <input name="recommendedWeeklyFrequency" id="field-frequency" type="number" min="1" max="14" step="1" placeholder="Ej. 2 días/semana (opcional)">
-            <span class="field-hint">Días recomendados por semana.</span>
-          </label>
-
-          <label class="form-field form-field-wide">
-            <span>Descripción del pack (opcional)</span>
-            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe las características de este bono…"></textarea>
-          </label>
-
-          <label class="form-field form-field-wide">
-            <span>Condiciones y políticas (opcional)</span>
-            <textarea name="conditions" id="field-conditions" rows="2" maxlength="5000" placeholder="Ej. Cancelaciones con un mínimo de 24h de antelación…"></textarea>
-          </label>
         </div>
 
         <p class="form-error" id="form-error" role="alert" hidden=""></p>

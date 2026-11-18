@@ -98,66 +98,124 @@
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
 
-        <div class="form-grid">
-          <label class="form-field form-field-wide">
-            <span>Nombre <b>*</b></span>
-            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Individual, Dual, Cabina">
-            <span class="field-hint">Nombre del tipo de sesión (ej. Individual, Dual, Cabina).</span>
-          </label>
+        <div class="dialog-body-layout">
+          <!-- Columna Izquierda: Configuración del tipo de sesión -->
+          <div class="dialog-col">
+            <!-- 1. Nombre -->
+            <label class="form-field form-field-wide">
+              <span>Nombre del tipo de sesión <b>*</b></span>
+              <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Individual, Dual, Cabina">
+              <div class="quick-suggest-chips" aria-label="Sugerencias de nombres">
+                <span style="font-size:11px;color:var(--tp-muted);align-self:center;">Rápido:</span>
+                <button type="button" class="suggest-chip" data-suggest-name="Individual">Individual</button>
+                <button type="button" class="suggest-chip" data-suggest-name="Dual">Dual</button>
+                <button type="button" class="suggest-chip" data-suggest-name="Cabina">Cabina</button>
+                <button type="button" class="suggest-chip" data-suggest-name="Estudio Corporal">Estudio Corporal</button>
+              </div>
+              <span class="field-hint">Nombre del tipo de sesión (ej. Individual, Dual, Cabina).</span>
+            </label>
 
-          <label class="form-field">
-            <span>Modalidad (Nº de personas) <b>*</b></span>
-            <div class="modality-input-wrap">
-              <input name="modality" id="field-modality" type="number" min="1" max="2" step="1" required value="1" placeholder="1 o 2">
-              <span class="modality-badge" id="modality-badge">👤 1 persona (Individual)</span>
+            <!-- 2. Modalidad y aforo -->
+            <div class="form-field form-field-wide">
+              <span>Modalidad (Nº de personas) <b>*</b></span>
+              <div class="modality-toggle-cards">
+                <div class="modality-card is-selected" id="modality-card-1" data-modality-val="1">
+                  <div class="modality-card-icon">👤</div>
+                  <div class="modality-card-info">
+                    <span class="modality-card-title">1 Persona · Individual</span>
+                    <span class="modality-card-sub">Sesión privada one-to-one</span>
+                  </div>
+                </div>
+                <div class="modality-card" id="modality-card-2" data-modality-val="2">
+                  <div class="modality-card-icon">👥</div>
+                  <div class="modality-card-info">
+                    <span class="modality-card-title">2 Personas · Dual / Pareja</span>
+                    <span class="modality-card-sub">Entrenamiento compartido</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="modality-input-wrap" style="margin-top:10px;">
+                <span style="font-size:12px;font-weight:600;color:var(--tp-muted);">Número directo:</span>
+                <input name="modality" id="field-modality" type="number" min="1" max="2" step="1" required value="1" placeholder="1 o 2">
+                <span class="modality-badge" id="modality-badge">👤 1 persona (Individual)</span>
+              </div>
+              <span class="field-hint">Escribe el número de personas: <strong>1</strong> para Individual o <strong>2</strong> para Dual (pareja).</span>
             </div>
-            <span class="field-hint">Escribe el número de personas: <strong>1</strong> para Individual (1 persona) o <strong>2</strong> para Dual (pareja / 2 personas).</span>
-          </label>
 
-          <label class="form-field">
-            <span>Color en el calendario <b>*</b></span>
-            <div class="color-picker-wrap">
-              <input id="field-color" name="color" type="color" value="#317b9b">
+            <!-- Fila doble: Categoría y Estado -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <label class="form-field">
+                <span>Categoría</span>
+                <select id="field-category" name="category">
+                  <option value="TRAINING">Entrenamiento</option>
+                  <option value="CABIN">Cabina</option>
+                </select>
+              </label>
+
+              <label class="form-field">
+                <span>Estado de la sesión <b>*</b></span>
+                <select name="isActive" id="field-isActive" required="">
+                  <option value="true">Activa (disponible en la agenda)</option>
+                  <option value="false">Inactiva (desactivada)</option>
+                </select>
+              </label>
             </div>
-            <span class="field-hint">El selector de color con el que se pintará esa sesión en el cuadrante.</span>
-            <div class="color-palette-presets" aria-label="Colores rápidos para el cuadrante">
-              <button type="button" class="color-preset-btn" data-color="#317b9b" style="background:#317b9b" title="Azul petróleo"></button>
-              <button type="button" class="color-preset-btn" data-color="#b85c38" style="background:#b85c38" title="Caldero"></button>
-              <button type="button" class="color-preset-btn" data-color="#477458" style="background:#477458" title="Verde bosque"></button>
-              <button type="button" class="color-preset-btn" data-color="#885b9c" style="background:#885b9c" title="Morado"></button>
-              <button type="button" class="color-preset-btn" data-color="#a67a18" style="background:#a67a18" title="Ocre"></button>
-              <button type="button" class="color-preset-btn" data-color="#c2413a" style="background:#c2413a" title="Coral"></button>
-              <button type="button" class="color-preset-btn" data-color="#1e6b7b" style="background:#1e6b7b" title="Turquesa"></button>
+
+            <label class="form-field form-field-wide">
+              <span>Descripción (opcional)</span>
+              <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Detalles u observaciones de esta sesión…"></textarea>
+            </label>
+          </div>
+
+          <!-- Columna Derecha: Vista previa y Cuadrante de Agenda -->
+          <div class="dialog-col-side">
+            <div>
+              <span class="preview-tag">📅 VISTA PREVIA EN EL CUADRANTE</span>
+              <p style="margin:2px 0 10px;font-size:11.5px;color:var(--tp-muted);">Así se mostrará exactamente este entrenamiento en el calendario.</p>
+
+              <div class="calendar-event-pill" id="preview-event-pill" style="border-left-color: #317b9b;">
+                <div class="preview-event-time">10:00 - <span id="preview-end-time">11:00</span> (Sesión en agenda)</div>
+                <div class="preview-event-title" id="preview-event-title">Individual</div>
+                <div class="preview-event-meta">
+                  <span class="preview-meta-badge" id="preview-event-modality">👤 1 persona (Individual)</span>
+                  <span class="preview-meta-badge" id="preview-event-duration">⏱ 60 min</span>
+                  <span class="preview-meta-badge" id="preview-event-color-code">#317b9b</span>
+                </div>
+              </div>
             </div>
-          </label>
 
-          <label class="form-field">
-            <span>Duración (minutos) <b>*</b></span>
-            <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
-            <span class="field-hint">Minutos por defecto (ej. 60 min).</span>
-          </label>
+            <!-- Color en el calendario -->
+            <label class="form-field" style="margin-top:4px;">
+              <span>Color en el calendario <b>*</b></span>
+              <div class="color-picker-wrap">
+                <input id="field-color" name="color" type="color" value="#317b9b">
+              </div>
+              <span class="field-hint">Color con el que se pintará en el cuadrante.</span>
+              <div class="color-palette-presets" aria-label="Colores rápidos para el cuadrante">
+                <button type="button" class="color-preset-btn" data-color="#317b9b" style="background:#317b9b" title="Azul petróleo"></button>
+                <button type="button" class="color-preset-btn" data-color="#b85c38" style="background:#b85c38" title="Caldero"></button>
+                <button type="button" class="color-preset-btn" data-color="#477458" style="background:#477458" title="Verde bosque"></button>
+                <button type="button" class="color-preset-btn" data-color="#885b9c" style="background:#885b9c" title="Morado"></button>
+                <button type="button" class="color-preset-btn" data-color="#a67a18" style="background:#a67a18" title="Ocre"></button>
+                <button type="button" class="color-preset-btn" data-color="#c2413a" style="background:#c2413a" title="Coral"></button>
+                <button type="button" class="color-preset-btn" data-color="#1e6b7b" style="background:#1e6b7b" title="Turquesa"></button>
+              </div>
+            </label>
 
-          <label class="form-field">
-            <span>Categoría</span>
-            <select id="field-category" name="category">
-              <option value="TRAINING">Entrenamiento</option>
-              <option value="CABIN">Cabina</option>
-            </select>
-          </label>
-
-          <label class="form-field">
-            <span>Estado de la sesión <b>*</b></span>
-            <select name="isActive" id="field-isActive" required="">
-              <option value="true">Activa (disponible en la agenda)</option>
-              <option value="false">Inactiva (desactivada temporalmente)</option>
-            </select>
-          </label>
-
-          <label class="form-field form-field-wide">
-            <span>Descripción (opcional)</span>
-            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Detalles u observaciones de esta sesión…"></textarea>
-          </label>
-
+            <!-- Duración -->
+            <label class="form-field">
+              <span>Duración por defecto <b>*</b></span>
+              <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
+              <div class="quick-suggest-chips" aria-label="Sugerencias de duración">
+                <button type="button" class="suggest-chip" data-suggest-duration="30">30 min</button>
+                <button type="button" class="suggest-chip" data-suggest-duration="45">45 min</button>
+                <button type="button" class="suggest-chip is-active" data-suggest-duration="60">60 min</button>
+                <button type="button" class="suggest-chip" data-suggest-duration="90">90 min</button>
+              </div>
+              <span class="field-hint">Minutos por defecto para la sesión en agenda.</span>
+            </label>
+          </div>
         </div>
 
         <p class="form-error" id="form-error" role="alert" hidden=""></p>

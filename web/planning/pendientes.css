@@ -31,7 +31,7 @@
 .pending-slots{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
 .pending-slots p{width:100%;margin:0}
 .pending-slots button{border:1px solid var(--tp-line,#ded6ca);background:#fff8ef;border-radius:8px;padding:8px 12px}
-.planning-page #editor{width:min(640px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}
+.planning-page #editor{width:min(980px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}
 .planning-page #editor form{padding:24px}
 .planning-page #original{overflow-wrap:anywhere;line-height:1.6}
 .planning-page #error{color:#a72c22}
@@ -54,8 +54,8 @@
   border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 20px 60px -15px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(15, 23, 42, 0.05);
-  width: min(580px, calc(100vw - 28px));
-  max-height: min(88vh, 740px);
+  width: min(980px, calc(100vw - 28px));
+  max-height: min(90vh, 860px);
   height: auto;
   padding: 0;
   color: #1e293b;
@@ -151,8 +151,20 @@
 
 .modern-form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .modern-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .modern-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modern-field {

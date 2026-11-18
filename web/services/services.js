@@ -209,17 +209,54 @@
     formError.hidden = false;
   }
 
+  function updateCalendarPreview() {
+    const name = ($('field-name')?.value || '').trim() || 'Tipo de sesión';
+    const color = ($('field-color')?.value || '#317b9b');
+    const rawMod = String($('field-modality')?.value || '').trim();
+    const isDual = rawMod === '2' || rawMod.toUpperCase() === 'DUAL';
+    const duration = Number($('field-durationMin')?.value) || 60;
+
+    const pill = $('preview-event-pill');
+    if (pill) {
+      pill.style.borderLeftColor = color;
+    }
+    const titleEl = $('preview-event-title');
+    if (titleEl) titleEl.textContent = name;
+    const modEl = $('preview-event-modality');
+    if (modEl) modEl.textContent = isDual ? '👥 2 personas (Dual)' : '👤 1 persona (Individual)';
+    const durEl = $('preview-event-duration');
+    if (durEl) durEl.textContent = `⏱ ${duration} min`;
+    const colEl = $('preview-event-color-code');
+    if (colEl) colEl.textContent = color;
+
+    // Actualizar estado visual de las tarjetas de modalidad
+    const card1 = $('modality-card-1');
+    const card2 = $('modality-card-2');
+    if (card1 && card2) {
+      card1.classList.toggle('is-selected', !isDual);
+      card2.classList.toggle('is-selected', isDual);
+    }
+
+    // Actualizar estado de los chips de duración
+    document.querySelectorAll('[data-suggest-duration]').forEach(chip => {
+      chip.classList.toggle('is-active', Number(chip.dataset.suggestDuration) === duration);
+    });
+  }
+
   function updateModalityBadge() {
     const raw = String($('field-modality')?.value || '').trim();
     const badge = $('modality-badge');
-    if (!badge) return;
-    if (raw === '2' || raw.toUpperCase() === 'DUAL') {
-      badge.textContent = '👥 2 personas (Dual / pareja)';
-    } else if (raw === '1' || raw.toUpperCase() === 'INDIVIDUAL' || raw === '') {
-      badge.textContent = '👤 1 persona (Individual)';
-    } else {
-      badge.textContent = '⚠️ Escribe 1 o 2';
+    const isDual = raw === '2' || raw.toUpperCase() === 'DUAL';
+    if (badge) {
+      if (isDual) {
+        badge.textContent = '👥 2 personas (Dual / pareja)';
+      } else if (raw === '1' || raw.toUpperCase() === 'INDIVIDUAL' || raw === '') {
+        badge.textContent = '👤 1 persona (Individual)';
+      } else {
+        badge.textContent = '⚠️ Escribe 1 o 2';
+      }
     }
+    updateCalendarPreview();
   }
 
   function openCreateDialog() {
@@ -232,10 +269,11 @@
     $('field-category').value = 'TRAINING';
     $('field-color').value = ['#317b9b','#b85c38','#477458','#885b9c','#a67a18','#c2413a'][services.length % 6];
     $('field-modality').value = '1';
-    updateModalityBadge();
     $('field-durationMin').value = '60';
     $('field-isActive').value = 'true';
     $('field-description').value = '';
+    updateModalityBadge();
+    updateCalendarPreview();
     dialog.showModal();
   }
 
@@ -252,10 +290,11 @@
     $('field-category').value = service.category || 'TRAINING';
     $('field-color').value = service.color || '#317b9b';
     $('field-modality').value = service.modality === 'DUAL' ? '2' : '1';
-    updateModalityBadge();
     $('field-durationMin').value = service.durationMin || 60;
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
+    updateModalityBadge();
+    updateCalendarPreview();
     dialog.showModal();
   }
 
@@ -277,8 +316,47 @@
     $('open-service-create')?.addEventListener('click', openCreateDialog);
     $('field-modality')?.addEventListener('input', updateModalityBadge);
     $('field-modality')?.addEventListener('change', updateModalityBadge);
+    $('field-name')?.addEventListener('input', updateCalendarPreview);
+    $('field-color')?.addEventListener('input', updateCalendarPreview);
+    $('field-durationMin')?.addEventListener('input', updateCalendarPreview);
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
+
+    // Tarjetas interactivas de modalidad
+    $('modality-card-1')?.addEventListener('click', () => {
+      if ($('field-modality')) {
+        $('field-modality').value = '1';
+        $('field-modality').dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    $('modality-card-2')?.addEventListener('click', () => {
+      if ($('field-modality')) {
+        $('field-modality').value = '2';
+        $('field-modality').dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    // Sugerencias rápidas de nombre
+    document.querySelectorAll('[data-suggest-name]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const nameVal = btn.dataset.suggestName;
+        if (nameVal && $('field-name')) {
+          $('field-name').value = nameVal;
+          $('field-name').dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
+
+    // Sugerencias rápidas de duración
+    document.querySelectorAll('[data-suggest-duration]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const durVal = btn.dataset.suggestDuration;
+        if (durVal && $('field-durationMin')) {
+          $('field-durationMin').value = durVal;
+          $('field-durationMin').dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
 
     // Selección rápida de color desde la paleta
     document.querySelectorAll('.color-preset-btn').forEach(btn => {

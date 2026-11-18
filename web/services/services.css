@@ -551,5 +551,451 @@
   transition: all .15s ease;
 }
 
+/* ==========================================================================
+   DISEÑO MODERNO Y ESPACIOSO: MODAL GRANDE Y ERGONÓMICO (SIN SCROLL)
+   ========================================================================== */
+
+/* Diálogo grande y panorámico para Servicios y Packs */
+.client-dialog.service-dialog {
+  width: min(1080px, 95vw) !important;
+  max-width: 1080px !important;
+  max-height: 90vh !important;
+  padding: 0 !important;
+  border-radius: 18px !important;
+  border: 1px solid rgba(220, 213, 202, 0.85) !important;
+  background: #fffdf9 !important;
+  box-shadow: 0 32px 90px rgba(17, 17, 17, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.9) !important;
+  overflow: hidden !important;
+}
+
+.client-dialog.service-dialog::backdrop {
+  background: rgba(18, 17, 16, 0.65) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.service-dialog form {
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 90vh !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.service-dialog .dialog-heading {
+  padding: 20px 28px 16px !important;
+  border-bottom: 1px solid #ebe4d8 !important;
+  background: #fbf9f5 !important;
+  margin-bottom: 0 !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.service-dialog .dialog-heading h2 {
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+  margin: 2px 0 0;
+}
+
+.service-dialog .dialog-heading p#dialog-subtitle {
+  font-size: 12.5px;
+  color: var(--tp-muted, #746d64);
+  margin: 3px 0 0;
+}
+
+/* Disposición panorámica en 2 columnas: configuración + visualización en vivo */
+.service-dialog .dialog-body-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 26px;
+  padding: 22px 28px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.dialog-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #faf7f2;
+  border: 1px solid #e7ded2;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.service-dialog .dialog-actions {
+  padding: 14px 28px !important;
+  border-top: 1px solid #ebe4d8 !important;
+  background: #fbf9f5 !important;
+  margin-top: 0 !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+}
+
+.service-dialog .dialog-actions .button-primary {
+  padding: 10px 24px !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+}
+
+@media (max-width: 900px) {
+  .service-dialog .dialog-body-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 18px;
+  }
+}
+
+
+/* Bloques o pasos visuales en los modales */
+.form-step-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 4px;
+  border-top: 1px dashed var(--tp-line, #dcd5ca);
+  margin-top: 6px;
+}
+
+.form-step-header:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.form-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--tp-ink, #24211e);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.form-step-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+  margin: 0;
+}
+
+.form-step-desc {
+  font-size: 11.5px;
+  color: var(--tp-muted, #746d64);
+  margin: 0 0 0 auto;
+}
+
+/* Chips de sugerencias rápidas (para nombres, duraciones, etc.) */
+.quick-suggest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.suggest-chip {
+  appearance: none;
+  border: 1px solid #dcd5ca;
+  background: #fdfaf6;
+  color: var(--tp-ink, #24211e);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.suggest-chip:hover {
+  border-color: var(--tp-accent, #ff7f0a);
+  background: #fff8f0;
+  color: #c45e00;
+  transform: translateY(-1px);
+}
+
+.suggest-chip.is-active {
+  background: var(--tp-ink, #24211e);
+  border-color: var(--tp-ink, #24211e);
+  color: #fff;
+}
+
+/* Selector visual de modalidad con tarjetas interactivas */
+.modality-toggle-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.modality-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fffdfa;
+  border: 2px solid #e2ddd5;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .2s ease;
+  user-select: none;
+}
+
+.modality-card:hover {
+  border-color: #c8bfb0;
+  background: #faf6f0;
+}
+
+.modality-card.is-selected {
+  border-color: var(--tp-accent, #ff7f0a);
+  background: #fff8f0;
+  box-shadow: 0 4px 12px rgba(255, 127, 10, 0.12);
+}
+
+.modality-card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #f0ebe2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: all .2s ease;
+}
+
+.modality-card.is-selected .modality-card-icon {
+  background: #ffe6cf;
+  color: #a64f00;
+}
+
+.modality-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modality-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+}
+
+.modality-card-sub {
+  font-size: 11px;
+  color: var(--tp-muted, #746d64);
+}
+
+/* Previsualización en vivo en la agenda para Servicios */
+.calendar-preview-box {
+  grid-column: 1 / -1;
+  background: #fbf9f5;
+  border: 1px solid #e7ded2;
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 6px;
+}
+
+.calendar-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.preview-tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tp-ink, #24211e);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-hint {
+  font-size: 11px;
+  color: var(--tp-muted, #746d64);
+}
+
+.calendar-event-pill {
+  background: #ffffff;
+  border: 1px solid #e2ddd5;
+  border-left: 6px solid #317b9b;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-left-color .2s ease;
+}
+
+.preview-event-time {
+  font-size: 11px;
+  font-weight: 700;
+  color: #746d64;
+  letter-spacing: 0.3px;
+}
+
+.preview-event-title {
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+}
+
+.preview-event-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preview-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: #f4efe7;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #435149;
+}
+
+/* Tarjetas selectoras de servicio en Packs (Grid visual moderno) */
+.service-cards-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.service-select-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: #fffdfa;
+  border: 2px solid #e2ddd5;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .2s ease;
+  position: relative;
+  text-align: left;
+}
+
+.service-select-card:hover {
+  border-color: #c0b8aa;
+  background: #faf6f0;
+  transform: translateY(-1px);
+}
+
+.service-select-card.is-selected {
+  border-color: var(--tp-ink, #24211e);
+  background: #fbf9f5;
+  box-shadow: 0 4px 12px rgba(36, 33, 30, 0.12);
+}
+
+.service-select-card.is-selected::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--tp-ink, #24211e);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.service-select-card-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+  margin: 0;
+  padding-right: 20px;
+}
+
+.service-select-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--tp-muted, #746d64);
+  font-weight: 600;
+}
+
+/* Hero breakdown para Packs */
+.calculated-rate-panel {
+  background: #faf8f5;
+  border: 1px solid #e0d8cc;
+  border-left: 5px solid var(--tp-ink, #24211e);
+  border-radius: 10px;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.calc-hero-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.calc-hero-number {
+  font-family: var(--tp-display, "Bahnschrift Local", Impact, sans-serif);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--tp-ink, #24211e);
+  line-height: 1;
+}
+
+.calc-hero-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tp-muted, #746d64);
+}
+
+/* Estilo mejorado de las tarjetas en el catálogo */
+.service-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(20, 20, 20, 0.04);
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.service-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(20, 20, 20, 0.08);
+}
+
+
 
 

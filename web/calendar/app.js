@@ -786,11 +786,63 @@ function syncDualPanel() {
     }
   }
 }
+function renderBookingServicePills(servicesList, currentSelectedId) {
+  const container = $('booking-service-pills');
+  if (!container) return;
+  const selectedId = currentSelectedId || $('booking-service')?.value || servicesList[0]?.id;
+  container.innerHTML = servicesList.map(s => {
+    const isSelected = s.id === selectedId;
+    const isDual = s.modality === 'DUAL' || Number(s.capacity || 1) >= 2 || (s.name && /dual/i.test(s.name));
+    const color = s.color || '#317b9b';
+    const dur = s.duration || s.durationMin || 60;
+    return `
+      <button type="button" class="booking-service-pill ${isSelected ? 'is-selected' : ''}" data-service-pill="${escapeHTML(s.id)}" style="--pill-color:${color};" aria-pressed="${String(isSelected)}">
+        <div class="pill-title-row">
+          <strong class="pill-service-title">${escapeHTML(s.name)}</strong>
+        </div>
+        <div class="pill-meta-row">
+          <span>${isDual ? '👥 Dual (2 pers.)' : '👤 Individual'}</span>
+          <span>·</span>
+          <span>⏱ ${dur} min</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  container.querySelectorAll('[data-service-pill]').forEach(btn => {
+    btn.onclick = () => {
+      const sid = btn.dataset.servicePill;
+      syncSelectedService(sid, { updateBuySelect: true, refreshPackages: true });
+    };
+  });
+
+  updateServiceDurationBadge(selectedId);
+}
+
+function updateServiceDurationBadge(serviceId) {
+  const srv = lookup('services', serviceId);
+  const badge = $('booking-service-duration-badge');
+  if (badge) {
+    const dur = srv?.duration || srv?.durationMin || 60;
+    const isDual = srv?.modality === 'DUAL' || Number(srv?.capacity || 1) >= 2 || (srv?.name && /dual/i.test(srv?.name));
+    badge.textContent = `${dur} min · ${isDual ? 'Dual (2 pers.)' : 'Individual'}`;
+  }
+}
+
 function syncSelectedService(serviceId, { updateBuySelect = true, refreshPackages = true } = {}) {
   if (!serviceId) return;
   const srv = lookup('services', serviceId);
   if ($('booking-service')) $('booking-service').value = serviceId;
   if ($('no-package-service')) $('no-package-service').value = serviceId;
+
+  // Actualizar estado visual de los pills de tipo de sesión en el modal
+  document.querySelectorAll('[data-service-pill]').forEach(btn => {
+    const match = btn.dataset.servicePill === serviceId;
+    btn.classList.toggle('is-selected', match);
+    btn.setAttribute('aria-pressed', String(match));
+  });
+  updateServiceDurationBadge(serviceId);
+
   if (updateBuySelect && $('buy-package-service') && Array.from($('buy-package-service').options).some(o => o.value === serviceId)) {
     $('buy-package-service').value = serviceId;
   }
@@ -801,7 +853,10 @@ function syncSelectedService(serviceId, { updateBuySelect = true, refreshPackage
     if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
   }
   syncDualPanel();
-  if (refreshPackages && $('dual-booking-client')?.value) renderDualPackages();
+  if (refreshPackages) {
+    renderPackages();
+    if ($('dual-booking-client')?.value) renderDualPackages();
+  }
 }
 function syncClientPicker() {
   const value = $('booking-client').value;
@@ -893,6 +948,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
     ? `<strong>${escapeHTML(detailService.name)}</strong><span>${detailService.modality === 'DUAL' || Number(detailService.capacity || 1) >= 2 ? 'Entrenamiento dual' : 'Entrenamiento individual'}${sessionText ? ` · ${escapeHTML(sessionText)}` : ''}</span>`
     : '';
   if ($('no-package-service')) $('no-package-service').value = values.serviceId || '';
+  renderBookingServicePills(activeServicesForModal, values.serviceId);
+  loadCommercialPacks().catch(() => {});
   if ($('dual-booking-client')) $('dual-booking-client').value = partner?.clientId || '';
   const defaultDualMode = document.querySelector('input[name="dual-pkg-mode"][value="none"]');
   if (defaultDualMode) defaultDualMode.checked = true;
@@ -1030,11 +1087,19 @@ function renderDualPackages(selected = undefined) {
   const availablePaid = dualClientPackages.filter(p => p.paymentStatus === 'PAGADO' && p.sessionsRemaining > 0);
   const partnerPkgId = state.editingPartnerSnapshot?.clientId === dualClientId ? state.editingPartnerSnapshot?.packageId : null;
   const list = dualClientPackages.filter(p => (p.paymentStatus === 'PAGADO' && p.sessionsRemaining > 0) || p.id === old || p.id === partnerPkgId);
+  list.sort((a, b) => {
+    const aSrvId = (a.bookingService || a.service)?.id;
+    const bSrvId = (b.bookingService || b.service)?.id;
+    const aMatch = aSrvId === currentServiceId ? 1 : 0;
+    const bMatch = bSrvId === currentServiceId ? 1 : 0;
+    return bMatch - aMatch;
+  });
 
   select.innerHTML = '<option value="">Sin bono · pago pendiente</option>' + list.map(p => {
     const bookingService = p.bookingService || p.service;
-    const isMatching = bookingService.id === currentServiceId;
-    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(bookingService.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus === 'PAGADO' ? 'Pagado' : 'Pago pendiente'}</option>`;
+    const isMatching = bookingService?.id === currentServiceId;
+    const packName = p.service?.name || bookingService?.name || 'Bono';
+    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(packName)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus === 'PAGADO' ? 'Pagado' : 'Pago pendiente'}</option>`;
   }).join('');
 
   if (selected === undefined && !old && availablePaid.length > 0) {
@@ -1119,17 +1184,47 @@ async function loadClientPackages(selected=null){
   finally{if(request===packageRequest)packageBusy=false;}
 }
 
-function updateBuyPackageServices() {
+let commercialPacks = [];
+async function loadCommercialPacks(force = false) {
+  if (commercialPacks.length && !force) return commercialPacks;
+  if (!serverMode) return [];
+  try {
+    const res = await api('services/packs?all=true');
+    commercialPacks = Array.isArray(res.packages) ? res.packages : [];
+  } catch (_) {
+    commercialPacks = [];
+  }
+  return commercialPacks;
+}
+
+async function updateBuyPackageServices() {
   const select = $('buy-package-service');
   if (!select) return;
   const currentServiceId = $('booking-service')?.value;
-  const activeServices = sortedServices((data.services || []).filter(s => s.active !== false));
-  select.innerHTML = activeServices.map(s => {
-    const isSelected = s.id === currentServiceId;
-    const priceText = s.price ? `${s.price} €` : '0 €';
-    const count = s.trainingCount || 1;
-    return `<option value="${escapeHTML(s.id)}" ${isSelected ? 'selected' : ''}>${escapeHTML(s.name)} · ${count} sesión${count > 1 ? 'es' : ''} (${priceText})</option>`;
-  }).join('');
+  const packs = await loadCommercialPacks();
+  if (packs.length) {
+    const activePacks = packs.filter(p => p.isActive !== false);
+    const sortedPacks = [...activePacks].sort((a, b) => {
+      const aMatch = a.serviceId === currentServiceId ? 1 : 0;
+      const bMatch = b.serviceId === currentServiceId ? 1 : 0;
+      return bMatch - aMatch || a.name.localeCompare(b.name, 'es');
+    });
+    select.innerHTML = sortedPacks.map(p => {
+      const isSelected = p.serviceId === currentServiceId;
+      const count = p.trainingCount || 1;
+      const priceText = p.price != null ? `${Number(p.price).toFixed(2)} €` : '0,00 €';
+      const linkedName = p.service?.name || (p.modality === 'DUAL' ? 'Dual' : 'Individual');
+      return `<option value="${escapeHTML(p.id)}" ${isSelected ? 'selected' : ''}>${escapeHTML(p.name)} (${escapeHTML(linkedName)}) · ${count} ses. (${priceText})</option>`;
+    }).join('');
+  } else {
+    const activeServices = sortedServices((data.services || []).filter(s => s.active !== false));
+    select.innerHTML = activeServices.map(s => {
+      const isSelected = s.id === currentServiceId;
+      const priceText = s.price ? `${s.price} €` : '0 €';
+      const count = s.trainingCount || 1;
+      return `<option value="${escapeHTML(s.id)}" ${isSelected ? 'selected' : ''}>${escapeHTML(s.name)} · ${count} sesión${count > 1 ? 'es' : ''} (${priceText})</option>`;
+    }).join('');
+  }
 }
 
 function renderPackages(selected){
@@ -1155,17 +1250,27 @@ function renderPackages(selected){
 
   const availablePaid = clientPackages.filter(p=>p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0);
   const list=clientPackages.filter(p=>(p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0)||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
+  // Priorizar bonos que coinciden con el tipo de sesión de agenda seleccionado
+  list.sort((a, b) => {
+    const aSrvId = (a.bookingService || a.service)?.id;
+    const bSrvId = (b.bookingService || b.service)?.id;
+    const aMatch = aSrvId === currentServiceId ? 1 : 0;
+    const bMatch = bSrvId === currentServiceId ? 1 : 0;
+    return bMatch - aMatch;
+  });
+
   select.innerHTML='<option value="">Reservar sin bono · pago pendiente</option>'+list.map(p=>{
     const bookingService = p.bookingService || p.service;
-    const isMatching = bookingService.id === currentServiceId;
-    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(bookingService.name)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`;
+    const isMatching = bookingService?.id === currentServiceId;
+    const packName = p.service?.name || bookingService?.name || 'Bono';
+    return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(packName)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`;
   }).join('');
 
   if (!old && availablePaid.length > 0) {
-    const matching = availablePaid.find(p => (p.bookingService || p.service).id === currentServiceId) || availablePaid[0];
+    const matching = availablePaid.find(p => (p.bookingService || p.service)?.id === currentServiceId) || availablePaid[0];
     select.value = matching.id;
-    if ((matching.bookingService || matching.service)?.id) {
-      syncSelectedService((matching.bookingService || matching.service).id, { updateBuySelect: true, refreshPackages: true });
+    if ((matching.bookingService || matching.service)?.id && (matching.bookingService || matching.service).id !== currentServiceId) {
+      syncSelectedService((matching.bookingService || matching.service).id, { updateBuySelect: true, refreshPackages: false });
     }
   } else {
     select.value=list.some(p=>p.id===old)?old:'';
@@ -1178,8 +1283,10 @@ function renderPackages(selected){
     if (existingWrap) existingWrap.hidden = false;
     if (buyCard) buyCard.hidden = true;
     if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
+    const bookingSrv = chosen.bookingService || chosen.service;
+    const isMatching = bookingSrv?.id === currentServiceId;
     if (chosen.paymentStatus === 'PAGADO') {
-      msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Sesión asignada al bono "${escapeHTML(chosen.service.name)}" (${chosen.sessionsRemaining} disponibles).</span>`;
+      msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Se descontará del bono "${escapeHTML(chosen.service?.name || bookingSrv?.name)}" (${chosen.sessionsRemaining} disponibles).${!isMatching && bookingSrv?.name ? ' (Bono vinculado a: ' + escapeHTML(bookingSrv.name) + ')' : ''}</span>`;
     } else {
       msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#fef3c7; color:#b45309; font-weight:600; font-size:12px;">⚠️ Este bono está pendiente de cobro. La cita mostrará aviso de cobro.</span>`;
     }
@@ -1204,7 +1311,7 @@ function renderPackages(selected){
 
 $('booking-package').onchange=()=>{
   const p=clientPackages.find(p=>p.id===$('booking-package').value);
-  if((p?.bookingService || p?.service)?.id) syncSelectedService((p.bookingService || p.service).id);
+  if((p?.bookingService || p?.service)?.id) syncSelectedService((p.bookingService || p.service).id, { refreshPackages: false });
   renderPackages();
 };
 
@@ -1242,7 +1349,10 @@ document.querySelectorAll('input[name="buy-pkg-mode"]').forEach(radio => {
 
 if ($('buy-package-service')) {
   $('buy-package-service').onchange = () => {
-    syncSelectedService($('buy-package-service').value, { updateBuySelect: false });
+    const chosenVal = $('buy-package-service').value;
+    const pack = commercialPacks.find(p => p.id === chosenVal);
+    const targetServiceId = pack?.serviceId || chosenVal;
+    syncSelectedService(targetServiceId, { updateBuySelect: false });
   };
 }
 if ($('no-package-service')) {
@@ -1251,16 +1361,25 @@ if ($('no-package-service')) {
   };
 }
 
-async function createClientServicePackage(clientId, serviceId, isNow, rawPaymentMethod = 'TARJETA') {
-  const service = lookup('services', serviceId);
-  if (!clientId || !service) return null;
+async function createClientServicePackage(clientId, packOrServiceId, isNow, rawPaymentMethod = 'TARJETA') {
+  const packs = await loadCommercialPacks();
+  const directPack = packs.find(p => p.id === packOrServiceId);
+  const linkedPack = !directPack ? packs.find(p => p.serviceId === packOrServiceId && p.isActive !== false) : null;
+  const pack = directPack || linkedPack;
+  const service = lookup('services', pack ? pack.serviceId : packOrServiceId);
+  if (!clientId || (!pack && !service)) return null;
+
   const paymentStatus = isNow ? 'PAGADO' : 'PENDIENTE';
   const paymentMethod = isNow ? rawPaymentMethod : 'OTRO';
+  const targetId = pack ? pack.id : packOrServiceId;
+  const sessionsBought = Number(pack?.trainingCount || service?.trainingCount || 1);
+  const totalAmount = Number(pack?.price != null ? pack.price : (service?.price || 0));
+
   return api('clients/' + encodeURIComponent(clientId) + '/service-packages', 'POST', {
     requestKey: uid(),
-    serviceId,
-    sessionsBought: service.trainingCount || 1,
-    totalAmount: service.price || 0,
+    serviceId: targetId,
+    sessionsBought,
+    totalAmount,
     paymentStatus,
     paymentMethod,
     notes: `Contratado desde el calendario (${isNow ? 'Pagado por ' + paymentMethod : 'Pendiente de cobro'}).`
@@ -1271,9 +1390,11 @@ async function handleBuyPackage(isNow) {
   const clientId = $('booking-client').value;
   if (!clientId || clientId === 'new' || packageBusy) return null;
   if(currentUser?.role==='TRAINER' || state.packagesBrand==='COBOSU' || awsClients.find(c=>c.id===clientId)?.brand==='COBOSU')return null;
-  const serviceId = $('buy-package-service').value;
-  const service = lookup('services', serviceId);
-  if (!service) return null;
+  const packOrServiceId = $('buy-package-service').value;
+  const packs = await loadCommercialPacks();
+  const pack = packs.find(p => p.id === packOrServiceId);
+  const service = pack ? lookup('services', pack.serviceId) : lookup('services', packOrServiceId);
+  if (!pack && !service) return null;
 
   const paymentMethod = isNow ? $('buy-package-method').value : 'OTRO';
   const nowBtn = $('buy-package-now-btn');
@@ -1289,19 +1410,14 @@ async function handleBuyPackage(isNow) {
   }
 
   try {
-    const result = await createClientServicePackage(clientId, serviceId, isNow, paymentMethod);
+    const result = await createClientServicePackage(clientId, packOrServiceId, isNow, paymentMethod);
     const history = await api('clients/' + encodeURIComponent(clientId) + '/service-history');
     if ($('booking-client').value === clientId) {
       clientPackages = history.packages || [];
       const newPkgId = result?.servicePackage?.id;
-      newPendingPackageId=newPkgId;
-      $('booking-service').value = serviceId;
-      if (service.duration && $('booking-start').value) {
-        $('booking-end').value = C.timeLabel(C.minutes($('booking-start').value) + service.duration);
-        const summaryDt = $('summary-datetime');
-        if (summaryDt) summaryDt.textContent = `${prettyDate($('booking-date').value, { weekday: 'short', day: 'numeric', month: 'short' })} · ${$('booking-start').value} a ${$('booking-end').value}`;
-      }
-      syncSelectedService(serviceId);
+      newPendingPackageId = newPkgId;
+      const baseServiceId = pack?.serviceId || packOrServiceId;
+      syncSelectedService(baseServiceId);
       renderPackages(newPkgId);
       if (resEl) {
         resEl.style.color = '#15803d';

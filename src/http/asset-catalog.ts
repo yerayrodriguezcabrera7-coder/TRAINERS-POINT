@@ -55,6 +55,7 @@ export const staticFiles: Record<string, {
   "/change-password.js": { file: "web/auth/change-password.js", contentType: "text/javascript; charset=utf-8" },
   "/app.js": { file: "web/calendar/app.js", contentType: "text/javascript; charset=utf-8" },
   "/calendar-core.js": { file: "web/calendar/calendar-core.js", contentType: "text/javascript; charset=utf-8" },
+  "/pending-banner.js": { file: "web/calendar/pending-banner.js", contentType: "text/javascript; charset=utf-8" },
   "/runtime.js": { file: "web/shared/runtime.js", contentType: "text/javascript; charset=utf-8" },
   "/menu.js": { file: "web/shared/menu.js", contentType: "text/javascript; charset=utf-8" },
   "/menu.css": { file: "web/shared/menu.css", contentType: "text/css; charset=utf-8" },

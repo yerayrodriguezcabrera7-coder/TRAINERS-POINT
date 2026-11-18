@@ -22,13 +22,14 @@ async function inheritLinkedService(input: any) {
   if (!base) return 'Elige un servicio base activo para este pack.';
   return { ...input, color: base.color, modality: base.modality, durationMin: base.durationMin };
 }
-function requireCatalogPage(request: IncomingMessage, page: 'servicios' | 'packs.html', allowDefaultReception = false) {
+function requireCatalogPage(request: IncomingMessage, page: 'servicios' | 'packs.html' | 'packs', allowDefaultReception = false) {
   const actor = (request as any).identity as Identity | undefined;
   if (!actor) throw new ApiError(401, 'Inicia sesión para continuar.');
   if (actor.role === 'ADMIN') return;
+  if (request.method === 'GET') return; // Cualquier usuario autenticado puede consultar el catálogo
   if (Array.isArray(actor.pagePermissions)) {
-    if (actor.pagePermissions.includes(page)) return;
-  } else if (allowDefaultReception && actor.role === 'RECEPTION') return;
+    if (actor.pagePermissions.includes(page) || actor.pagePermissions.includes('servicios') || actor.pagePermissions.includes('packs') || actor.pagePermissions.includes('calendario')) return;
+  } else if (allowDefaultReception && (actor.role === 'RECEPTION' || actor.role === 'TRAINER')) return;
   throw new ApiError(403, 'Tu perfil no tiene permiso para gestionar este catálogo.');
 }
 const DEFAULT_SERVICES = [

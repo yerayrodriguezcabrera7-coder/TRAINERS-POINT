@@ -130,7 +130,7 @@
     const select = $('field-service');
     if (!select) return;
     const activeServices = services.filter(s => s.isActive && s.type !== 'PACK');
-    select.innerHTML = '<option value="">— Selecciona primero si es para Individual o Dual —</option>' + activeServices.map(s => {
+    select.innerHTML = '<option value="">— O selecciona del desplegable de servicios —</option>' + activeServices.map(s => {
       const isDual = s.modality === 'DUAL';
       return `<option value="${esc(s.id)}" data-modality="${esc(s.modality)}" data-duration="${Number(s.durationMin)}" data-category="${esc(s.category)}" data-color="${esc(s.color)}">${esc(s.name)} (${isDual ? 'Dual · pareja / 2 personas' : 'Individual · 1 persona'}) · ${s.durationMin} min</option>`;
     }).join('');
@@ -139,10 +139,16 @@
     if (pills) {
       pills.innerHTML = activeServices.map(s => {
         const isDual = s.modality === 'DUAL';
-        return `<button type="button" class="service-pill-btn" data-service-pill="${esc(s.id)}" aria-pressed="false">
-          <strong>${esc(s.name)}</strong>
-          <span style="font-size:11px;color:var(--tp-muted);">${isDual ? 'Dual (2 pers.)' : 'Individual (1 pers.)'}</span>
-        </button>`;
+        return `
+          <button type="button" class="service-select-card" data-service-pill="${esc(s.id)}" aria-pressed="false">
+            <h4 class="service-select-card-name">${esc(s.name)}</h4>
+            <div class="service-select-card-meta">
+              <span>${isDual ? '👥 Dual (2 pers.)' : '👤 Individual (1 pers.)'}</span>
+              <span>·</span>
+              <span>⏱ ${s.durationMin} min</span>
+            </div>
+          </button>
+        `;
       }).join('');
     }
 
@@ -437,6 +443,45 @@
         $('field-service').value = btn.dataset.servicePill;
         $('field-service').dispatchEvent(new Event('change', { bubbles: true }));
       }
+    });
+
+    // Sugerencias rápidas de nombre de pack
+    document.querySelectorAll('[data-pack-name]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.packName;
+        if (val && $('field-name')) {
+          $('field-name').value = val;
+          $('field-name').dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
+
+    // Sugerencias rápidas de sesiones
+    document.querySelectorAll('[data-pack-sessions]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.packSessions;
+        if (val && $('field-trainingCount')) {
+          $('field-trainingCount').value = val;
+          $('field-trainingCount').dispatchEvent(new Event('input', { bubbles: true }));
+          document.querySelectorAll('[data-pack-sessions]').forEach(c => {
+            c.classList.toggle('is-active', c.dataset.packSessions === val);
+          });
+        }
+      });
+    });
+
+    // Sugerencias rápidas de validez en semanas
+    document.querySelectorAll('[data-pack-validity]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.packValidity;
+        if (val && $('field-validityWeeks')) {
+          $('field-validityWeeks').value = val;
+          $('field-validityWeeks').dispatchEvent(new Event('input', { bubbles: true }));
+          document.querySelectorAll('[data-pack-validity]').forEach(c => {
+            c.classList.toggle('is-active', c.dataset.packValidity === val);
+          });
+        }
+      });
     });
 
     // Auto-cálculo en tiempo real
