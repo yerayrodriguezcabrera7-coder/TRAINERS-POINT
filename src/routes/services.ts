@@ -31,6 +31,40 @@ function requireCatalogPage(request: IncomingMessage, page: 'servicios' | 'packs
   } else if (allowDefaultReception && actor.role === 'RECEPTION') return;
   throw new ApiError(403, 'Tu perfil no tiene permiso para gestionar este catálogo.');
 }
+const DEFAULT_SERVICES = [
+  { name: 'Individual', modality: 'INDIVIDUAL', color: '#317b9b', durationMin: 60, category: 'TRAINING' as const },
+  { name: 'Dual', modality: 'DUAL', color: '#b85c38', durationMin: 60, category: 'TRAINING' as const },
+  { name: 'Cabina', modality: 'INDIVIDUAL', color: '#477458', durationMin: 60, category: 'CABIN' as const },
+  { name: 'Estudio Corporal', modality: 'INDIVIDUAL', color: '#885b9c', durationMin: 60, category: 'TRAINING' as const },
+] as const;
+
+async function ensureDefaultServices() {
+  for (const def of DEFAULT_SERVICES) {
+    const existing = await prisma.service.findFirst({
+      where: {
+        type: { not: 'PACK' },
+        name: { equals: def.name, mode: 'insensitive' }
+      }
+    });
+    if (!existing) {
+      await prisma.service.create({
+        data: {
+          name: def.name,
+          modality: def.modality,
+          color: def.color,
+          durationMin: def.durationMin,
+          category: def.category,
+          type: 'SESION_INDIVIDUAL',
+          trainingCount: 1,
+          price: 0,
+          validityWeeks: 4,
+          isActive: true
+        }
+      });
+    }
+  }
+}
+
 export async function servicesRoutes(request: IncomingMessage, response: ServerResponse, url: URL, context: ApiContext): Promise<boolean> {
   const { port, hasTrustedOrigin } = context;
   // GET /api/services/packs – only return packs (type=PACK) with service reference
@@ -48,6 +82,7 @@ export async function servicesRoutes(request: IncomingMessage, response: ServerR
     return true;
   }
   if (request.method === "GET" && url.pathname === "/api/services") {
+    await ensureDefaultServices();
     const includeAll = url.searchParams.get("all") === "true" || url.searchParams.get("includeInactive") === "true";
     // Exclude packs from the main services list (those are managed in the Packs screen)
     const services = await prisma.service.findMany({
@@ -148,6 +183,10 @@ export async function servicesRoutes(request: IncomingMessage, response: ServerR
       return true;
     }
     requireCatalogPage(request, existing.type === 'PACK' ? 'packs.html' : 'servicios');
+    if (existing.type !== 'PACK' && DEFAULT_SERVICES.some(d => d.name.toLowerCase() === existing.name.trim().toLowerCase())) {
+      sendError(response, 400, `El servicio "${existing.name}" es un servicio base predeterminado y siempre debe estar en el sistema.`);
+      return true;
+    }
     if (existing._count.bookings > 0 || existing._count.packages > 0) {
       const service = await prisma.service.update({
         where: { id },

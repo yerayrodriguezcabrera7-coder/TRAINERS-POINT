@@ -106,12 +106,12 @@
           </label>
 
           <label class="form-field">
-            <span>Modalidad <b>*</b></span>
-            <select name="modality" id="field-modality" required="">
-              <option value="INDIVIDUAL">Individual (1 persona)</option>
-              <option value="DUAL">Dual (pareja / 2 personas)</option>
-            </select>
-            <span class="field-hint">Selector para elegir si es Individual (1 persona) o Dual (pareja / 2 personas).</span>
+            <span>Modalidad (Nº de personas) <b>*</b></span>
+            <div class="modality-input-wrap">
+              <input name="modality" id="field-modality" type="number" min="1" max="2" step="1" required value="1" placeholder="1 o 2">
+              <span class="modality-badge" id="modality-badge">👤 1 persona (Individual)</span>
+            </div>
+            <span class="field-hint">Escribe el número de personas: <strong>1</strong> para Individual (1 persona) o <strong>2</strong> para Dual (pareja / 2 personas).</span>
           </label>
 
           <label class="form-field">

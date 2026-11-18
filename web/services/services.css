@@ -476,3 +476,80 @@
   box-shadow: 0 0 0 2px var(--tp-accent, #ff7f0a);
 }
 
+/* Selector visual rápido de servicio para Packs */
+.service-quick-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  margin-bottom: 10px;
+}
+
+.service-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1.5px solid #dcd5ca;
+  background: var(--tp-surface, #fffdf9);
+  color: var(--tp-ink, #24211e);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.service-pill-btn:hover {
+  border-color: var(--tp-accent, #ff7f0a);
+  background: #fff8f0;
+}
+
+.service-pill-btn.is-selected {
+  border-color: var(--tp-accent, #ff7f0a);
+  background: #fff4e8;
+  color: #a64f00;
+  box-shadow: 0 0 0 2px rgba(255, 127, 10, 0.25);
+  font-weight: 700;
+}
+
+.service-pill-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* Modalidad numérica en Servicios (escribiendo el admin el número) */
+.modality-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modality-input-wrap input {
+  max-width: 90px !important;
+  font-weight: 800 !important;
+  font-size: 17px !important;
+  text-align: center;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.modality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: #f7f4ee;
+  border: 1px solid #dcd5ca;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tp-ink, #24211e);
+  transition: all .15s ease;
+}
+
+
+

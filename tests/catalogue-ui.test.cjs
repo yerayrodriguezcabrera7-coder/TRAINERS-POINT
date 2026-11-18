@@ -81,7 +81,6 @@ test('Packs: se configuran bonos con servicio vinculado, herencia de color/modal
     p.d.getElementById('field-service').value=dualService.id;
     p.d.getElementById('field-service').dispatchEvent(new p.w.Event('change'));
     assert.match(p.d.getElementById('inherited-modality-text').textContent,/Dual/);
-    assert.equal(p.d.getElementById('inherited-color-text').textContent,'#b85c38');
 
     p.d.getElementById('field-trainingCount').value='8';
     p.d.getElementById('field-price').value='200';

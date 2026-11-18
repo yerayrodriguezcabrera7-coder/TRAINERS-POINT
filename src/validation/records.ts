@@ -440,9 +440,11 @@ export function parseServiceInput(value: unknown): ServiceInput | string {
     return "La descripción debe tener como máximo 2000 caracteres.";
   }
 
-  const rawModality = String(value.modality ?? "INDIVIDUAL").trim().toUpperCase();
+  let rawModality = String(value.modality ?? "INDIVIDUAL").trim().toUpperCase();
+  if (rawModality === "1") rawModality = "INDIVIDUAL";
+  if (rawModality === "2") rawModality = "DUAL";
   if (rawModality !== "INDIVIDUAL" && rawModality !== "DUAL") {
-    return "La modalidad debe ser individual o dual.";
+    return "La modalidad debe ser 1 (Individual) o 2 (Dual / pareja).";
   }
   const modality: "INDIVIDUAL" | "DUAL" = rawModality as "INDIVIDUAL" | "DUAL";
 

@@ -28,7 +28,7 @@
             <div class="page-heading-copy">
               <p class="eyebrow">COMERCIAL · BONOS DE SESIONES</p>
               <h1>Packs <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Aquí se configuran los bonos que compran los clientes (Bono 10 sesiones, Pack mensual 8 sesiones…). Cada bono se vincula a un tipo de servicio (Individual o Dual), heredando automáticamente su color y modalidad para las reservas de la agenda.</p>
+              <p class="page-description">Aquí se configuran los bonos que compran los clientes (Bono 10 sesiones, Pack mensual 8 sesiones…). Cada bono se vincula a un tipo de servicio (Individual o Dual), heredando automáticamente su modalidad y duración.</p>
             </div>
             <button class="button button-primary" id="open-pack-create" type="button">
               <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
@@ -98,40 +98,29 @@
         </div>
 
         <div class="form-grid">
+          <!-- 1. Servicio vinculado: se escoge primero, la modalidad Individual o Dual viene de aquí -->
           <label class="form-field form-field-wide">
-            <span>Nombre del pack <b>*</b></span>
-            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 sesiones, Pack mensual 8 sesiones">
-            <span class="field-hint">ej. Bono 10 sesiones, Pack mensual 8 sesiones.</span>
-          </label>
-
-          <label class="form-field form-field-wide">
-            <span>Servicio vinculado <b>*</b></span>
+            <span>1. Servicio que se usa (Individual o Dual) <b>*</b></span>
+            <div id="service-quick-pills" class="service-quick-pills" role="radiogroup" aria-label="Elegir servicio vinculado"></div>
             <select name="serviceId" id="field-service" required>
-              <option value="">— Selecciona si este bono es para Individual o Dual —</option>
+              <option value="">— Selecciona primero si es para Individual o Dual —</option>
             </select>
-            <span class="field-hint">Elige si este bono es para sesiones de Individual o de Dual.</span>
+            <span class="field-hint">Escoge primero qué servicio se usa. La modalidad (Individual o Dual) y la duración se heredan automáticamente de aquí.</span>
 
             <!-- Herencia automática visible -->
             <div id="service-inheritance-box" class="service-inheritance-box" aria-live="polite">
               <div class="inheritance-header">
-                <span class="inheritance-tag">✨ Herencia automática</span>
-                <span class="inheritance-note">Hereda automáticamente el color y la modalidad del servicio que elijas</span>
+                <span class="inheritance-tag">✨ Herencia de servicio</span>
+                <span class="inheritance-note">Modalidad y duración provienen del servicio elegido</span>
               </div>
               <div class="inheritance-content">
                 <div class="inheritance-item">
-                  <span class="inheritance-label">Modalidad heredada:</span>
-                  <strong id="inherited-modality-text">Individual (1 persona)</strong>
-                </div>
-                <div class="inheritance-item">
-                  <span class="inheritance-label">Color en cuadrante:</span>
-                  <span class="color-preview-wrap">
-                    <span id="inherited-color-dot" class="service-color-dot"></span>
-                    <strong id="inherited-color-text">#317b9b</strong>
-                  </span>
+                  <span class="inheritance-label">Modalidad:</span>
+                  <strong id="inherited-modality-text">Selecciona un servicio</strong>
                 </div>
                 <div class="inheritance-item">
                   <span class="inheritance-label">Duración sesión:</span>
-                  <strong id="inherited-duration-text">60 min</strong>
+                  <strong id="inherited-duration-text">—</strong>
                 </div>
               </div>
             </div>
@@ -141,6 +130,13 @@
           <input type="hidden" name="category" id="field-category" value="TRAINING">
           <input type="hidden" name="modality" id="field-modality" value="INDIVIDUAL">
           <input type="hidden" name="durationMin" id="field-durationMin" value="60">
+
+          <!-- 2. Nombre del pack -->
+          <label class="form-field form-field-wide">
+            <span>2. Nombre del pack <b>*</b></span>
+            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Bono 10 sesiones, Pack mensual 8 sesiones">
+            <span class="field-hint">ej. Bono 10 sesiones, Pack mensual 8 sesiones.</span>
+          </label>
 
           <label class="form-field">
             <span>Número de sesiones <b>*</b></span>

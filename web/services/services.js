@@ -142,6 +142,7 @@
     grid.innerHTML = filtered.map(service => {
       const isDual = service.modality === 'DUAL';
       const color = /^#[0-9a-f]{6}$/i.test(service.color) ? service.color : '#317b9b';
+      const isBase = ['individual', 'dual', 'cabina', 'estudio corporal'].includes(service.name.toLowerCase().trim());
 
       return `
         <article class="service-card ${service.isActive ? '' : 'is-inactive'}" data-id="${esc(service.id)}">
@@ -153,6 +154,7 @@
               <span class="badge-pill badge-modality">
                 ${isDual ? 'Dual (pareja / 2 personas)' : 'Individual (1 persona)'}
               </span>
+              ${isBase ? '<span class="badge-pill" style="background:#eef2f7;color:#2b547e;border:1px solid #d0deeb;">Servicio base</span>' : ''}
             </div>
           </div>
 
@@ -207,6 +209,19 @@
     formError.hidden = false;
   }
 
+  function updateModalityBadge() {
+    const raw = String($('field-modality')?.value || '').trim();
+    const badge = $('modality-badge');
+    if (!badge) return;
+    if (raw === '2' || raw.toUpperCase() === 'DUAL') {
+      badge.textContent = '👥 2 personas (Dual / pareja)';
+    } else if (raw === '1' || raw.toUpperCase() === 'INDIVIDUAL' || raw === '') {
+      badge.textContent = '👤 1 persona (Individual)';
+    } else {
+      badge.textContent = '⚠️ Escribe 1 o 2';
+    }
+  }
+
   function openCreateDialog() {
     form.reset();
     clearValidationErrors();
@@ -216,7 +231,8 @@
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
     $('field-color').value = ['#317b9b','#b85c38','#477458','#885b9c','#a67a18','#c2413a'][services.length % 6];
-    $('field-modality').value = 'INDIVIDUAL';
+    $('field-modality').value = '1';
+    updateModalityBadge();
     $('field-durationMin').value = '60';
     $('field-isActive').value = 'true';
     $('field-description').value = '';
@@ -235,7 +251,8 @@
     $('field-name').value = service.name || '';
     $('field-category').value = service.category || 'TRAINING';
     $('field-color').value = service.color || '#317b9b';
-    $('field-modality').value = service.modality || 'INDIVIDUAL';
+    $('field-modality').value = service.modality === 'DUAL' ? '2' : '1';
+    updateModalityBadge();
     $('field-durationMin').value = service.durationMin || 60;
     $('field-isActive').value = String(service.isActive !== false);
     $('field-description').value = service.description || '';
@@ -258,6 +275,8 @@
     loadServices();
 
     $('open-service-create')?.addEventListener('click', openCreateDialog);
+    $('field-modality')?.addEventListener('input', updateModalityBadge);
+    $('field-modality')?.addEventListener('change', updateModalityBadge);
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
 
@@ -302,10 +321,15 @@
         return setFieldError('field-name', 'El nombre no puede tener más de 120 caracteres.');
       }
 
-      // 2. Modalidad
-      const modality = $('field-modality').value;
-      if (modality !== 'INDIVIDUAL' && modality !== 'DUAL') {
-        return setFieldError('field-modality', 'Selecciona una modalidad válida (Individual o Dual).');
+      // 2. Modalidad (número de personas escrito por el admin)
+      const modalityRaw = String($('field-modality').value || '').trim();
+      let modality = 'INDIVIDUAL';
+      if (modalityRaw === '2' || modalityRaw.toUpperCase() === 'DUAL') {
+        modality = 'DUAL';
+      } else if (modalityRaw === '1' || modalityRaw.toUpperCase() === 'INDIVIDUAL') {
+        modality = 'INDIVIDUAL';
+      } else {
+        return setFieldError('field-modality', 'Escribe 1 (Individual) o 2 (Dual / pareja) como número de personas.');
       }
 
       // 3. Color

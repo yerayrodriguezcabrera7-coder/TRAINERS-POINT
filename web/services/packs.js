@@ -130,31 +130,58 @@
     const select = $('field-service');
     if (!select) return;
     const activeServices = services.filter(s => s.isActive && s.type !== 'PACK');
-    select.innerHTML = activeServices.map(s => {
+    select.innerHTML = '<option value="">— Selecciona primero si es para Individual o Dual —</option>' + activeServices.map(s => {
       const isDual = s.modality === 'DUAL';
       return `<option value="${esc(s.id)}" data-modality="${esc(s.modality)}" data-duration="${Number(s.durationMin)}" data-category="${esc(s.category)}" data-color="${esc(s.color)}">${esc(s.name)} (${isDual ? 'Dual · pareja / 2 personas' : 'Individual · 1 persona'}) · ${s.durationMin} min</option>`;
     }).join('');
+
+    const pills = $('service-quick-pills');
+    if (pills) {
+      pills.innerHTML = activeServices.map(s => {
+        const isDual = s.modality === 'DUAL';
+        return `<button type="button" class="service-pill-btn" data-service-pill="${esc(s.id)}" aria-pressed="false">
+          <strong>${esc(s.name)}</strong>
+          <span style="font-size:11px;color:var(--tp-muted);">${isDual ? 'Dual (2 pers.)' : 'Individual (1 pers.)'}</span>
+        </button>`;
+      }).join('');
+    }
+
     updateInheritedService();
   }
 
   function updateInheritedService() {
-    const service = services.find(item => item.id === $('field-service')?.value);
-    if (!service) return;
+    const currentVal = $('field-service')?.value;
+    const service = services.find(item => item.id === currentVal);
+
+    // Actualizar estado visual de los pills rápidos
+    document.querySelectorAll('[data-service-pill]').forEach(btn => {
+      const match = btn.dataset.servicePill === currentVal;
+      btn.classList.toggle('is-selected', match);
+      btn.setAttribute('aria-pressed', String(match));
+    });
+
+    if (!service) {
+      if ($('field-modality')) $('field-modality').value = '';
+      if ($('inherited-modality-text')) $('inherited-modality-text').textContent = 'Selecciona un servicio';
+      if ($('inherited-duration-text')) $('inherited-duration-text').textContent = '—';
+      const info = $('inherited-service-info');
+      if (info) info.innerHTML = '<span style="color:var(--tp-muted);">Primero selecciona qué servicio se usa (Individual o Dual).</span>';
+      updateCalculatedPrice();
+      return;
+    }
+
     if ($('field-modality')) $('field-modality').value = service.modality;
     if ($('field-durationMin')) $('field-durationMin').value = service.durationMin;
     if ($('field-category')) $('field-category').value = service.category || 'TRAINING';
 
     const isDual = service.modality === 'DUAL';
     const modalityText = isDual ? 'Dual (pareja / 2 personas)' : 'Individual (1 persona)';
-    const color = /^#[0-9a-f]{6}$/i.test(service.color) ? service.color : '#317b9b';
 
     if ($('inherited-modality-text')) $('inherited-modality-text').textContent = modalityText;
-    if ($('inherited-color-dot')) $('inherited-color-dot').style.background = color;
-    if ($('inherited-color-text')) $('inherited-color-text').textContent = color;
     if ($('inherited-duration-text')) $('inherited-duration-text').textContent = `${service.durationMin} min`;
 
     const info = $('inherited-service-info');
-    if (info) info.innerHTML = `<span class="service-color-dot" style="background:${esc(color)}"></span> Color de calendario: <strong>${esc(color)}</strong> · ${modalityText} · ${service.durationMin} min`;
+    if (info) info.innerHTML = `Modalidad heredada: <strong>${modalityText}</strong> · Duración: <strong>${service.durationMin} min</strong>`;
 
     updateCalculatedPrice();
   }
@@ -182,7 +209,6 @@
       const count = Number(pack.trainingCount) || 1;
       const pricePerSession = count > 0 ? (priceNum / count) : 0;
       const isDual = pack.modality === 'DUAL';
-      const serviceColor = /^#[0-9a-f]{6}$/i.test(pack.color) ? pack.color : '#317b9b';
 
       return `
         <article class="service-card ${pack.isActive ? '' : 'is-inactive'}" data-id="${esc(pack.id)}">
@@ -200,10 +226,7 @@
             </div>
           </div>
 
-          <h3 class="service-name">
-            <span class="service-color-dot" style="background:${serviceColor}" aria-hidden="true"></span>
-            ${esc(pack.name)}
-          </h3>
+          <h3 class="service-name">${esc(pack.name)}</h3>
           <p class="service-category">${pack.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
           ${pack.service ? `<p class="service-description" style="font-size:12.5px;color:var(--tp-muted);margin-bottom:8px;">Servicio vinculado: <strong>${esc(pack.service.name)}</strong> (${isDual ? 'Dual · 2 personas' : 'Individual · 1 persona'}) · ⏱ ${pack.durationMin} min</p>` : ''}
           <p class="service-description">${esc(pack.description || 'Sin descripción detallada.')}</p>
@@ -294,11 +317,12 @@
     clearValidationErrors();
     $('pack-id').value = '';
     $('dialog-title').textContent = 'Nuevo pack';
-    $('dialog-subtitle').textContent = 'Aquí se configuran los bonos comerciales que compran los clientes.';
+    $('dialog-subtitle').textContent = 'Primero escoge el servicio (Individual o Dual). El pack heredará su modalidad y duración.';
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
-    $('field-service').value = services.find(s => s.type !== 'PACK' && s.isActive)?.id || '';
-    $('field-modality').value = 'INDIVIDUAL';
+    const activeNonPacks = services.filter(s => s.type !== 'PACK' && s.isActive);
+    $('field-service').value = activeNonPacks.length === 1 ? activeNonPacks[0].id : '';
+    $('field-modality').value = '';
     if ($('field-type')) $('field-type').value = 'PACK';
     $('field-trainingCount').value = '10';
     $('field-durationMin').value = '60';
@@ -311,6 +335,9 @@
     updateInheritedService();
     updateCalculatedPrice();
     dialog.showModal();
+    if ($('field-service') && !$('field-service').value) {
+      setTimeout(() => $('field-service').focus(), 50);
+    }
   }
 
   function openEditDialog(packId) {
@@ -403,6 +430,15 @@
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
 
+    // Selección rápida mediante los pills de servicio (Individual / Dual)
+    $('service-quick-pills')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-service-pill]');
+      if (btn && $('field-service')) {
+        $('field-service').value = btn.dataset.servicePill;
+        $('field-service').dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+
     // Auto-cálculo en tiempo real
     $('field-price')?.addEventListener('input', updateCalculatedPrice);
     $('field-price')?.addEventListener('change', updateCalculatedPrice);
@@ -431,26 +467,26 @@
       e.preventDefault();
       clearValidationErrors();
 
-      // 1. Nombre del pack
+      // 1. Servicio vinculado: primero se debe escoger el servicio (Individual o Dual)
+      const serviceId = $('field-service').value;
+      if (!serviceId) {
+        return setFieldError('field-service', 'Primero debes seleccionar qué servicio se usa (Individual o Dual).');
+      }
+      const linkedService = services.find(s => s.id === serviceId);
+
+      // 2. Modalidad (heredada directamente del servicio elegido)
+      const modality = linkedService?.modality || $('field-modality')?.value || 'INDIVIDUAL';
+      if (modality !== 'INDIVIDUAL' && modality !== 'DUAL') {
+        return setFieldError('field-service', 'El servicio seleccionado debe tener una modalidad válida.');
+      }
+
+      // 3. Nombre del pack
       const name = $('field-name').value.trim();
       if (!name) {
         return setFieldError('field-name', 'El nombre del pack es obligatorio.');
       }
       if (name.length > 120) {
         return setFieldError('field-name', 'El nombre no puede tener más de 120 caracteres.');
-      }
-
-      // 2. Servicio vinculado
-      const serviceId = $('field-service').value;
-      if (!serviceId) {
-        return setFieldError('field-service', 'Selecciona un servicio al que se vincule este pack.');
-      }
-      const linkedService = services.find(s => s.id === serviceId);
-
-      // 3. Modalidad (heredada automáticamente del servicio)
-      const modality = linkedService?.modality || $('field-modality')?.value || 'INDIVIDUAL';
-      if (modality !== 'INDIVIDUAL' && modality !== 'DUAL') {
-        return setFieldError('field-service', 'El servicio vinculado debe tener una modalidad válida.');
       }
 
       // 4. Número de sesiones
