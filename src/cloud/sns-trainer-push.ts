@@ -8,7 +8,7 @@ import {
 import type { Booking } from "../calendar/model";
 
 type Platform = "ios" | "android";
-type PushConfig = { topicArn: string; iosArn?: string; androidArn?: string };
+type PushConfig = { topicArn: string; region?: string; iosArn?: string; androidArn?: string };
 type Sender = Pick<SNSClient, "send">;
 
 export const pushMigration = `CREATE TABLE IF NOT EXISTS calendar.push_devices (
@@ -26,7 +26,7 @@ export function agendaPushEvent(old: Booking | undefined, current: Booking, time
   const local = now.setZone(timezone);
   const starts = DateTime.fromISO(`${current.date}T${current.start}`, { zone: timezone });
   if (old?.status !== "CANCELLED" && current.status === "CANCELLED" &&
-      starts.toMillis() >= local.toMillis() && starts.toMillis() <= local.plus({ hours: 3 }).toMillis()) {
+      starts.toMillis() >= local.toMillis() && starts.toMillis() <= local.plus({ hours: 2 }).toMillis()) {
     return old?.employeeId ? { kind: "CANCELLED_SOON" as const, employeeId: old.employeeId, bookingId: current.id } : null;
   }
   if (current.employeeId && current.date === local.toISODate() &&
@@ -41,13 +41,14 @@ export class SnsTrainerPush {
   readonly enabled: boolean;
   private client: Sender;
   constructor(private pool: Pool, private config: PushConfig, client?: Sender) {
-    if (!/^arn:aws:sns:([a-z0-9-]+):\d{12}:[\w-]+$/.test(config.topicArn)) throw new Error("SNS_TRAINER_TOPIC_ARN no es válido.");
+    if (!/^arn:aws:sns:([a-z0-9-]+):\d{12}:[\w-]+$/.test(config.topicArn)) throw new Error("SNS_TOPIC_AVISOS_ARN no es válido.");
     const region = config.topicArn.split(":")[3];
+    if (config.region && config.region !== region) throw new Error("AWS_REGION debe coincidir con la región del tema SNS.");
     for (const arn of [config.iosArn, config.androidArn].filter(Boolean)) {
       if (!arn!.startsWith(`arn:aws:sns:${region}:`) || !arn!.includes(":app/")) throw new Error("El ARN de la aplicación SNS debe pertenecer a la región del tema.");
     }
     this.enabled = Boolean(config.iosArn || config.androidArn);
-    this.client = client || new SNSClient({ region, maxAttempts: 2 });
+    this.client = client || new SNSClient({ region: config.region || region, maxAttempts: 2 });
   }
   supports(platform: Platform) { return Boolean(platform === "ios" ? this.config.iosArn : this.config.androidArn); }
   private application(platform: Platform) { return platform === "ios" ? this.config.iosArn : this.config.androidArn; }

@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { StyleSheet } from "react-native";
+import React, { useState, useCallback, useEffect } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ApiClient } from "../../shared/api";
@@ -12,6 +12,7 @@ import { apiBaseUrl } from "../../shared/config";
 import { mobileCognito } from "../../shared/cognito";
 import { Platform } from "react-native";
 import { unregisterTrainerPush } from "./trainer-push";
+import { sessionStore } from "./session-store";
 
 /* ------------------------------------------------------------------ */
 /*  Main App                                                           */
@@ -20,9 +21,9 @@ import { unregisterTrainerPush } from "./trainer-push";
 export default function AccountApp({ onBack }: { onBack: () => void }) {
   const [currentUser, setCurrentUser] = useState<Identity | null>(null);
   const [loginKey, setLoginKey] = useState(0);
+  const [restoringSession, setRestoringSession] = useState(true);
 
   const [api] = useState(() => {
-    let token: string | null = null;
     return new ApiClient({
       baseUrl: apiBaseUrl(Platform.OS, process.env.EXPO_PUBLIC_API_URL),
       gymId: process.env.EXPO_PUBLIC_GYM_ID?.trim() || undefined,
@@ -31,16 +32,31 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
         process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
         process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID
       ),
-      getToken: async () => token,
-      setToken: async (value) => {
-        token = value;
-      },
+      getToken: sessionStore.get,
+      setToken: sessionStore.set,
       onUnauthorized: () => {
         setCurrentUser(null);
         setLoginKey((v) => v + 1);
       },
     });
   });
+
+  useEffect(() => {
+    let active=true;
+    void (async()=>{
+      try {
+        if (await sessionStore.get()) {
+          const user=await api.getMe();
+          if(active)setCurrentUser(user);
+        }
+      } catch {
+        // ApiClient deletes invalid (401) sessions. Keep a valid token on transient network errors.
+      } finally {
+        if(active)setRestoringSession(false);
+      }
+    })();
+    return()=>{active=false;};
+  },[api]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -86,7 +102,7 @@ export default function AccountApp({ onBack }: { onBack: () => void }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      {currentUser ? renderScreen() : (
+      {restoringSession ? <View style={styles.loading}><ActivityIndicator/><Text>Recuperando sesión segura…</Text></View> : currentUser ? renderScreen() : (
         <LoginScreen key={loginKey} api={api} onLoginSuccess={handleLoginSuccess} onBack={handleBack} />
       )}
     </SafeAreaView>
@@ -101,4 +117,5 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     backgroundColor: "#fffdf9",
   },
+  loading: { flex:1,alignItems:"center",justifyContent:"center",gap:12 },
 });

@@ -10,7 +10,7 @@ La cuenta real del cliente consulta `/api/client-calendar` y `/api/mobile/client
 
 La agenda diaria muestra las citas asignadas. Al abrir una cita se pueden registrar asistencia, medidas, cargas, sensaciones y el objetivo de la siguiente sesión. El objetivo anterior aparece arriba al abrir la próxima cita del mismo cliente. «Pendiente de reubicar» libera el horario y deja la cita visible a recepción. La pestaña «Mis clientes» permite buscar, consultar el bono, las últimas sesiones, la evolución de peso y dejar un aviso interno. El servidor comprueba la asignación antes de devolver la ficha o guardar medidas.
 
-La agenda agrupa las sesiones duales en una tarjeta y permite gestionar la asistencia y el diario de cada cliente por separado. El selector de fecha permite saltar a cualquier día. La pestaña «Turnos» muestra horario semanal, excepciones y ausencias aprobadas, y envía nuevas solicitudes a administración. Mientras la app está abierta consulta los cambios de agenda cada 15 segundos y muestra un aviso con sonido si aparece una cita nueva hoy o se cancela una cita de las próximas tres horas. El sonido puede depender de los ajustes del dispositivo o de la autorización de reproducción del navegador; las notificaciones remotas con la app cerrada requieren infraestructura de push adicional.
+La agenda agrupa las sesiones duales en una tarjeta y permite gestionar la asistencia y el diario de cada cliente por separado. El selector de fecha permite saltar a cualquier día. La pestaña «Turnos» muestra horario semanal, excepciones y ausencias aprobadas, y envía nuevas solicitudes a administración. Mientras la app está abierta consulta los cambios de agenda cada 15 segundos y muestra un aviso con sonido si aparece una cita nueva hoy o se cancela una cita de las próximas dos horas. El sonido puede depender de los ajustes del dispositivo o de la autorización de reproducción del navegador; las notificaciones remotas con la app cerrada requieren las aplicaciones de plataforma SNS descritas más abajo.
 
 Para activar las medidas de grasa corporal hay que aplicar la migración Prisma `20261118000100_body_fat_measurement` junto con el despliegue del backend. Para fichar desde el móvil, cada centro necesita coordenadas y radio configurados. La demostración sigue siendo ficticia y no escribe en estos endpoints.
 
@@ -76,7 +76,7 @@ Para una revisión visual desde el navegador del teléfono, se puede arrancar `n
 
 ## Trabajo pendiente para la primera fase real
 
-- Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. Actualmente la sesión se mantiene en memoria; al cerrar o recargar se debe iniciar sesión de nuevo. No se guardan contraseñas.
+- Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. En Android/iOS la sesión del backend se conserva mediante `expo-secure-store`, se valida de nuevo al abrir la app y se elimina al cerrar sesión o recibir un 401. No se guardan contraseñas ni tokens de Cognito.
 - Validar el recorrido de la cuenta real en teléfonos Android y iOS; la vista web y las pruebas de integración no sustituyen esa comprobación.
 - Configurar proveedor de cobro aprobado por la empresa. Confirmar pagos en el servidor mediante eventos firmados e idempotentes antes de activar bonos o marcar deudas como pagadas. La app no debe poder declarar un pago recibido.
 - Completar las preferencias de avisos, los recordatorios programados y el control de duplicados entre dispositivos.

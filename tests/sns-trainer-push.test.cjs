@@ -16,7 +16,8 @@ test('agenda push selects only new today and imminent cancellation for the assig
   assert.equal(agendaPushEvent(booking,{...booking,version:2},'Europe/Madrid',now),null);
   assert.equal(agendaPushEvent(undefined,{...booking,date:'2026-11-19'},'Europe/Madrid',now),null);
   assert.deepEqual(agendaPushEvent(booking,{...booking,status:'CANCELLED'},'Europe/Madrid',now),{kind:'CANCELLED_SOON',employeeId:'trainer-1',bookingId:'booking-1'});
-  assert.equal(agendaPushEvent(booking,{...booking,status:'CANCELLED',start:'13:01'},'Europe/Madrid',now),null);
+  assert.deepEqual(agendaPushEvent(booking,{...booking,status:'CANCELLED',start:'11:00'},'Europe/Madrid',now),{kind:'CANCELLED_SOON',employeeId:'trainer-1',bookingId:'booking-1'});
+  assert.equal(agendaPushEvent(booking,{...booking,status:'CANCELLED',start:'11:01'},'Europe/Madrid',now),null);
   assert.equal(agendaPushEvent(booking,{...booking,status:'CANCELLED',start:'08:59'},'Europe/Madrid',now),null);
   assert.deepEqual(agendaPushEvent(booking,{...booking,employeeId:'trainer-2'},'Europe/Madrid',now),{kind:'NEW_TODAY',employeeId:'trainer-2',bookingId:'booking-1'});
 });

@@ -155,12 +155,13 @@ async function start(): Promise<void> {
     console.warn("Advertencia al aplicar optimizaciones de DB:", error);
   }
   
-  const trainerTopicArn = process.env.SNS_TRAINER_TOPIC_ARN ||
+  const trainerTopicArn = process.env.SNS_TOPIC_AVISOS_ARN || process.env.SNS_TRAINER_TOPIC_ARN ||
     (process.env.SNS_IOS_PLATFORM_APPLICATION_ARN || process.env.SNS_ANDROID_PLATFORM_APPLICATION_ARN
       ? "arn:aws:sns:eu-south-2:704043378842:trainerspoint-avisos" : undefined);
   const trainerPush = trainerTopicArn
     ? new SnsTrainerPush(pool, {
       topicArn: trainerTopicArn,
+      region: process.env.AWS_REGION || "eu-south-2",
       iosArn: process.env.SNS_IOS_PLATFORM_APPLICATION_ARN,
       androidArn: process.env.SNS_ANDROID_PLATFORM_APPLICATION_ARN,
     }) : undefined;

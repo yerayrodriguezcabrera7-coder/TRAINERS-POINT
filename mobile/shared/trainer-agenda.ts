@@ -27,7 +27,7 @@ export function detectTrainerAgendaAlerts(previous: Booking[], next: Booking[], 
     const startsAt = new Date(`${booking.date}T${booking.start}:00`).getTime();
     const newToday = !old && booking.date === today && ["PENDING", "CONFIRMED"].includes(booking.status);
     const cancelledSoon = old && old.status !== "CANCELLED" && booking.status === "CANCELLED"
-      && startsAt >= now.getTime() && startsAt <= now.getTime() + 3 * 60 * 60 * 1000;
+      && startsAt >= now.getTime() && startsAt <= now.getTime() + 2 * 60 * 60 * 1000;
     if (!newToday && !cancelledSoon) continue;
     const kind = newToday ? "NEW_TODAY" : "CANCELLED_SOON";
     const key = `${kind}:${groupKey(booking)}`;
