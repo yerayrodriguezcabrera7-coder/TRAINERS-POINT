@@ -30,6 +30,7 @@ const returnInput = z.object({ reason: z.string().trim().min(3).max(500).default
 const restockStatusEnum = z.enum(['PENDIENTE', 'PEDIDO', 'RECIBIDO', 'CANCELADO']);
 const restockInput = z.object({ productId: z.string().uuid().nullable().optional(), productName: z.string().trim().min(1).max(200).optional(), quantity: z.number().int().min(1).max(10000).default(1), notes: z.string().trim().max(1000).default('') });
 const restockUpdateInput = z.object({ status: restockStatusEnum.optional(), quantity: z.number().int().min(1).max(10000).optional(), notes: z.string().trim().max(1000).optional(), addToStock: z.boolean().default(false) });
+const stockAdjustmentInput = z.object({ productId: z.string().uuid(), type: z.enum(['DANO', 'SALIDA', 'AJUSTE']).default('DANO'), quantity: z.number().int().min(1).max(10000), notes: z.string().trim().max(1000).default('') });
 export function getGymSeriesFromKey(gymKey: string): string {
   if (!gymKey) return '001';
   if (/^\d{3}$/.test(gymKey)) return gymKey;

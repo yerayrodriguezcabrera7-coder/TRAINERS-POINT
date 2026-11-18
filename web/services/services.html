@@ -26,13 +26,13 @@
           <header class="page-heading">
             <img class="page-heading-logo" src="/assets/trainers-point-logo.png" alt="">
             <div class="page-heading-copy">
-              <p class="eyebrow">CENTRO · SERVICIOS</p>
-              <h1>Servicios <span id="heading-count" class="heading-count"></span></h1>
-              <p class="page-description">Define los tipos de sesión que se muestran en el calendario (Individual, Dual, Cabina…) con su color, duración y modalidad. Cada bono/pack se gestiona en la pantalla <strong>Packs</strong>.</p>
+              <p class="eyebrow">AGENDA · TIPOS DE SESIÓN</p>
+              <h1>Tipos de sesión <span id="heading-count" class="heading-count"></span></h1>
+              <p class="page-description">Aquí únicamente se crean los tipos de entrenamiento para el calendario. Ya no hay precios de bonos ni número de sesiones: se definen únicamente con su nombre (Individual, Dual, Cabina…), modalidad, color en el cuadrante y duración por defecto. Los bonos comerciales se gestionan en <strong>Packs</strong>.</p>
             </div>
             <button class="button button-primary" id="open-service-create" type="button">
               <svg class="button-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-              Nuevo servicio
+              Nuevo tipo de sesión
             </button>
           </header>
 
@@ -40,8 +40,8 @@
           <section class="client-panel" aria-labelledby="services-panel-title">
             <div class="panel-heading">
               <div>
-                <h2 id="services-panel-title">Tipos de sesión</h2>
-                <p>Colores, duración y modalidad para el calendario.</p>
+                <h2 id="services-panel-title">Tipos de sesión de agenda</h2>
+                <p>Configuración de color, duración por defecto y modalidad para el cuadrante del calendario.</p>
               </div>
               <span class="results-count" id="results-count"></span>
             </div>
@@ -84,58 +84,78 @@
       </main>
     </div>
 
-    <!-- Modal Dialog para crear y editar servicio -->
+    <!-- Modal Dialog para crear y editar servicio (tipo de sesión de agenda) -->
     <dialog id="service-dialog" class="client-dialog service-dialog" aria-labelledby="dialog-title">
       <form id="service-form" novalidate="">
         <input type="hidden" name="id" id="service-id">
 
         <div class="dialog-heading">
           <div>
-            <p class="eyebrow" id="dialog-eyebrow">CATÁLOGO DE SERVICIOS</p>
-            <h2 id="dialog-title">Nuevo servicio</h2>
-            <p id="dialog-subtitle">Define el tipo de sesión y su color en el calendario.</p>
+            <p class="eyebrow" id="dialog-eyebrow">AGENDA · TIPOS DE SESIÓN</p>
+            <h2 id="dialog-title">Nuevo tipo de sesión</h2>
+            <p id="dialog-subtitle">Aquí únicamente se crean los tipos de entrenamiento para el calendario (sin precios ni bonos).</p>
           </div>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
 
         <div class="form-grid">
           <label class="form-field form-field-wide">
-            <span>Nombre del servicio <b>*</b></span>
-            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Individual, Dual, Cabina, Studio Body">
+            <span>Nombre <b>*</b></span>
+            <input name="name" id="field-name" required="" maxlength="120" placeholder="Ej. Individual, Dual, Cabina">
+            <span class="field-hint">Nombre del tipo de sesión (ej. Individual, Dual, Cabina).</span>
           </label>
 
           <label class="form-field">
             <span>Modalidad <b>*</b></span>
             <select name="modality" id="field-modality" required="">
               <option value="INDIVIDUAL">Individual (1 persona)</option>
-              <option value="DUAL">Dual (2 personas / pareja)</option>
+              <option value="DUAL">Dual (pareja / 2 personas)</option>
             </select>
+            <span class="field-hint">Selector para elegir si es Individual (1 persona) o Dual (pareja / 2 personas).</span>
           </label>
 
-          <label class="form-field"><span>Categoría</span><select id="field-category" name="category"><option value="TRAINING">Entrenamiento</option><option value="CABIN">Cabina</option></select></label>
           <label class="form-field">
             <span>Color en el calendario <b>*</b></span>
-            <input id="field-color" name="color" type="color" value="#317b9b">
-            <span class="field-hint">Identifica las reservas de este servicio en el calendario.</span>
+            <div class="color-picker-wrap">
+              <input id="field-color" name="color" type="color" value="#317b9b">
+            </div>
+            <span class="field-hint">El selector de color con el que se pintará esa sesión en el cuadrante.</span>
+            <div class="color-palette-presets" aria-label="Colores rápidos para el cuadrante">
+              <button type="button" class="color-preset-btn" data-color="#317b9b" style="background:#317b9b" title="Azul petróleo"></button>
+              <button type="button" class="color-preset-btn" data-color="#b85c38" style="background:#b85c38" title="Caldero"></button>
+              <button type="button" class="color-preset-btn" data-color="#477458" style="background:#477458" title="Verde bosque"></button>
+              <button type="button" class="color-preset-btn" data-color="#885b9c" style="background:#885b9c" title="Morado"></button>
+              <button type="button" class="color-preset-btn" data-color="#a67a18" style="background:#a67a18" title="Ocre"></button>
+              <button type="button" class="color-preset-btn" data-color="#c2413a" style="background:#c2413a" title="Coral"></button>
+              <button type="button" class="color-preset-btn" data-color="#1e6b7b" style="background:#1e6b7b" title="Turquesa"></button>
+            </div>
           </label>
 
           <label class="form-field">
             <span>Duración (minutos) <b>*</b></span>
             <input name="durationMin" id="field-durationMin" type="number" min="5" max="720" step="5" required="" value="60">
-            <span class="field-hint">Minutos de la sesión en el calendario.</span>
+            <span class="field-hint">Minutos por defecto (ej. 60 min).</span>
           </label>
 
           <label class="form-field">
-            <span>Estado del servicio <b>*</b></span>
+            <span>Categoría</span>
+            <select id="field-category" name="category">
+              <option value="TRAINING">Entrenamiento</option>
+              <option value="CABIN">Cabina</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Estado de la sesión <b>*</b></span>
             <select name="isActive" id="field-isActive" required="">
-              <option value="true">Activo (visible para contratación y reservas)</option>
-              <option value="false">Inactivo (desactivado temporalmente)</option>
+              <option value="true">Activa (disponible en la agenda)</option>
+              <option value="false">Inactiva (desactivada temporalmente)</option>
             </select>
           </label>
 
           <label class="form-field form-field-wide">
-            <span>Descripción del servicio</span>
-            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Describe los objetivos, enfoque o detalles de esta sesión…"></textarea>
+            <span>Descripción (opcional)</span>
+            <textarea name="description" id="field-description" rows="2" maxlength="2000" placeholder="Detalles u observaciones de esta sesión…"></textarea>
           </label>
 
         </div>
@@ -144,7 +164,7 @@
 
         <div class="dialog-actions">
           <button class="button button-outline" id="cancel-dialog" type="button">Cancelar</button>
-          <button class="button button-primary" id="submit-dialog" type="submit">Guardar servicio</button>
+          <button class="button button-primary" id="submit-dialog" type="submit">Guardar tipo de sesión</button>
         </div>
       </form>
     </dialog>

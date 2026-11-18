@@ -58,6 +58,52 @@ test('Servicios: categoría, duración, modalidad y color se editan sin campos c
   }finally{p.dom.window.close();}
 });
 
+test('Packs: se configuran bonos con servicio vinculado, herencia de color/modalidad, cálculo por sesión y validez',async()=>{
+  const baseService={id:randomUUID(),name:'Individual',category:'TRAINING',color:'#317b9b',type:'SESION_INDIVIDUAL',modality:'INDIVIDUAL',durationMin:60,isActive:true};
+  const dualService={id:randomUUID(),name:'Dual',category:'TRAINING',color:'#b85c38',type:'SESION_INDIVIDUAL',modality:'DUAL',durationMin:60,isActive:true};
+  const pack={id:randomUUID(),name:'Bono 10 sesiones',category:'TRAINING',color:'#317b9b',type:'PACK',modality:'INDIVIDUAL',trainingCount:10,price:250,durationMin:60,validityWeeks:4,serviceId:baseService.id,service:baseService,isActive:true};
+  let savedPack;
+  const p=page('web/services/packs.html','web/services/packs.js',(url,options)=>{
+    if(url.pathname==='/api/me')return {role:'ADMIN'};
+    if(options.method==='POST'&&url.pathname==='/api/services'){savedPack=JSON.parse(options.body);return {service:{...pack,...savedPack,id:randomUUID()}};}
+    if(url.pathname==='/api/services')return {services:[baseService,dualService]};
+    if(url.pathname==='/api/services/packs')return {packages:[pack]};
+    return {};
+  },'http://localhost/packs');
+  try{
+    await until(()=>p.d.querySelector('[data-edit-id]'));
+    assert.match(p.d.querySelector('.service-card').textContent,/Bono 10 sesiones/);
+    assert.match(p.d.querySelector('.service-card').textContent,/25,00\s*€\s*\/\s*sesión/);
+    assert.match(p.d.querySelector('.service-card').textContent,/4 semanas/);
+
+    p.d.getElementById('open-pack-create').click();
+    p.d.getElementById('field-name').value='Pack mensual 8 sesiones';
+    p.d.getElementById('field-service').value=dualService.id;
+    p.d.getElementById('field-service').dispatchEvent(new p.w.Event('change'));
+    assert.match(p.d.getElementById('inherited-modality-text').textContent,/Dual/);
+    assert.equal(p.d.getElementById('inherited-color-text').textContent,'#b85c38');
+
+    p.d.getElementById('field-trainingCount').value='8';
+    p.d.getElementById('field-price').value='200';
+    p.d.getElementById('field-price').dispatchEvent(new p.w.Event('input'));
+    assert.match(p.d.getElementById('calc-session-price').textContent,/25,00/);
+    assert.match(p.d.getElementById('calc-formula').textContent,/12,50/);
+
+    p.d.getElementById('field-validityWeeks').value='4';
+    p.d.getElementById('pack-form').requestSubmit(p.d.getElementById('submit-dialog'));
+    await until(()=>savedPack);
+    assert.equal(savedPack.name,'Pack mensual 8 sesiones');
+    assert.equal(savedPack.type,'PACK');
+    assert.equal(savedPack.serviceId,dualService.id);
+    assert.equal(savedPack.trainingCount,8);
+    assert.equal(savedPack.price,200);
+    assert.equal(savedPack.validityWeeks,4);
+    assert.equal(savedPack.modality,'DUAL');
+    assert.equal(savedPack.color,'#b85c38');
+    assert.deepEqual(p.errors,[]);
+  }finally{p.dom.window.close();}
+});
+
 test('Clientes: marcas separadas, búsqueda compartida y ningún acceso rápido de bonos para Cobosu',async()=>{
   const gym={id:randomUUID(),name:'Centro de prueba',_count:{clients:2}};
   const clients=[{id:randomUUID(),firstName:'Ana',lastName:'Trainers',brand:'TRAINERS_POINT'}, {id:randomUUID(),firstName:'Bea',lastName:'Cobosu',brand:'COBOSU'}].map(c=>({...c,email:c.firstName+'@example.invalid',phone:'600000001',status:'ACTIVO',gymId:gym.id,gym,remainingSessions:0,pendingPayments:0,servicePackageCount:0,trainingPlans:[],clientNotes:[],createdAt:new Date().toISOString()}));

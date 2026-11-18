@@ -151,7 +151,7 @@
                 ${service.isActive ? 'Activo' : 'Inactivo'}
               </span>
               <span class="badge-pill badge-modality">
-                ${isDual ? 'Dual (2 personas)' : 'Individual'}
+                ${isDual ? 'Dual (pareja / 2 personas)' : 'Individual (1 persona)'}
               </span>
             </div>
           </div>
@@ -162,10 +162,10 @@
           <div class="service-specs">
             <div class="spec-item">
               <span class="spec-label">Duración</span>
-              <span class="spec-value">⏱ ${service.durationMin} min</span>
+              <span class="spec-value">⏱ ${service.durationMin} min (por defecto)</span>
             </div>
             <div class="spec-item">
-              <span class="spec-label">Color en calendario</span>
+              <span class="spec-label">Color en cuadrante</span>
               <span class="spec-value"><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${color};vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1);"></span>${service.color}</span>
             </div>
           </div>
@@ -175,7 +175,7 @@
               ${service.isActive ? 'Desactivar' : 'Activar'}
             </button>
             <button class="button-edit-service" type="button" data-edit-id="${esc(service.id)}">
-              Editar servicio ✎
+              Editar sesión ✎
             </button>
           </div>
         </article>
@@ -200,8 +200,8 @@
     const field = $(fieldId);
     if (field) {
       field.classList.add('is-invalid');
-      field.focus();
-      field.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (typeof field.focus === 'function') field.focus();
+      if (typeof field.scrollIntoView === 'function') field.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     formError.textContent = message;
     formError.hidden = false;
@@ -211,11 +211,11 @@
     form.reset();
     clearValidationErrors();
     $('service-id').value = '';
-    $('dialog-title').textContent = 'Nuevo servicio';
-    $('dialog-subtitle').textContent = 'Define un tipo de sesión (Individual, Dual, Cabina…) con su color en el calendario.';
+    $('dialog-title').textContent = 'Nuevo tipo de sesión';
+    $('dialog-subtitle').textContent = 'Aquí únicamente se configuran los tipos de entrenamiento para la agenda (Individual, Dual, Cabina…).';
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
-    $('field-color').value = ['#317b9b','#b85c38','#63805b','#885b9c','#a67a18'][services.length % 5];
+    $('field-color').value = ['#317b9b','#b85c38','#477458','#885b9c','#a67a18','#c2413a'][services.length % 6];
     $('field-modality').value = 'INDIVIDUAL';
     $('field-durationMin').value = '60';
     $('field-isActive').value = 'true';
@@ -230,7 +230,7 @@
     form.reset();
     clearValidationErrors();
     $('service-id').value = service.id;
-    $('dialog-title').textContent = 'Editar servicio';
+    $('dialog-title').textContent = 'Editar tipo de sesión';
     $('dialog-subtitle').textContent = `Modifica las características de «${service.name}».`;
     $('field-name').value = service.name || '';
     $('field-category').value = service.category || 'TRAINING';
@@ -260,6 +260,17 @@
     $('open-service-create')?.addEventListener('click', openCreateDialog);
     $('close-dialog')?.addEventListener('click', () => dialog.close());
     $('cancel-dialog')?.addEventListener('click', () => dialog.close());
+
+    // Selección rápida de color desde la paleta
+    document.querySelectorAll('.color-preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = btn.dataset.color;
+        if (c && $('field-color')) {
+          $('field-color').value = c;
+          $('field-color').dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    });
 
     // Limpiar estado de error al escribir en cualquier campo
     form?.querySelectorAll('input, select, textarea').forEach(field => {

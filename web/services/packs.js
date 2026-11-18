@@ -129,21 +129,34 @@
   function renderServiceOptions() {
     const select = $('field-service');
     if (!select) return;
-    const activeServices = services.filter(s => s.isActive && s.type === 'SESION_INDIVIDUAL');
-    select.innerHTML = activeServices.map(s =>
-      `<option value="${esc(s.id)}" data-modality="${esc(s.modality)}" data-duration="${Number(s.durationMin)}" data-category="${esc(s.category)}" data-color="${esc(s.color)}">${esc(s.name)}${s.modality === 'DUAL' ? ' · Dual' : ' · Individual'}</option>`
-    ).join('');
+    const activeServices = services.filter(s => s.isActive && s.type !== 'PACK');
+    select.innerHTML = activeServices.map(s => {
+      const isDual = s.modality === 'DUAL';
+      return `<option value="${esc(s.id)}" data-modality="${esc(s.modality)}" data-duration="${Number(s.durationMin)}" data-category="${esc(s.category)}" data-color="${esc(s.color)}">${esc(s.name)} (${isDual ? 'Dual · pareja / 2 personas' : 'Individual · 1 persona'}) · ${s.durationMin} min</option>`;
+    }).join('');
     updateInheritedService();
   }
 
   function updateInheritedService() {
     const service = services.find(item => item.id === $('field-service')?.value);
     if (!service) return;
-    $('field-modality').value = service.modality;
-    $('field-durationMin').value = service.durationMin;
-    $('field-category').value = service.category;
+    if ($('field-modality')) $('field-modality').value = service.modality;
+    if ($('field-durationMin')) $('field-durationMin').value = service.durationMin;
+    if ($('field-category')) $('field-category').value = service.category || 'TRAINING';
+
+    const isDual = service.modality === 'DUAL';
+    const modalityText = isDual ? 'Dual (pareja / 2 personas)' : 'Individual (1 persona)';
+    const color = /^#[0-9a-f]{6}$/i.test(service.color) ? service.color : '#317b9b';
+
+    if ($('inherited-modality-text')) $('inherited-modality-text').textContent = modalityText;
+    if ($('inherited-color-dot')) $('inherited-color-dot').style.background = color;
+    if ($('inherited-color-text')) $('inherited-color-text').textContent = color;
+    if ($('inherited-duration-text')) $('inherited-duration-text').textContent = `${service.durationMin} min`;
+
     const info = $('inherited-service-info');
-    if (info) info.innerHTML = `<span class="service-color-dot" style="background:${esc(service.color)}"></span> Color de calendario: <strong>${esc(service.color)}</strong> · ${service.modality === 'DUAL' ? '2 personas' : '1 persona'} · ${service.durationMin} min`;
+    if (info) info.innerHTML = `<span class="service-color-dot" style="background:${esc(color)}"></span> Color de calendario: <strong>${esc(color)}</strong> · ${modalityText} · ${service.durationMin} min`;
+
+    updateCalculatedPrice();
   }
 
   function renderPacks() {
@@ -167,7 +180,7 @@
     grid.innerHTML = filtered.map(pack => {
       const priceNum = Number(pack.price) || 0;
       const count = Number(pack.trainingCount) || 1;
-      const pricePerSession = count > 1 ? (priceNum / count) : null;
+      const pricePerSession = count > 0 ? (priceNum / count) : 0;
       const isDual = pack.modality === 'DUAL';
       const serviceColor = /^#[0-9a-f]{6}$/i.test(pack.color) ? pack.color : '#317b9b';
 
@@ -179,7 +192,7 @@
                 ${pack.isActive ? 'Activo' : 'Inactivo'}
               </span>
               <span class="badge-pill badge-modality">
-                ${isDual ? 'Dual (2 personas)' : 'Individual'}
+                ${isDual ? 'Dual (pareja / 2 personas)' : 'Individual (1 persona)'}
               </span>
               <span class="badge-pill badge-type">
                 Pack de sesiones
@@ -192,7 +205,7 @@
             ${esc(pack.name)}
           </h3>
           <p class="service-category">${pack.category === "CABIN" ? "Cabina" : "Entrenamiento"}</p>
-          ${pack.service ? `<p class="service-description" style="font-size:13px;color:var(--muted);">Servicio vinculado: <strong>${esc(pack.service.name)}</strong> ${pack.modality === 'DUAL' ? ' · Dual' : ' · Individual'}</p>` : ''}
+          ${pack.service ? `<p class="service-description" style="font-size:12.5px;color:var(--tp-muted);margin-bottom:8px;">Servicio vinculado: <strong>${esc(pack.service.name)}</strong> (${isDual ? 'Dual · 2 personas' : 'Individual · 1 persona'}) · ⏱ ${pack.durationMin} min</p>` : ''}
           <p class="service-description">${esc(pack.description || 'Sin descripción detallada.')}</p>
 
           <div class="service-price-box">
@@ -201,7 +214,7 @@
               <div class="price-main">${eur.format(priceNum)}</div>
             </div>
             <div class="price-subtitle">
-              ${pricePerSession ? `${eur.format(pricePerSession)} / sesión` : `${pack.durationMin} min / sesión`}
+              ⚡ ${eur.format(pricePerSession)} / sesión${isDual ? ` <span style="font-weight:normal;font-size:11px;">(${eur.format(pricePerSession / 2)} / pers.)</span>` : ''}
             </div>
           </div>
 
@@ -211,12 +224,12 @@
               <span class="spec-value">${pack.service ? esc(pack.service.name) : 'Sin servicio vinculado'}</span>
             </div>
             <div class="spec-item">
-              <span class="spec-label">Duración</span>
-              <span class="spec-value">⏱ ${pack.durationMin} min / sesión</span>
-            </div>
-            <div class="spec-item">
               <span class="spec-label">Sesiones</span>
               <span class="spec-value">🏋️ ${count} ${count === 1 ? 'sesión' : 'sesiones'}</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">A cuánto sale</span>
+              <span class="spec-value" style="color:var(--tp-accent);font-weight:700;">${eur.format(pricePerSession)} / ses.</span>
             </div>
             <div class="spec-item">
               <span class="spec-label">Validez</span>
@@ -225,6 +238,10 @@
             <div class="spec-item">
               <span class="spec-label">Frecuencia rec.</span>
               <span class="spec-value">🔄 ${pack.recommendedWeeklyFrequency ? `${pack.recommendedWeeklyFrequency} días / sem` : 'Flexible'}</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Duración</span>
+              <span class="spec-value">⏱ ${pack.durationMin} min</span>
             </div>
           </div>
 
@@ -265,8 +282,8 @@
     const field = $(fieldId);
     if (field) {
       field.classList.add('is-invalid');
-      field.focus();
-      field.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (typeof field.focus === 'function') field.focus();
+      if (typeof field.scrollIntoView === 'function') field.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     formError.textContent = message;
     formError.hidden = false;
@@ -277,12 +294,12 @@
     clearValidationErrors();
     $('pack-id').value = '';
     $('dialog-title').textContent = 'Nuevo pack';
-    $('dialog-subtitle').textContent = 'Define un bono de sesiones vinculado a un servicio existente.';
+    $('dialog-subtitle').textContent = 'Aquí se configuran los bonos comerciales que compran los clientes.';
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
-    $('field-service').value = services.find(s => s.type === 'SESION_INDIVIDUAL')?.id || '';
+    $('field-service').value = services.find(s => s.type !== 'PACK' && s.isActive)?.id || '';
     $('field-modality').value = 'INDIVIDUAL';
-    $('field-type').value = 'PACK';
+    if ($('field-type')) $('field-type').value = 'PACK';
     $('field-trainingCount').value = '10';
     $('field-durationMin').value = '60';
     $('field-price').value = '';
@@ -309,7 +326,7 @@
     $('field-category').value = pack.category || 'TRAINING';
     $('field-service').value = pack.serviceId || '';
     $('field-modality').value = pack.modality || 'INDIVIDUAL';
-    $('field-type').value = 'PACK';
+    if ($('field-type')) $('field-type').value = 'PACK';
     $('field-trainingCount').value = pack.trainingCount ?? 10;
     $('field-price').value = pack.price != null ? Number(pack.price).toFixed(2) : '';
     $('field-durationMin').value = pack.durationMin || 60;
@@ -428,11 +445,12 @@
       if (!serviceId) {
         return setFieldError('field-service', 'Selecciona un servicio al que se vincule este pack.');
       }
+      const linkedService = services.find(s => s.id === serviceId);
 
-      // 3. Modalidad
-      const modality = $('field-modality').value;
+      // 3. Modalidad (heredada automáticamente del servicio)
+      const modality = linkedService?.modality || $('field-modality')?.value || 'INDIVIDUAL';
       if (modality !== 'INDIVIDUAL' && modality !== 'DUAL') {
-        return setFieldError('field-modality', 'Selecciona una modalidad válida (Individual o Dual).');
+        return setFieldError('field-service', 'El servicio vinculado debe tener una modalidad válida.');
       }
 
       // 4. Número de sesiones
@@ -441,8 +459,8 @@
         return setFieldError('field-trainingCount', 'Indica el número de sesiones del pack.');
       }
       const trainingCount = Number(countRaw);
-      if (!Number.isInteger(trainingCount) || trainingCount < 2 || trainingCount > 500) {
-        return setFieldError('field-trainingCount', 'El número de sesiones debe ser un entero entre 2 y 500.');
+      if (!Number.isInteger(trainingCount) || trainingCount < 1 || trainingCount > 500) {
+        return setFieldError('field-trainingCount', 'El número de sesiones debe ser un entero entre 1 y 500.');
       }
 
       // 5. Precio total
@@ -458,15 +476,8 @@
         return setFieldError('field-price', 'El precio total no puede superar los 99.999.999,99 €.');
       }
 
-      // 6. Duración por sesión
-      const durRaw = $('field-durationMin').value.trim();
-      if (!durRaw) {
-        return setFieldError('field-durationMin', 'La duración de cada sesión es obligatoria.');
-      }
-      const durationMin = Number(durRaw);
-      if (!Number.isInteger(durationMin) || durationMin < 5 || durationMin > 720) {
-        return setFieldError('field-durationMin', 'La duración debe ser un entero entre 5 y 720 minutos.');
-      }
+      // 6. Duración por sesión (heredada del servicio)
+      const durationMin = linkedService?.durationMin || Number($('field-durationMin')?.value) || 60;
 
       // 7. Validez editable en semanas completas.
       const weeksRaw = $('field-validityWeeks').value.trim();
@@ -514,7 +525,8 @@
         price,
         durationMin,
         validityWeeks,
-        category: $('field-category').value,
+        color: linkedService?.color || '#317b9b',
+        category: $('field-category')?.value || linkedService?.category || 'TRAINING',
         recommendedWeeklyFrequency,
         conditions: conditions || null,
         isActive,
