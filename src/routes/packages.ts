@@ -311,6 +311,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
     return true;
   }
   const attendanceMatch = url.pathname.match(/^\/api\/bookings\/([0-9a-f-]+)\/attendance$/i);
+  if (request.method === "PATCH" && attendanceMatch && (request as any).identity?.role === 'TRAINER') return false;
   if (request.method === "PATCH" && attendanceMatch) {
     if (!hasTrustedOrigin(request, port)) {
       sendError(response, 403, "Origen de la solicitud no permitido.");

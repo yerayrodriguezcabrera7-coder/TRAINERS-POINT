@@ -1,4 +1,5 @@
 import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery } from "./types";
+import type { AttendanceData, TrainerClientDetail } from "./trainer-types";
 import type { CognitoAuth } from "./cognito";
 export { CognitoPasswordRequired } from "./cognito";
 
@@ -102,6 +103,22 @@ export class ApiClient {
   }
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }
   getStaffCalendar() { return this.request<CalendarData>("/api/mobile/calendar"); }
+  getAttendance(day: string) { return this.request<AttendanceData>(`/api/attendance?from=${encodeURIComponent(day)}&to=${encodeURIComponent(day)}`); }
+  clock(employeeId: string, action: "IN" | "OUT", geo: {latitude:number;longitude:number;accuracy:number|null}) {
+    return this.request<{clockIn:string;clockOut:string|null;geoIn?:{inGeofence:boolean};geoOut?:{inGeofence:boolean}}>("/api/attendance/clock",{method:"POST",body:JSON.stringify({employeeId,action,geo})});
+  }
+  pause(employeeId: string, action: "START" | "END") {
+    return this.request("/api/attendance/pause",{method:"POST",body:JSON.stringify({employeeId,action})});
+  }
+  getTrainerClient(clientId: string) { return this.request<TrainerClientDetail>(`/api/mobile/clients/${encodeURIComponent(clientId)}`); }
+  saveReceptionNote(clientId: string, content: string) { return this.request(`/api/mobile/clients/${encodeURIComponent(clientId)}/reception-note`,{method:"POST",body:JSON.stringify({content})}); }
+  saveMeasurement(clientId: string, data: Record<string,number|string>) { return this.request(`/api/clients/${encodeURIComponent(clientId)}/measurements`,{method:"POST",body:JSON.stringify(data)}); }
+  markAttendance(bookingId:string,attendance:"ASISTIO"|"NO_ASISTIO"|"REPROGRAMAR",version:number) {
+    return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/attendance`,{method:"PATCH",body:JSON.stringify({attendance,version})});
+  }
+  saveSession(bookingId:string, data:{version:number;exercises:string;feeling:"GOOD"|"TIRED"|"PAIN"|null;nextSessionPlan:string}) {
+    return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/session`,{method:"PATCH",body:JSON.stringify(data)});
+  }
   getClientSlots(query: SlotQuery) {
     const params = new URLSearchParams({ ...query });
     return this.request<Array<{ start: string; end: string }>>(`/api/client-slots?${params}`);
@@ -118,6 +135,8 @@ export class ApiClient {
   }
   // Assign/update a booking (for office/reception)
   assignBooking(bookingId: string, data: {
+    clientId?: string;
+    serviceId?: string;
     employeeId?: string;
     date?: string;
     start?: string;

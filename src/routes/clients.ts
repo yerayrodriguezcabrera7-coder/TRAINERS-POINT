@@ -104,6 +104,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
       measurements: measurements.map((measurement) => ({
         ...measurement,
         weight: measurement.weight === null ? null : Number(measurement.weight),
+        bodyFat: measurement.bodyFat === null ? null : Number(measurement.bodyFat),
         hip: measurement.hip === null ? null : Number(measurement.hip),
         waist: measurement.waist === null ? null : Number(measurement.waist),
         leg: measurement.leg === null ? null : Number(measurement.leg),
@@ -267,6 +268,12 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
   }
   const clientMeasurementMatch = url.pathname.match(/^\/api\/clients\/([0-9a-f-]+)\/measurements$/i);
   if (request.method === "POST" && clientMeasurementMatch) {
+    const actor = (request as any).identity;
+    if (actor?.role === 'TRAINER') {
+      const stateClientIds = calendarPool && actor.employeeId ? (await calendarPool.query("SELECT 1 FROM calendar.bookings WHERE gym_id=$1 AND data->>'employeeId'=$2 AND data->>'clientId'=$3 LIMIT 1", [selectedGym,actor.employeeId,clientMeasurementMatch[1]])).rowCount : 0;
+      const assigned = await prisma.client.findUnique({where:{id:clientMeasurementMatch[1]},select:{assignedWorkerId:true}});
+      if (!stateClientIds && assigned?.assignedWorkerId !== actor.employeeId) { sendError(response,403,'No tienes acceso a esta ficha de cliente.'); return true; }
+    }
     if (!hasTrustedOrigin(request, port)) {
       sendError(response, 403, "Origen de la solicitud no permitido.");
       return true;
@@ -283,6 +290,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
           client: { connect: { id: clientMeasurementMatch[1] } },
           measuredAt: new Date(`${input.measuredAt}T00:00:00.000Z`),
           ...(input.weight !== undefined ? { weight: input.weight } : {}),
+          ...(input.bodyFat !== undefined ? { bodyFat: input.bodyFat } : {}),
           ...(input.hip !== undefined ? { hip: input.hip } : {}),
           ...(input.waist !== undefined ? { waist: input.waist } : {}),
           ...(input.leg !== undefined ? { leg: input.leg } : {}),
@@ -292,6 +300,7 @@ export async function clientsRoutes(request: IncomingMessage, response: ServerRe
         },
         update: {
           ...(input.weight !== undefined ? { weight: input.weight } : { weight: null }),
+          ...(input.bodyFat !== undefined ? { bodyFat: input.bodyFat } : { bodyFat: null }),
           ...(input.hip !== undefined ? { hip: input.hip } : { hip: null }),
           ...(input.waist !== undefined ? { waist: input.waist } : { waist: null }),
           ...(input.leg !== undefined ? { leg: input.leg } : { leg: null }),

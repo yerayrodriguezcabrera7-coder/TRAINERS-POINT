@@ -671,6 +671,24 @@ test('Planificación: trabajador solo completa o comunica incidencias en reserva
  const completed=await store.workerAction(g,original.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:incident.version});assert.equal(completed.status,'COMPLETED');
  const future=await store.save(g,booking());await assert.rejects(store.workerAction(g,future.id,{id:'user1',employeeId:'e1'},{action:'COMPLETE',version:future.version}),/no ha terminado/);
 });
+test('Diario móvil y pausas: persisten y se limitan al entrenador asignado',async()=>{
+ const g=await gym();
+ const b=await store.save(g,booking());
+ const own={id:'user1',role:'TRAINER',name:'Entrenador',employeeId:'e1',clientId:null};
+ const otherWorker={...own,id:'user2',employeeId:'e2'};
+ await assert.rejects(store.saveSessionLog(g,b.id,otherWorker,{version:b.version,exercises:'Sentadilla 80 kg',feeling:'GOOD',nextSessionPlan:'85 kg'}),/desconocida/);
+ const logged=await store.saveSessionLog(g,b.id,own,{version:b.version,exercises:'Sentadilla 80 kg',feeling:'GOOD',nextSessionPlan:'85 kg'});
+ assert.equal(logged.sessionLog.exercises,'Sentadilla 80 kg');
+ assert.equal((await store.state(g)).bookings.find(item=>item.id===b.id).nextSessionPlan,'85 kg');
+ await assert.rejects(store.saveSessionLog(g,b.id,own,{version:b.version,exercises:'',feeling:null,nextSessionPlan:''}),/ha cambiado/);
+ await store.clock(g,{employeeId:'e1',action:'IN'},own);
+ await store.pause(g,'e1','START',own);
+ await assert.rejects(store.pause(g,'e1','START',own),/Ya estás en pausa/);
+ await store.pause(g,'e1','END',own);
+ const attendance=await store.attendance(g,undefined,undefined,'e1','TRAINER');
+ assert.equal(attendance.openRecords[0].pauses.length,1);
+ assert.ok(attendance.openRecords[0].pauses[0].endedAt);
+});
 test('Pendientes: interfaz asigna una reserva y la elimina de la cola compartida',async()=>{
  const {JSDOM}=require('jsdom'),g=await gym(),center=await gym();const b=await store.save(g,booking({employeeId:null,status:'PENDING',centerId:center}));
  const app=server(store,g,'planning-ui-token-long-enough',{exposeAdminToken:true});await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;let dom;

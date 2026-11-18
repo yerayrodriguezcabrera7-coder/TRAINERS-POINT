@@ -47,6 +47,7 @@ type ContactSlotInput = (typeof contactSlotValues)[number];
 type MeasurementInput = {
   measuredAt: string;
   weight?: number;
+  bodyFat?: number;
   hip?: number;
   waist?: number;
   leg?: number;
@@ -295,12 +296,13 @@ export function parseMeasurementInput(value: unknown): MeasurementInput | string
   if (!/^\d{4}-\d{2}-\d{2}$/.test(measuredAt)) return "Introduce una fecha válida.";
   const parsedDate = new Date(`${measuredAt}T00:00:00.000Z`);
   if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== measuredAt) return "Introduce una fecha válida.";
-  const fields = ["weight", "hip", "waist", "leg", "chest", "arm"] as const;
+  const fields = ["weight", "bodyFat", "hip", "waist", "leg", "chest", "arm"] as const;
   const result: MeasurementInput = { measuredAt };
   for (const field of fields) {
     if (value[field] === undefined || value[field] === null || value[field] === "") continue;
     const number = typeof value[field] === "number" ? value[field] : Number(value[field]);
     if (!Number.isFinite(number) || number <= 0 || number > 1000) return "Las medidas deben ser números positivos válidos.";
+    if (field === 'bodyFat' && number > 100) return 'El porcentaje de grasa debe estar entre 0 y 100.';
     result[field] = Math.round(number * 100) / 100;
   }
   if (fields.every((field) => result[field] === undefined)) return "Introduce al menos una medida.";

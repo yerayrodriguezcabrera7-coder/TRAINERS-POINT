@@ -100,6 +100,10 @@ test('Geolocalización en fichajes: en centro vs fuera de centro', async () => {
   assert.ok(inRes.geoIn.distanceMeters < 200, `Distancia debe ser <200m: ${inRes.geoIn.distanceMeters}m`);
   assert.equal(inRes.geoIn.accuracy, 15);
 
+  const trainer={id:'u1',name:'Entrenador Uno',role:'TRAINER',employeeId:'e1',clientId:null};
+  await assert.rejects(store.clock('gym-1',{employeeId:'e1',action:'OUT',geo:{latitude:43.2800,longitude:-2.9500,accuracy:20}},trainer),/fuera del radio/);
+  await assert.rejects(store.clock('gym-1',{employeeId:'e1',action:'OUT',geo:{latitude:centerLat,longitude:centerLon,accuracy:150}},trainer),/precisión suficiente/);
+
   // Caso 2: Salida fuera del centro (a 2.5 km)
   const outRes = await store.clock('gym-1', {
     employeeId: 'e1',

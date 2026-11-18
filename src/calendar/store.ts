@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
 import { randomUUID } from "node:crypto";
 import { Pool,PoolClient } from "pg";
+import { z } from "zod";
 import { accessMigration, type Identity } from "./access";
 import { sharedStaffMigration, sharedStaff, saveStaff, saveSharedLeave, networkLock } from "./shared-staff";
 import { clientScope } from "../network/scope";
@@ -46,6 +47,7 @@ ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_in jsonb;
 ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS geo_out jsonb;
 ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS actor_in jsonb;
 ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS actor_out jsonb;
+ALTER TABLE calendar.attendance ADD COLUMN IF NOT EXISTS pauses jsonb NOT NULL DEFAULT '[]'::jsonb;
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_one_open_shift ON calendar.attendance(gym_id,employee_id) WHERE clock_out IS NULL;
 CREATE INDEX IF NOT EXISTS attendance_by_gym_and_time ON calendar.attendance(gym_id,clock_in DESC);
 CREATE TABLE IF NOT EXISTS calendar.attendance_omissions (
@@ -812,7 +814,7 @@ export class Store {
     if (end <= start) throw new ApiError(400, "Rango de fechas inválido.");
     const { rows } = await this.pool.query(
       `SELECT id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
-              geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"
+              geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut",pauses
        FROM calendar.attendance
        WHERE gym_id=$1 AND clock_in < $3 AND COALESCE(clock_out,now()) >= $2
        ORDER BY clock_in DESC`,
@@ -820,7 +822,7 @@ export class Store {
     );
     // Open shifts follow the person between centres. Closed history and exports stay local.
     const openRows=(await this.pool.query(`SELECT a.id,a.employee_id AS "employeeId",a.clock_in AS "clockIn",a.clock_out AS "clockOut",
-      a.geo_in AS "geoIn",a.actor_in AS "actorIn",a.gym_id AS "centerId",COALESCE(g.name,g.id) AS "centerName"
+      a.geo_in AS "geoIn",a.actor_in AS "actorIn",a.pauses,a.gym_id AS "centerId",COALESCE(g.name,g.id) AS "centerName"
       FROM calendar.attendance a JOIN calendar.gyms g ON g.id=a.gym_id WHERE a.clock_out IS NULL`)).rows;
 
     let employeesList = current.employees;
@@ -836,7 +838,7 @@ export class Store {
 
     return {
       timezone: zone,
-      centerLocation: (current as any).location || null,
+      centerLocation: await this.centerLocation(gym, (current as any).location),
       employees: employeesList.filter((e: any) => (!employeeId || e.id === employeeId) && (e.active !== false || recordsList.some(r => r.employeeId === e.id))).map(
         ({ id, name, color }: { id: string; name: string; color: string }) => ({
           id,
@@ -847,9 +849,19 @@ export class Store {
       records: recordsList,
       openRecords: openRows.filter(r=>!employeeId || r.employeeId===employeeId).filter(r=>viewerRole!=='TRAINER' || r.employeeId===employeeId),
       serverNow: new Date().toISOString(),
+      dayStart: start.toUTC().toISO(),
+      dayEnd: end.toUTC().toISO(),
       from: first,
       to: last,
     };
+  }
+
+  private async centerLocation(gym: string, configured?: { latitude:number; longitude:number; radiusMeters?:number } | null) {
+    if (configured) return configured;
+    if (!this.clientsDb || !/^[0-9a-f-]{36}$/i.test(gym)) return null;
+    const center = await this.clientsDb.gym.findUnique({ where: { id:gym }, select: { latitude:true, longitude:true, radiusMeters:true } });
+    return center?.latitude != null && center.longitude != null
+      ? { latitude:center.latitude, longitude:center.longitude, radiusMeters:center.radiusMeters || 200 } : null;
   }
 
   async clock(gym: string, raw: unknown, actor?: Identity) {
@@ -879,9 +891,9 @@ export class Store {
         [gym, input.employeeId],
       );
       let geoRecord: any = null;
+      const gymLoc = await this.centerLocation(gym, gymResult.rows[0].config?.location);
+      if (actor?.role === 'TRAINER' && input.geo && !gymLoc) throw new ApiError(409, 'El centro no tiene ubicación configurada para fichar desde el móvil. Contacta con recepción.');
       if (input.geo && typeof input.geo.latitude === "number" && typeof input.geo.longitude === "number") {
-        const gymConfig = gymResult.rows[0].config;
-        const gymLoc = gymConfig ? (gymConfig as any).location : null;
         let distanceMeters: number | null = null;
         let inGeofence: boolean | null = null;
 
@@ -894,6 +906,10 @@ export class Store {
           );
           const radius = gymLoc.radiusMeters || 200;
           inGeofence = distanceMeters <= radius;
+          if (actor?.role === 'TRAINER' && (input.geo.accuracy == null || input.geo.accuracy > Math.min(radius,100)))
+            throw new ApiError(400, 'La ubicación no tiene precisión suficiente. Acércate al centro y vuelve a intentarlo.');
+          if (actor?.role === 'TRAINER' && !inGeofence)
+            throw new ApiError(403, 'Estás fuera del radio permitido para fichar en este centro.');
         }
 
         geoRecord = {
@@ -914,7 +930,7 @@ export class Store {
           await db.query(
             `INSERT INTO calendar.attendance(id,gym_id,employee_id,geo_in,actor_in)
              VALUES($1,$2,$3,$4,$5)
-             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
+             RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",pauses,
                        geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"`,
             [randomUUID(), gym, input.employeeId, geoRecord ? JSON.stringify(geoRecord) : null, audit],
           )
@@ -924,9 +940,11 @@ export class Store {
           throw new ApiError(409, `${employee.name} no tiene una jornada abierta.`);
         row = (
           await db.query(
-            `UPDATE calendar.attendance SET clock_out=now(), geo_out=$2, actor_out=$3 WHERE id=$1
+            `UPDATE calendar.attendance SET clock_out=now(), geo_out=$2, actor_out=$3,
+               pauses=CASE WHEN jsonb_array_length(pauses)>0 AND pauses->-1->>'endedAt' IS NULL
+                 THEN jsonb_set(pauses,ARRAY[(jsonb_array_length(pauses)-1)::text,'endedAt'],to_jsonb(now()::text)) ELSE pauses END WHERE id=$1
              RETURNING id,employee_id AS "employeeId",clock_in AS "clockIn",clock_out AS "clockOut",
-                       geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut"`,
+                       geo_in AS "geoIn",geo_out AS "geoOut",actor_in AS "actorIn",actor_out AS "actorOut",pauses`,
             [open.rows[0].id, geoRecord ? JSON.stringify(geoRecord) : null, audit],
           )
         ).rows[0];
@@ -941,6 +959,41 @@ export class Store {
     } finally {
       db.release();
     }
+  }
+
+  async pause(gym:string, employeeId:string, action:'START'|'END', actor:Identity) {
+    if (actor.role !== 'TRAINER' || actor.employeeId !== employeeId) throw new ApiError(403,'Solo puedes registrar tus propias pausas.');
+    const db=await this.pool.connect();
+    try {
+      await db.query('BEGIN');
+      const result=await db.query(`SELECT id,pauses FROM calendar.attendance WHERE gym_id=$1 AND employee_id=$2 AND clock_out IS NULL FOR UPDATE`,[gym,employeeId]);
+      const row=result.rows[0];
+      if (!row) throw new ApiError(409,'No tienes una jornada abierta en este centro.');
+      const pauses=Array.isArray(row.pauses)?row.pauses:[];
+      const ongoing=pauses.length>0 && !pauses[pauses.length-1].endedAt;
+      if (action==='START' && ongoing) throw new ApiError(409,'Ya estás en pausa.');
+      if (action==='END' && !ongoing) throw new ApiError(409,'No hay una pausa abierta.');
+      if (action==='START') pauses.push({startedAt:new Date().toISOString()});
+      else pauses[pauses.length-1].endedAt=new Date().toISOString();
+      await db.query('UPDATE calendar.attendance SET pauses=$2 WHERE id=$1',[row.id,JSON.stringify(pauses)]);
+      await db.query('COMMIT');
+      return {id:row.id,pauses};
+    } catch(error) { await db.query('ROLLBACK'); throw error; }
+    finally { db.release(); }
+  }
+
+  async saveSessionLog(gym:string,id:string,actor:Identity,raw:unknown) {
+    const input=z.object({version:z.number().int().positive(),exercises:z.string().max(2000),feeling:z.enum(['GOOD','TIRED','PAIN']).nullable(),nextSessionPlan:z.string().max(2000)}).parse(raw);
+    return this.transaction(gym,async(db,_c,bookings)=>{
+      const booking=bookings.find(b=>b.id===id && (actor.role!=='TRAINER' || b.employeeId===actor.employeeId));
+      if(!booking)throw new ApiError(404,'Reserva desconocida.');
+      if(booking.version!==input.version)throw new ApiError(409,'La sesión ha cambiado. Actualiza y vuelve a intentarlo.');
+      booking.sessionLog={exercises:input.exercises.trim(),feeling:input.feeling};
+      booking.nextSessionPlan=input.nextSessionPlan.trim();
+      booking.version++;
+      await db.query('UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2',[gym,id,booking]);
+      return booking;
+    });
   }
 
   async updateEmployeeShift(gym: string, employeeId: string, dateStr: string, periods: Array<{ open: string; close: string }> | null) {

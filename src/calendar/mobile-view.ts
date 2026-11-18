@@ -60,7 +60,8 @@ export function mobileStaffView(state: MobileState, actor: Identity) {
       serviceId: booking.serviceId, roomId: booking.roomId, centerId: booking.centerId,
       date: booking.date, start: booking.start, end: booking.end, status: booking.status,
       version: booking.version, centerName: booking.centerName, centerAddress: booking.centerAddress,
-      needsReschedule: booking.needsReschedule,
+      needsReschedule: booking.needsReschedule, notes: booking.notes,
+      sessionLog: booking.sessionLog, nextSessionPlan: booking.nextSessionPlan,
     })),
     clients: state.clients.filter(client => clientIds.has(client.id)).map(client => ({
       id: client.id, name: client.name, phone: client.phone, email: client.email, status: client.status,
