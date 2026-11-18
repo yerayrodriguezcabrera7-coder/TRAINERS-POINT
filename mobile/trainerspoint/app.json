@@ -8,7 +8,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.trainerspoint.app",
-      "infoPlist": { "NSLocationWhenInUseUsageDescription": "Tu ubicación se usa al fichar para verificar que estás en el centro." }
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Tu ubicación se usa al fichar para verificar que estás en el centro."
+      }
     },
     "android": {
       "package": "com.trainerspoint.app"
@@ -16,7 +18,13 @@
     "plugins": [
       "expo-asset",
       "expo-font",
-      ["expo-location", { "locationWhenInUsePermission": "Tu ubicación se usa al fichar para verificar que estás en el centro." }]
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Tu ubicación se usa al fichar para verificar que estás en el centro."
+        }
+      ],
+      ["expo-audio", { "recordAudioAndroid": false, "enableBackgroundPlayback": false }]
     ],
     "web": {
       "bundler": "metro"

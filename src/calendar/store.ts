@@ -958,7 +958,7 @@ export class Store {
   }
 
   async saveSessionLog(gym:string,id:string,actor:Identity,raw:unknown) {
-    const input=z.object({version:z.number().int().positive(),exercises:z.string().max(2000),feeling:z.enum(['GOOD','TIRED','PAIN']).nullable(),nextSessionPlan:z.string().max(2000)}).parse(raw);
+    const input=z.object({version:z.number().int().positive(),exercises:z.string().max(2000),feeling:z.enum(['GOOD','TIRED','EASY','ADEQUATE','LIMIT','PAIN']).nullable(),nextSessionPlan:z.string().max(2000)}).parse(raw);
     return this.transaction(gym,async(db,_c,bookings)=>{
       const booking=bookings.find(b=>b.id===id && (actor.role!=='TRAINER' || b.employeeId===actor.employeeId));
       if(!booking)throw new ApiError(404,'Reserva desconocida.');

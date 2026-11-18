@@ -10,6 +10,8 @@ La cuenta real del cliente consulta `/api/client-calendar` y `/api/mobile/client
 
 La agenda diaria muestra las citas asignadas. Al abrir una cita se pueden registrar asistencia, medidas, cargas, sensaciones y el objetivo de la siguiente sesión. El objetivo anterior aparece arriba al abrir la próxima cita del mismo cliente. «Pendiente de reubicar» libera el horario y deja la cita visible a recepción. La pestaña «Mis clientes» permite buscar, consultar el bono, las últimas sesiones, la evolución de peso y dejar un aviso interno. El servidor comprueba la asignación antes de devolver la ficha o guardar medidas.
 
+La agenda agrupa las sesiones duales en una tarjeta y permite gestionar la asistencia y el diario de cada cliente por separado. El selector de fecha permite saltar a cualquier día. La pestaña «Turnos» muestra horario semanal, excepciones y ausencias aprobadas, y envía nuevas solicitudes a administración. Mientras la app está abierta consulta los cambios de agenda cada 15 segundos y muestra un aviso con sonido si aparece una cita nueva hoy o se cancela una cita de las próximas tres horas. El sonido puede depender de los ajustes del dispositivo o de la autorización de reproducción del navegador; las notificaciones remotas con la app cerrada requieren infraestructura de push adicional.
+
 Para activar las medidas de grasa corporal hay que aplicar la migración Prisma `20261118000100_body_fat_measurement` junto con el despliegue del backend. Para fichar desde el móvil, cada centro necesita coordenadas y radio configurados. La demostración sigue siendo ficticia y no escribe en estos endpoints.
 
 ## Abrir la vista previa en el ordenador

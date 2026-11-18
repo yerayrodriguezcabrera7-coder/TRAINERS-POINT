@@ -1,5 +1,5 @@
 import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery, ServicePackage, Measurement, TrainingPlan } from "./types";
-import type { AttendanceData, TrainerClientDetail } from "./trainer-types";
+import type { AttendanceData, TrainerClientDetail, TrainerLeave, LeaveKind } from "./trainer-types";
 import type { CognitoAuth } from "./cognito";
 export { CognitoPasswordRequired } from "./cognito";
 
@@ -117,8 +117,12 @@ export class ApiClient {
   markAttendance(bookingId:string,attendance:"ASISTIO"|"NO_ASISTIO"|"REPROGRAMAR",version:number) {
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/attendance`,{method:"PATCH",body:JSON.stringify({attendance,version})});
   }
-  saveSession(bookingId:string, data:{version:number;exercises:string;feeling:"GOOD"|"TIRED"|"PAIN"|null;nextSessionPlan:string}) {
+  saveSession(bookingId:string, data:{version:number;exercises:string;feeling:"GOOD"|"TIRED"|"EASY"|"ADEQUATE"|"LIMIT"|"PAIN"|null;nextSessionPlan:string}) {
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/session`,{method:"PATCH",body:JSON.stringify(data)});
+  }
+  getLeaves() { return this.request<TrainerLeave[]>("/api/leaves"); }
+  requestLeave(data:{type:LeaveKind;startDate:string;endDate:string;note:string}) {
+    return this.request("/api/leaves",{method:"POST",body:JSON.stringify(data)});
   }
   getClientSlots(query: SlotQuery) {
     const params = new URLSearchParams({ ...query });

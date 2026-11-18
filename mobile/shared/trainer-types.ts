@@ -20,3 +20,8 @@ export interface TrainerClientDetail {
   measurements:Array<{id:string;measuredAt:string;weight:number|null;bodyFat:number|null;waist:number|null;hip:number|null;chest:number|null;arm:number|null;leg:number|null}>;
   packages:Array<{id:string;serviceName:string;sessionsRemaining:number;sessionsBought:number;expiresAt:string;paymentStatus:string}>;
 }
+export type LeaveKind = "VACATION" | "SICK_LEAVE" | "PERMISSION" | "OTHER";
+export interface TrainerLeave {
+  id:string;employeeId:string;type:LeaveKind;startDate:string;endDate:string;note:string;
+  status:"PENDING"|"APPROVED"|"REJECTED"|"CANCELLED";
+}

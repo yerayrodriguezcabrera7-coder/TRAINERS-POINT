@@ -20,7 +20,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 const { ApiClient } = require('../mobile/shared/api.ts');
 
-let pg, pool, db, http, gym, own, other, employee, service, api, base, token;
+let pg, pool, db, http, gym, own, other, employee, adminEmployee, service, api, base, token;
 const hours = Array.from({ length: 7 }, () => ({ open: '08:00', close: '22:00', closed: false }));
 before(async () => {
   const { default: Embedded } = await import('embedded-postgres');
@@ -40,11 +40,12 @@ before(async () => {
   [own, other] = await Promise.all(['Propia', 'Ajena'].map(lastName => db.client.create({ data: { firstName: 'Ficha', lastName, email: `${randomUUID()}@example.invalid`, phone: '600000000', gymId: gym.id, status: 'ACTIVO' } })));
   service = await db.service.create({ data: { name: 'Sesión de entrenamiento', price: 30, durationMin: 60, validityWeeks: 4 } });
   employee = { id: randomUUID(), name: 'Entrenadora', color: '#123456', active: true, schedule: hours };
+  adminEmployee = { id: randomUUID(), name: 'Recepción', color: '#654321', active: true, schedule: hours };
   const store = new Store(pool, db);
   await store.migrate();
-  await store.seed(gym.id, { timezone: 'Europe/Madrid', schedule: hours, employees: [employee], rooms: [{ id: 'r1', name: 'Sala principal' }], services: [{ id: service.id, name: service.name, duration: 60, capacity: 1 }], clients: [] });
+  await store.seed(gym.id, { timezone: 'Europe/Madrid', schedule: hours, employees: [employee, adminEmployee], rooms: [{ id: 'r1', name: 'Sala principal' }], services: [{ id: service.id, name: service.name, duration: 60, capacity: 1 }], clients: [] });
   const access = new Access(pool, db);
-  await access.save(gym.id, { employeeId: employee.id, username: 'admin.movil', role: 'ADMIN', enabled: true, password: 'AdminMobilePassword123!', mustChangePassword: false });
+  await access.save(gym.id, { employeeId: adminEmployee.id, username: 'admin.movil', role: 'ADMIN', enabled: true, password: 'AdminMobilePassword123!', mustChangePassword: false });
   await access.save(gym.id, { clientId: own.id, username: 'cliente.movil', role: 'CLIENT', enabled: true, password: 'ClientMobilePassword123!', mustChangePassword: false });
   const purchasedAt = new Date();
   await db.clientServicePackage.create({ data: { clientId: own.id, serviceId: service.id, sessionsBought: 5, totalAmount: 150, paymentMethod: 'EFECTIVO', paymentStatus: 'PAGADO', purchasedAt } });
@@ -151,4 +152,35 @@ test('Recepción móvil: organiza un bono y conserva su vínculo al mover la cit
   assert.equal(moved.start, '12:00');
   assert.equal(moved.packageId, pkg.packageId);
   assert.equal(moved.version, visible.version + 1);
+});
+
+test('Entrenador móvil: sesión dual individual, esfuerzo y solicitud de ausencia', async () => {
+  await db.service.update({ where: { id: service.id }, data: { modality: 'DUAL' } });
+  const sessionId = randomUUID();
+  const date = DateTime.now().setZone('Europe/Madrid').minus({ days: 1 }).toISODate();
+  const first = await api.createOfficeBooking({ clientId: own.id, serviceId: service.id, employeeId: employee.id, roomId: 'r1', date, start: '15:00', status: 'CONFIRMED', notes: '', sessionId });
+  const second = await api.createOfficeBooking({ clientId: other.id, serviceId: service.id, employeeId: employee.id, roomId: 'r1', date, start: '15:00', status: 'CONFIRMED', notes: '', sessionId });
+  const access = new Access(pool, db);
+  await access.save(gym.id, { employeeId: employee.id, username: 'trainer.dual', role: 'TRAINER', enabled: true, password: 'TrainerDualPassword123!', mustChangePassword: false });
+  await api.login({ username: 'trainer.dual', password: 'TrainerDualPassword123!', portal: 'TRAINER' });
+  const agenda = await api.getStaffCalendar();
+  const pair = agenda.bookings.filter(item => item.sessionId === sessionId);
+  assert.deepEqual(pair.map(item => item.clientId).sort(), [own.id, other.id].sort());
+  assert.equal(agenda.employees.length, 1);
+  assert.equal(agenda.employees[0].id, employee.id);
+  assert.equal(agenda.employees[0].schedule.length, 7);
+  await api.markAttendance(first.id, 'ASISTIO', pair.find(item => item.id === first.id).version);
+  const afterAttendance = await api.getStaffCalendar();
+  assert.equal(afterAttendance.bookings.find(item => item.id === first.id).status, 'COMPLETED');
+  assert.equal(afterAttendance.bookings.find(item => item.id === second.id).status, 'CONFIRMED');
+  const secondVersion = afterAttendance.bookings.find(item => item.id === second.id).version;
+  await api.saveSession(second.id, { version: secondVersion, exercises: 'Press militar 45 kg 4x8', feeling: 'LIMIT', nextSessionPlan: 'Revisar hombro' });
+  const afterNotes = await api.getStaffCalendar();
+  assert.equal(afterNotes.bookings.find(item => item.id === second.id).sessionLog.feeling, 'LIMIT');
+  assert.equal(afterNotes.bookings.find(item => item.id === second.id).nextSessionPlan, 'Revisar hombro');
+  assert.equal(afterNotes.bookings.find(item => item.id === first.id).sessionLog, undefined);
+  const leaveDay = DateTime.now().setZone('Europe/Madrid').plus({ days: 8 }).toISODate();
+  await api.requestLeave({ type: 'PERMISSION', startDate: leaveDay, endDate: leaveDay, note: 'Cita médica' });
+  const leaves = await api.getLeaves();
+  assert.ok(leaves.some(item => item.employeeId === employee.id && item.type === 'PERMISSION' && item.status === 'PENDING'));
 });
