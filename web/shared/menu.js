@@ -46,7 +46,11 @@
   function menuKey(href) {
     const url = new URL(href, location.origin + "/");
     const path = url.pathname;
-    if (path === '/') return '/index.html';
+    const hash = url.hash;
+    if (path === '/pendientes.html' || ((path === '/' || path === '/index.html') && hash.startsWith('#pend'))) {
+      return '/index.html#pendientes';
+    }
+    if (path === '/' || path === '/index.html') return '/index.html';
     if (path === '/clientes' || path.startsWith('/clientes/') || path === '/client-profile.html') return '/clientes';
     if (path === '/usuarios.html') return '/usuarios';
     if (['/gyms.html','/gimnasios.html'].includes(path)) return '/gimnasios';
@@ -55,6 +59,9 @@
     if (['/professionals.html', '/profesionales.html'].includes(path)) return '/profesionales';
     if (['/fichajes', '/fichaje'].includes(path)) return '/fichajes.html';
     if (['/tienda.html', '/tienda'].includes(path)) return '/tienda.html';
+    if (['/dashboard.html', '/cuadro-mando.html'].includes(path)) return '/cuadro-mando.html';
+    if (['/audit.html', '/historial-eventos.html'].includes(path)) return '/historial-eventos.html';
+    if (['/reports.html', '/informes.html'].includes(path)) return '/informes.html';
     return path;
   }
   const current = menuKey(location.href);
@@ -65,6 +72,26 @@
         ? '<a class="app-menu-item" href="'+href+'" title="'+label+'"'+(menuKey(href)===current?' aria-current="page"':'')+'>'+content+'</a>'
         : '<button class="app-menu-item" type="button" disabled title="'+label+' · Próximamente" aria-label="'+label+' · Próximamente">'+content+'</button>';
   }
+  function updateActive() {
+    const cur = menuKey(location.href);
+    host.querySelectorAll('.app-menu-item').forEach(item => {
+      const href = item.getAttribute('href');
+      if (href) {
+        if (menuKey(href) === cur) {
+          item.setAttribute('aria-current', 'page');
+        } else {
+          item.removeAttribute('aria-current');
+        }
+      }
+    });
+  }
+  window.addEventListener('hashchange', updateActive);
+  host.addEventListener('click', (e) => {
+    const link = e.target.closest('.app-menu-item');
+    if (link && link.getAttribute('href')) {
+      setTimeout(updateActive, 30);
+    }
+  });
 const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes','Historial de eventos']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
