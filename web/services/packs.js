@@ -282,7 +282,6 @@
     $('field-category').value = 'TRAINING';
     $('field-service').value = services.find(s => s.type === 'SESION_INDIVIDUAL')?.id || '';
     $('field-modality').value = 'INDIVIDUAL';
-    $('field-type').value = 'PACK';
     $('field-trainingCount').value = '10';
     $('field-durationMin').value = '60';
     $('field-price').value = '';
@@ -309,7 +308,6 @@
     $('field-category').value = pack.category || 'TRAINING';
     $('field-service').value = pack.serviceId || '';
     $('field-modality').value = pack.modality || 'INDIVIDUAL';
-    $('field-type').value = 'PACK';
     $('field-trainingCount').value = pack.trainingCount ?? 10;
     $('field-price').value = pack.price != null ? Number(pack.price).toFixed(2) : '';
     $('field-durationMin').value = pack.durationMin || 60;
