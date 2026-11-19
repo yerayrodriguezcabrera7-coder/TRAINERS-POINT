@@ -38,6 +38,100 @@ test('Pendientes: cuatro prioridades por cliente, lista completa, búsqueda y ag
  }finally{dom.window.close();}
 });
 
+test('Pendientes: tiene en cuenta preferencias del cliente (entrenador habitual, horario preferente, consideraciones)', async () => {
+ const gymId = randomUUID(), serviceId = randomUUID(), now = Date.now();
+ const client = {
+   id: randomUUID(),
+   name: 'Marcos Gómez',
+   assignedWorkerId: 'emp-yeray',
+   contactSlot: 'MANANA',
+   availability: { days: ['L', 'X', 'V'], slots: ['MANANA'] },
+   objective: 'Pérdida de grasa y tonificación',
+   injuryNotes: 'Condromalacia rotuliana'
+ };
+ const pkg = {
+   packageId: randomUUID(),
+   clientId: client.id,
+   clientName: client.name,
+   serviceId,
+   serviceName: 'Entrenamiento Personal',
+   sessionsToSchedule: 3,
+   sessionsScheduled: 1,
+   expiresAt: new Date(now + 10 * 86400000).toISOString(),
+   daysRemaining: 10
+ };
+ const state = {
+   gymId,
+   timezone: 'Europe/Madrid',
+   clients: [client],
+   services: [{ id: serviceId, name: 'Entrenamiento Personal', duration: 60 }],
+   employees: [
+     { id: 'emp-other', name: 'Otro Entrenador', active: true },
+     { id: 'emp-yeray', name: 'Yeray', active: true }
+   ],
+   rooms: [{ id: 'r1', name: 'Sala 1' }],
+   bookings: []
+ };
+ const errors = [], console = new VirtualConsole(); console.on('jsdomError', e => errors.push(e.message));
+ const dom = new JSDOM(fs.readFileSync('web/planning/pendientes.html', 'utf8'), {
+   url: 'http://localhost/pendientes.html',
+   runScripts: 'outside-only',
+   pretendToBeVisual: true,
+   virtualConsole: console
+ });
+ const w = dom.window, d = w.document;
+ w.structuredClone = structuredClone;
+ w.TrainersPoint = { poll: () => () => {} };
+ w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+ w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+ w.fetch = async (path) => {
+   if (path === '/api/me') return { ok: true, json: async () => ({ role: 'RECEPTION' }) };
+   if (path === '/api/state') return { ok: true, json: async () => structuredClone(state) };
+   if (path === '/api/pending-packages') return { ok: true, json: async () => ({ packages: [structuredClone(pkg)] }) };
+   if (path.startsWith('/api/slots?')) return { ok: true, json: async () => [{ start: '10:00', end: '11:00' }, { start: '18:00', end: '19:00' }] };
+   return { ok: true, json: async () => ({}) };
+ };
+ try {
+   w.eval(fs.readFileSync('web/planning/pendientes.js', 'utf8'));
+   await until(() => d.querySelector('#rows').textContent.includes('Marcos Gómez'));
+
+   // Verificar que la fila y la tarjeta urgente muestran el entrenador habitual
+   assert.match(d.querySelector('#rows').textContent, /⭐ Habitual: Yeray/);
+   assert.match(d.querySelector('.pending-urgent-card').textContent, /⭐ Yeray · ⏰ Mañanas/);
+
+   // Abrir modal de asignación
+   d.querySelector('[data-package]').click();
+   assert.equal(d.getElementById('editor').open, true);
+
+   // Entrenador habitual pre-seleccionado automáticamente en el desplegable
+   assert.equal(d.getElementById('employee').value, 'emp-yeray');
+
+   // Banner de preferencias presente y visible con todos los detalles
+   const prefBadge = d.getElementById('client-preferences-badge');
+   assert.equal(prefBadge.hidden, false);
+   assert.match(prefBadge.textContent, /Yeray/);
+   assert.match(prefBadge.textContent, /Lunes, Miércoles, Viernes/);
+   assert.match(prefBadge.textContent, /Mañanas/);
+   assert.match(prefBadge.textContent, /Pérdida de grasa/);
+   assert.match(prefBadge.textContent, /Condromalacia rotuliana/);
+
+   // Consultar huecos y verificar que la franja de mañana se marca como preferente con estrella
+   const tomorrow = new Date(now + 86400000).toISOString().slice(0, 10);
+   d.getElementById('date').value = tomorrow;
+   d.getElementById('check').click();
+   await until(() => d.querySelectorAll('[data-slot]').length === 2);
+   const slotMorning = d.querySelector('[data-slot="10:00"]');
+   const slotEvening = d.querySelector('[data-slot="18:00"]');
+   assert.ok(slotMorning.classList.contains('is-preferred-slot'));
+   assert.match(slotMorning.textContent, /⭐ 10:00/);
+   assert.ok(!slotEvening.classList.contains('is-preferred-slot'));
+
+   assert.deepEqual(errors, []);
+ } finally {
+   dom.window.close();
+ }
+});
+
 test('Ficha: no aparece información ni formulario residual de centro en el resumen del cliente',()=>{
  const dom=new JSDOM(fs.readFileSync('web/clients/client-profile.html','utf8'));
  try{assert.equal(dom.window.document.getElementById('profile-gym'),null);assert.equal(dom.window.document.getElementById('profile-location'),null);assert.equal(dom.window.document.getElementById('profile-gym-form'),null);assert.equal(dom.window.document.getElementById('profile-gym-select'),null);}finally{dom.window.close();}

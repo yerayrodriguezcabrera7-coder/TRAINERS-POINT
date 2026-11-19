@@ -1,12 +1,11 @@
 <!DOCTYPE html>
 <html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Redirigiendo al calendario · Trainers Point</title>
+<title>Pendientes de asignación · Trainers Point</title>
 <script src="/polling.js" defer></script>
 <link rel="stylesheet" href="/fichajes.css"><link rel="stylesheet" href="/gestion.css"><link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/design.css">
 <link rel="stylesheet" href="/ayuda.css"><link rel="stylesheet" href="/orden.css"><link rel="stylesheet" href="/pendientes.css">
 <script src="/runtime.js" defer></script><script src="/menu.js" defer></script><script src="/pendientes.js" defer></script><script src="/ayuda.js" defer></script>
-<script>window.addEventListener('load',()=>{setTimeout(()=>{location.replace('/index.html#pendientes'+(new URLSearchParams(location.search).get('tipo')==='reprogramacion'?'?tipo=reprogramacion':''));},80);});</script>
 </head><body class="planning-page"><div class="app-shell">
 <aside data-app-menu="" aria-label="Navegación principal"></aside>
 <main class="attendance-shell main-content">
@@ -15,7 +14,16 @@
 <header class="attendance-header"><div><p class="eyebrow">RECEPCIÓN · ORGANIZACIÓN</p><h1>Pendientes de asignación</h1><p id="page-description">Organiza bonos con sesiones pendientes, citas sin trabajador y sesiones por reprogramar o recuperar desde el centro activo.</p></div><a href="/index.html" class="outline-button">Volver al calendario</a></header>
 <p id="notice" role="status" tabindex="-1"></p>
 <nav class="section-links" aria-label="Tipo de pendiente"><a href="?tipo=asignacion" id="assignment-tab">Por organizar</a><a href="?tipo=reprogramacion" id="reschedule-tab">Reprogramar / Recuperar</a></nav>
-<div class="pending-toolbar"><label for="search">Buscar cliente o servicio<input type="search" id="search" placeholder="Nombre del cliente o servicio" autocomplete="off"></label><button id="refresh" class="outline-button" type="button">Actualizar</button></div>
+<div class="pending-toolbar">
+  <label for="search">Buscar cliente o servicio<input type="search" id="search" placeholder="Nombre del cliente o servicio" autocomplete="off"></label>
+  <button id="refresh" class="outline-button" type="button">Actualizar</button>
+</div>
+<div id="quick-filters" class="pending-filter-chips" role="group" aria-label="Filtros rápidos">
+  <button type="button" class="chip-filter active" data-filter="all">Todos</button>
+  <button type="button" class="chip-filter" data-filter="urgent">🔴 Próxima caducidad (&le;7d)</button>
+  <button type="button" class="chip-filter" data-filter="unassigned">👤 Citas sin entrenador</button>
+  <button type="button" class="chip-filter" data-filter="unpaid">💳 Cobro pendiente</button>
+</div>
 <section id="urgent-panel" class="pending-priority" aria-labelledby="urgent-title" hidden>
 <div class="pending-heading"><div><p class="eyebrow">PRIORIDAD DE ORGANIZACIÓN</p><h2 id="urgent-title">Urgentes</h2><p>Primero, la cita o el bono con la fecha más próxima. Si coinciden, las sesiones que necesitan más huecos.</p></div><span id="urgent-count" class="pending-count"></span></div>
 <div id="urgent-list" class="pending-urgent-grid"></div>
@@ -36,6 +44,7 @@
   </header>
   <div class="modal-body">
     <p id="original" class="compact-info-bar"></p>
+    <div id="client-preferences-badge" class="client-pref-banner" hidden></div>
     <div class="form-grid modern-form-grid">
       <label class="modern-field"><span class="field-label">Trabajador</span><select id="employee" required></select></label>
       <label class="modern-field"><span class="field-label">Fecha</span><input id="date" type="date" required></label>

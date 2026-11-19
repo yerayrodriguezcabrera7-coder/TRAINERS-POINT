@@ -4,30 +4,72 @@
 .pending-toolbar{display:flex;align-items:end;gap:16px}
 .pending-toolbar label{display:grid;gap:8px;flex:1;max-width:560px;font-weight:600}
 .pending-toolbar input{width:100%;min-height:44px;padding:10px 14px;border:1px solid var(--tp-line,#ded6ca);border-radius:10px;background:var(--tp-surface,#fff);color:inherit}
+
+/* Quick Filter Chips */
+.pending-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -8px 0 4px;
+}
+.chip-filter {
+  padding: 7px 15px;
+  border-radius: 20px;
+  border: 1px solid var(--tp-line, #ded6ca);
+  background: var(--tp-surface, #fff);
+  color: var(--tp-muted, #64748b);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chip-filter:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+.chip-filter.active {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
 .pending-heading{display:flex;justify-content:space-between;align-items:start;gap:16px;margin-bottom:20px}
 .pending-heading h2{margin:0 0 8px;font-size:1.3rem}
 .pending-heading p{margin:0;color:var(--tp-muted,#65747b);line-height:1.5;max-width:75ch}
 .pending-heading .eyebrow{margin-bottom:8px;font-size:.7rem}
 .pending-count{flex-shrink:0;font-size:.8rem;color:var(--tp-muted,#65747b)}
 .pending-urgent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
-.pending-urgent-card{display:flex;flex-direction:column;gap:12px;min-width:0;padding:20px;border:1px solid #e8c8a4;border-top:4px solid #ff7f0a;border-radius:14px;background:var(--tp-surface,#fff)}
+.pending-urgent-card{display:flex;flex-direction:column;gap:10px;min-width:0;padding:18px;border:1px solid rgba(226, 232, 240, 0.95);border-top:3px solid var(--tp-accent, #ff7f0a);border-radius:12px;background:var(--tp-surface,#fff);box-shadow:0 2px 8px rgba(15, 23, 42, 0.04);transition:transform 0.15s ease, box-shadow 0.15s ease}
+.pending-urgent-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(15, 23, 42, 0.08)}
+.pending-urgent-card.is-critical{border-top-color:#ef4444}
+.pending-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .pending-urgent-card h3,.pending-urgent-card p{margin:0;overflow-wrap:anywhere}
-.pending-urgent-card h3{font-size:1rem}
+.pending-urgent-card h3{font-size:1.05rem;font-weight:700;color:var(--tp-black,#111)}
 .pending-urgent-card p,.pending-urgent-card small{font-size:.85rem;line-height:1.5;color:var(--tp-muted,#65747b)}
-.pending-urgent-card .pending-reason{color:#8c4706;font-weight:700}
-.pending-rank{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8c4706}
-.pending-urgent-card button{margin-top:auto;min-height:42px;padding:10px 12px;border:1px solid #e8c8a4;border-radius:8px;background:#fff8ef;color:#7c3c00;font-weight:700}
+.pending-urgent-card .pending-reason{color:#ea580c;font-weight:600;font-size:12px}
+.pending-rank{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8c4706;background:#fff7ed;padding:2px 8px;border-radius:12px}
+.urgency-pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:12px}
+.urgency-pill.critical{background:#fee2e2;color:#991b1b}
+.urgency-pill.normal{background:#f1f5f9;color:#475569}
+.pending-urgent-card button{margin-top:auto;min-height:38px;padding:8px 14px;border:1px solid var(--tp-accent,#ff7f0a);border-radius:8px;background:#fffaf5;color:#9a3412;font-weight:700;font-size:12px;cursor:pointer;transition:all 0.15s ease}
+.pending-urgent-card button:hover{background:var(--tp-accent,#ff7f0a);color:#fff}
 .planning-page .management-card{padding:24px;min-width:0;max-width:100%;margin:0}
 .planning-page .history-scroll{max-width:100%;overflow-x:auto}
 .pending-table{width:100%;min-width:780px;border-collapse:collapse}
 .pending-table th,.pending-table td{text-align:left;padding:16px 14px;vertical-align:top;line-height:1.5}
+.pending-table tbody tr{transition:background 0.12s ease}
+.pending-table tbody tr:hover{background:#fafaf9}
 .pending-table small{display:block;margin-top:6px;color:var(--tp-muted,#65747b)}
-.pending-actions button{display:block;margin-bottom:8px;min-height:40px}
+.tag-unpaid{display:inline-block;background:#fef3c7;color:#92400e;font-weight:700;padding:2px 7px;border-radius:4px;font-size:11px;margin-top:5px}
+.tag-critical{color:#dc2626 !important;font-weight:700}
+.pending-actions button{display:block;margin-bottom:8px;min-height:38px;padding:8px 14px;background:#fffaf5;color:#9a3412;border:1px solid #fed7aa;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;transition:all 0.12s ease}
+.pending-actions button:hover{background:var(--tp-accent,#ff7f0a);border-color:var(--tp-accent,#ff7f0a);color:#fff}
 .pending-actions a{font-size:.8rem}
 .pending-table a{color:#914600;text-underline-offset:3px}
 .pending-table td:first-child a{color:var(--tp-ink,#283238);text-decoration:none}
 .pending-table td:first-child a:hover{color:#914600;text-decoration:underline}
-.pending-actions button{padding:10px 12px;background:#fff8ef;color:#7c3c00;border:1px solid #e8c8a4;border-radius:8px;font-weight:700}
 .pending-slots{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
 .pending-slots p{width:100%;margin:0}
 .pending-slots button{border:1px solid var(--tp-line,#ded6ca);background:#fff8ef;border-radius:8px;padding:8px 12px}
@@ -250,6 +292,65 @@
   background: #f0fdf4;
   border-color: #22c55e;
   color: #15803d;
+}
+
+/* Client Preferences Banner in Assignment Dialog */
+.client-pref-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.pref-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.pref-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pref-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #ffffff;
+  border: 1px solid #dcfce7;
+  border-radius: 6px;
+  color: #14532d;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pref-pill strong {
+  color: #166534;
+}
+.pref-pill-injury {
+  background: #fffbeb !important;
+  border-color: #fef3c7 !important;
+  color: #92400e !important;
+}
+.pref-hint {
+  display: block;
+  font-size: 11px;
+  color: #059669 !important;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.modern-slots-grid button.is-preferred-slot,
+.pending-slots button.is-preferred-slot {
+  background: #ecfdf5 !important;
+  border-color: #10b981 !important;
+  color: #047857 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.15);
 }
 
 .planning-page #editor .modal-footer {

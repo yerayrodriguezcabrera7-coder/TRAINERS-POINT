@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const type = new URLSearchParams(location.search).get('tipo') === 'reprogramacion' ? 'reprogramacion' : 'asignacion';
-  let data, packages = [], recoveries = [], editing, loading, saving = false;
+  let data, packages = [], recoveries = [], editing, loading, saving = false, activeFilter = 'all';
   async function api(path, method = 'GET', body) {
     const response = await fetch('/api/' + path, {method, headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
     const result = await response.json();
@@ -47,8 +47,14 @@
       }
     }
     const query=$('search').value.trim().toLocaleLowerCase('es');
-    return [...clients.values()].filter(item => (item.name+' '+item.packages.map(p=>p.serviceName).join(' ')+' '+item.bookings.map(b=>name('services',b.serviceId)).join(' ')+' '+item.recoveries.map(r=>name('services',r.serviceId)).join(' ')).toLocaleLowerCase('es').includes(query))
-      .sort((a,b)=>a.deadline.localeCompare(b.deadline) || b.pressure-a.pressure || a.name.localeCompare(b.name,'es') || a.id.localeCompare(b.id));
+    return [...clients.values()].filter(item => {
+      const matchText = (item.name+' '+item.packages.map(p=>p.serviceName).join(' ')+' '+item.bookings.map(b=>name('services',b.serviceId)).join(' ')+' '+item.recoveries.map(r=>name('services',r.serviceId)).join(' ')).toLocaleLowerCase('es').includes(query);
+      if (!matchText) return false;
+      if (activeFilter === 'urgent') return item.packages.some(p => p.daysRemaining <= 7) || item.bookings.some(b => !b.employeeId && b.date <= dayKey(Date.now() + 86400000 * 2));
+      if (activeFilter === 'unassigned') return item.bookings.some(b => !b.employeeId);
+      if (activeFilter === 'unpaid') return item.packages.some(p => p.paymentPending);
+      return true;
+    }).sort((a,b)=>a.deadline.localeCompare(b.deadline) || b.pressure-a.pressure || a.name.localeCompare(b.name,'es') || a.id.localeCompare(b.id));
   }
   function render() {
     const assignments=assignmentBookings(), reschedules=rescheduleBookings(), pendingRecs=pendingRecoveries();
@@ -70,13 +76,22 @@
       const prioritizeBooking=booking && (!pkg || booking.date<=dayKey(pkg.expiresAt));
       const reason=!prioritizeBooking && pkg ? `Bono: ${pkg.daysRemaining <= 1 ? 'caduca hoy o mañana' : `caduca en ${pkg.daysRemaining} días`}` : 'Cita sin trabajador asignado';
       const total=item.packages.reduce((n,p)=>n+p.sessionsToSchedule,0);
-      return `<article class="pending-urgent-card"><span class="pending-rank">Prioridad ${index+1}</span><h3>${esc(item.name)}</h3><p class="pending-reason">${esc(reason)}</p><p>${[...(total ? [quantity(total,'sesión de bono sin agendar','sesiones de bono sin agendar')] : []),...(item.bookings.length ? [quantity(item.bookings.length,'cita sin trabajador','citas sin trabajador')] : [])].join(' · ')}</p>${!prioritizeBooking && pkg ? `<small>Caducidad más próxima: ${esc(dateLabel(pkg.expiresAt))}</small>` : `<small>Cita: ${esc(booking.date)} · ${esc(booking.start)}</small>`}<button type="button" ${prioritizeBooking ? `data-edit="${esc(booking.id)}"` : `data-package="${esc(pkg.packageId)}"`}>${prioritizeBooking ? 'Organizar cita' : 'Agendar una sesión'}</button></article>`;
+      const isCritical = (!prioritizeBooking && pkg && pkg.daysRemaining <= 2) || (prioritizeBooking && booking && booking.date <= dayKey(Date.now() + 86400000));
+      const client = data?.clients ? data.clients.find(c => c.id === item.id) : null;
+      const prefWorker = client?.assignedWorkerId ? name('employees', client.assignedWorkerId) : null;
+      const prefSlotLabel = client?.contactSlot === 'MANANA' ? 'Mañanas' : client?.contactSlot === 'TARDE' ? 'Tardes' : client?.contactSlot === 'MEDIODIA' ? 'Mediodía' : null;
+      const prefSummary = [prefWorker ? `⭐ ${prefWorker}` : '', prefSlotLabel ? `⏰ ${prefSlotLabel}` : ''].filter(Boolean).join(' · ');
+      return `<article class="pending-urgent-card ${isCritical ? 'is-critical' : ''}"><div class="pending-card-top"><span class="pending-rank">Prioridad ${index+1}</span>${isCritical ? '<span class="urgency-pill critical">Urgente</span>' : '<span class="urgency-pill normal">Próximo</span>'}</div><h3>${esc(item.name)}</h3><p class="pending-reason">${esc(reason)}</p><p>${[...(total ? [quantity(total,'sesión de bono sin agendar','sesiones de bono sin agendar')] : []),...(item.bookings.length ? [quantity(item.bookings.length,'cita sin trabajador','citas sin trabajador')] : [])].join(' · ')}</p>${!prioritizeBooking && pkg ? `<small>Caducidad más próxima: ${esc(dateLabel(pkg.expiresAt))}</small>` : `<small>Cita: ${esc(booking.date)} · ${esc(booking.start)}</small>`}${prefSummary ? `<small class="pref-hint">${esc(prefSummary)}</small>` : ''}<button type="button" ${prioritizeBooking ? `data-edit="${esc(booking.id)}"` : `data-package="${esc(pkg.packageId)}"`}>${prioritizeBooking ? 'Organizar cita' : 'Agendar una sesión'}</button></article>`;
     }).join('');
-    $('rows').innerHTML=items.flatMap(item=>[
-      ...item.bookings.map(booking=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',booking.serviceId))}<small>${type === 'asignacion' ? 'Cita sin trabajador' : 'Pendiente de reprogramar'}</small></td><td>${esc(booking.date)} · ${esc(booking.start)}–${esc(booking.end)}</td><td>${esc(name('employees',booking.employeeId))}</td><td class="pending-actions"><button type="button" data-edit="${esc(booking.id)}">${type === 'asignacion' ? 'Asignar trabajador' : 'Reprogramar'}</button><a href="/index.html?fecha=${encodeURIComponent(booking.date)}&reserva=${encodeURIComponent(booking.id)}">Ver historial</a></td></tr>`),
-      ...item.recoveries.map(rec=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',rec.serviceId))}<small>${rec.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar'}</small></td><td>Sin fecha límite<small>Crédito de recuperación</small></td><td>${esc(name('employees',rec.employeeId))}</td><td class="pending-actions"><button type="button" data-recovery="${esc(rec.id)}">Agendar recuperación</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver ficha</a></td></tr>`),
-      ...item.packages.map(pkg=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(pkg.serviceName)}<small>${quantity(pkg.sessionsToSchedule,'sesión sin agendar','sesiones sin agendar')} · ${quantity(pkg.sessionsScheduled,'ya reservada','ya reservadas')}</small>${pkg.paymentPending ? '<small>Bono con pago pendiente</small>' : ''}</td><td>Caduca el ${esc(dateLabel(pkg.expiresAt))}<small>${pkg.daysRemaining} días restantes</small></td><td>Por elegir</td><td class="pending-actions"><button type="button" data-package="${esc(pkg.packageId)}">Agendar una sesión</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver bono y ficha</a></td></tr>`)
-    ]).join('') || '<tr><td colspan="5">No hay sesiones ni citas pendientes para esta búsqueda.</td></tr>';
+    $('rows').innerHTML=items.flatMap(item=>{
+      const client = data?.clients ? data.clients.find(c => c.id === item.id) : null;
+      const prefWorker = client?.assignedWorkerId ? name('employees', client.assignedWorkerId) : null;
+      return [
+        ...item.bookings.map(booking=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',booking.serviceId))}<small>${type === 'asignacion' ? 'Cita sin trabajador' : 'Pendiente de reprogramar'}</small></td><td>${esc(booking.date)} · ${esc(booking.start)}–${esc(booking.end)}</td><td>${esc(name('employees',booking.employeeId))}${!booking.employeeId && prefWorker ? `<small class="pref-hint">⭐ Habitual: ${esc(prefWorker)}</small>` : ''}</td><td class="pending-actions"><button type="button" data-edit="${esc(booking.id)}">${type === 'asignacion' ? 'Asignar trabajador' : 'Reprogramar'}</button><a href="/index.html?fecha=${encodeURIComponent(booking.date)}&reserva=${encodeURIComponent(booking.id)}">Ver historial</a></td></tr>`),
+        ...item.recoveries.map(rec=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',rec.serviceId))}<small>${rec.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar'}</small></td><td>Sin fecha límite<small>Crédito de recuperación</small></td><td>${esc(name('employees',rec.employeeId))}</td><td class="pending-actions"><button type="button" data-recovery="${esc(rec.id)}">Agendar recuperación</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver ficha</a></td></tr>`),
+        ...item.packages.map(pkg=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(pkg.serviceName)}<small>${quantity(pkg.sessionsToSchedule,'sesión sin agendar','sesiones sin agendar')} · ${quantity(pkg.sessionsScheduled,'ya reservada','ya reservadas')}</small>${pkg.paymentPending ? '<small class="tag-unpaid">⚠️ Bono con pago pendiente</small>' : ''}</td><td>Caduca el ${esc(dateLabel(pkg.expiresAt))}<small class="${pkg.daysRemaining <= 2 ? 'tag-critical' : ''}">${pkg.daysRemaining} días restantes</small></td><td>Por elegir${prefWorker ? `<small class="pref-hint">⭐ Habitual: ${esc(prefWorker)}</small>` : ''}</td><td class="pending-actions"><button type="button" data-package="${esc(pkg.packageId)}">Agendar una sesión</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver bono y ficha</a></td></tr>`)
+      ];
+    }).join('') || '<tr><td colspan="5">No hay sesiones ni citas pendientes para esta búsqueda.</td></tr>';
     const historyPanel=$('recoveries-history-panel'), historyList=$('recoveries-history-list');
     if (historyPanel && historyList) {
       const states={RESCHEDULE_PENDING:'Pendiente de reprogramación',PENDING:'Pendiente de recuperar',SCHEDULED:'Recuperación programada',COMPLETED:'Recuperada',FORFEITED:'Resuelta sin recuperación'};
@@ -105,8 +120,12 @@
     editing=pkg ? {clientId:pkg.clientId,serviceId:pkg.serviceId,packageId:pkg.packageId,centerId:data.gymId} : rec ? {clientId:rec.clientId,serviceId:rec.serviceId,recoveryId:rec.id,employeeId:rec.employeeId||'',centerId:data.gymId} : structuredClone(booking);
     const service=data.services.find(s=>s.id===editing.serviceId);
     if(!service){$('notice').textContent='El servicio ya no está disponible. Actualiza la lista.';return;}
-    $('employee').innerHTML=options(data.employees.filter(e=>e.active !== false && (!service.employeeIds?.length || service.employeeIds.includes(e.id))));
-    $('employee').value=editing.employeeId || $('employee').options[0]?.value || '';
+    const client=data.clients.find(c=>c.id===editing.clientId);
+    const activeEmployees=data.employees.filter(e=>e.active !== false && (!service.employeeIds?.length || service.employeeIds.includes(e.id)));
+    $('employee').innerHTML=options(activeEmployees);
+    // Preferencia de cliente: si no hay trabajador asignado en la cita, usar el entrenador habitual del cliente si está habilitado
+    const preferredEmployee=client?.assignedWorkerId && activeEmployees.some(e=>e.id===client.assignedWorkerId) ? client.assignedWorkerId : null;
+    $('employee').value=editing.employeeId || preferredEmployee || $('employee').options[0]?.value || '';
     $('room').innerHTML=options(data.rooms);$('room').value=editing.roomId || data.rooms[0]?.id || '';
     $('date').min=dayKey(Date.now());$('date').max=pkg ? dayKey(pkg.expiresAt) : '';
     $('date').value=editing.date || dayKey(Date.now());$('start').value=editing.start || '';
@@ -114,6 +133,33 @@
     $('title').textContent=pkg ? 'Agendar una sesión del bono' : rec ? 'Agendar sesión de recuperación' : 'Organizar reserva';
     $('save').textContent=pkg ? 'Confirmar sesión del bono' : rec ? 'Confirmar recuperación' : 'Confirmar nueva organización';
     $('original').textContent=pkg ? `${pkg.clientName} · ${pkg.serviceName} · ${quantity(pkg.sessionsToSchedule,'sesión disponible','sesiones disponibles')}. Se utilizará este bono sin crear otra compra.` : rec ? `${name('clients',rec.clientId)} · ${name('services',rec.serviceId)} · Sesión pendiente de recuperar. Se utilizará este crédito sin generar otro cobro.` : `${name('clients',editing.clientId)} · ${name('services',editing.serviceId)} · Anterior: ${editing.date} ${editing.start}`;
+
+    // Mostrar caja de preferencias del cliente
+    const prefBox=$('client-preferences-badge');
+    if(prefBox){
+      const assignedEmp=client?.assignedWorkerId ? data.employees.find(e=>e.id===client.assignedWorkerId) : null;
+      const daysMap={L:'Lunes',M:'Martes',X:'Miércoles',J:'Jueves',V:'Viernes',S:'Sábado',D:'Domingo'};
+      const slotsMap={MANANA:'Mañanas (09:00–14:00)',MEDIODIA:'Mediodía (14:00–16:00)',TARDE:'Tardes (16:00–21:00)'};
+      const prefDays=client?.availability?.days?.map(d=>daysMap[d]||d).join(', ');
+      const prefSlots=[
+        ...(client?.contactSlot ? [slotsMap[client.contactSlot]||client.contactSlot] : []),
+        ...(client?.availability?.slots ? client.availability.slots.filter(s=>s!==client.contactSlot).map(s=>slotsMap[s]||s) : [])
+      ].join(' · ');
+      const items=[];
+      if(assignedEmp)items.push(`<span class="pref-pill pref-pill-worker">⭐ Entrenador habitual: <strong>${esc(assignedEmp.name)}</strong></span>`);
+      if(prefDays)items.push(`<span class="pref-pill pref-pill-days">📅 Días: <strong>${esc(prefDays)}</strong></span>`);
+      if(prefSlots)items.push(`<span class="pref-pill pref-pill-time">⏰ Horario: <strong>${esc(prefSlots)}</strong></span>`);
+      if(client?.objective)items.push(`<span class="pref-pill pref-pill-obj">🎯 Objetivo: <em>${esc(client.objective)}</em></span>`);
+      if(client?.injuryNotes)items.push(`<span class="pref-pill pref-pill-injury">⚠️ Consideración: <em>${esc(client.injuryNotes)}</em></span>`);
+      if(items.length){
+        prefBox.hidden=false;
+        prefBox.innerHTML=`<div class="pref-card-title">💡 Preferencias del cliente</div><div class="pref-pills-row">${items.join('')}</div>`;
+      } else {
+        prefBox.hidden=true;
+        prefBox.innerHTML='';
+      }
+    }
+
     $('editor').showModal();
   }
   $('rows').onclick=$('urgent-list').onclick=openEditor;
@@ -126,7 +172,20 @@
       const pkg=packages.find(p=>p.packageId===editing.packageId);
       const expiry=pkg ? dayKey(pkg.expiresAt)+'T'+timeKey(pkg.expiresAt) : null;
       const slots=result.filter(slot=>($('date').value>dayKey(Date.now()) || slot.start>timeKey(Date.now())) && (!expiry || $('date').value+'T'+slot.end<=expiry));
-      $('availability').innerHTML=slots.length ? '<p>Elige un hueco disponible:</p>'+slots.map(slot=>`<button type="button" data-slot="${esc(slot.start)}">${esc(slot.start)}</button>`).join('') : '<p>No hay huecos disponibles. Prueba otro día o trabajador.</p>';
+      const client=data.clients.find(c=>c.id===editing.clientId);
+      const preferredSlot=client?.contactSlot || client?.availability?.slots?.[0];
+      const isSlotPreferred=startStr=>{
+        if(!preferredSlot)return false;
+        const h=parseInt(startStr,10);
+        if(preferredSlot==='MANANA')return h<14;
+        if(preferredSlot==='MEDIODIA')return h>=14 && h<16;
+        if(preferredSlot==='TARDE')return h>=16;
+        return false;
+      };
+      $('availability').innerHTML=slots.length ? '<p>Elige un hueco disponible:</p>'+slots.map(slot=>{
+        const isFav=isSlotPreferred(slot.start);
+        return `<button type="button" data-slot="${esc(slot.start)}" class="${isFav ? 'is-preferred-slot' : ''}" title="${isFav ? 'Coincide con la preferencia horaria del cliente' : ''}">${isFav ? '⭐ ' : ''}${esc(slot.start)}</button>`;
+      }).join('') : '<p>No hay huecos disponibles. Prueba otro día o trabajador.</p>';
     } catch(error){$('error').textContent=error.message;}
   };
   $('availability').onclick=event=>{const slot=event.target.closest('[data-slot]');if(slot){$('start').value=slot.dataset.slot;$('start').focus();}};
@@ -153,6 +212,17 @@
   $('editor').addEventListener('cancel',event=>{if(saving)event.preventDefault();});
   $('search').oninput=()=>{if(data)render();};
   $('refresh').onclick=()=>load().catch(error=>$('notice').textContent=error.message);
+  const quickFilters = $('quick-filters');
+  if (quickFilters) {
+    quickFilters.onclick = (e) => {
+      const chip = e.target.closest('.chip-filter');
+      if (!chip) return;
+      quickFilters.querySelectorAll('.chip-filter').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeFilter = chip.dataset.filter || 'all';
+      if (data) render();
+    };
+  }
   try {
     const me=await api('me');const canPending=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)?me.pagePermissions.includes('pendientes.html'):['ADMIN','RECEPTION'].includes(me.role));if(!canPending)throw Error('No tienes permiso para gestionar pendientes.');
     await load();

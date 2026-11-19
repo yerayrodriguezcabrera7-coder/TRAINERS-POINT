@@ -121,6 +121,10 @@
           const prio = booking && (!pkg || booking.date <= dayKey(pkg.expiresAt));
           const reason = !prio && pkg ? 'Bono: ' + (pkg.daysRemaining <= 1 ? 'caduca hoy o mañana' : 'caduca en ' + pkg.daysRemaining + ' días') : 'Cita sin trabajador asignado';
           const total = item.packages.reduce((n, p) => n + p.sessionsToSchedule, 0);
+          const client = pendingData.clients ? pendingData.clients.find(c => c.id === item.id) : null;
+          const prefWorker = client?.assignedWorkerId ? workerName(client.assignedWorkerId) : null;
+          const prefSlotLabel = client?.contactSlot === 'MANANA' ? 'Mañanas' : client?.contactSlot === 'TARDE' ? 'Tardes' : client?.contactSlot === 'MEDIODIA' ? 'Mediodía' : null;
+          const prefSummary = [prefWorker ? '⭐ ' + prefWorker : '', prefSlotLabel ? '⏰ ' + prefSlotLabel : ''].filter(Boolean).join(' · ');
           return '<article class="planning-urgent-card">' +
             '<span class="planning-rank">Prioridad ' + (i + 1) + '</span>' +
             '<h3>' + esc(item.name) + '</h3>' +
@@ -130,6 +134,7 @@
               ...(item.bookings.length ? [qty(item.bookings.length, 'cita sin trabajador', 'citas sin trabajador')] : [])
             ].join(' · ') + '</p>' +
             (!prio && pkg ? '<small>Caducidad: ' + dateLabel(pkg.expiresAt) + '</small>' : '<small>Cita: ' + esc(booking.date) + ' · ' + esc(booking.start) + '</small>') +
+            (prefSummary ? '<small class="pref-hint">' + esc(prefSummary) + '</small>' : '') +
             '<button type="button" ' + (prio ? 'data-edit="' + esc(booking.id) + '"' : 'data-package="' + esc(pkg.packageId) + '"') + '>' +
             (prio ? 'Organizar cita' : 'Agendar sesión') + '</button></article>';
         }).join('');
@@ -153,35 +158,39 @@
     // Main table
     const rows = $('planning-rows');
     if (rows) {
-      rows.innerHTML = items.flatMap(item => [
-        ...item.bookings.map(b => '<tr>' +
-          '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
-          '<td>' + serviceName(b.serviceId) + '<small>' + (tab ? 'Cita sin trabajador' : 'Pendiente de reprogramar') + '</small></td>' +
-          '<td>' + esc(b.date) + ' · ' + esc(b.start) + '–' + esc(b.end) + '</td>' +
-          '<td>' + workerName(b.employeeId) + '</td>' +
-          '<td class="planning-actions">' +
-          '<button type="button" data-edit="' + esc(b.id) + '">' + (tab ? 'Asignar trabajador' : 'Reprogramar') + '</button>' +
-          '<a href="/index.html?fecha=' + encodeURIComponent(b.date) + '&reserva=' + encodeURIComponent(b.id) + '">Ver historial</a>' +
-          '</td></tr>'),
-        ...item.recoveries.map(r => '<tr>' +
-          '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
-          '<td>' + serviceName(r.serviceId) + '<small>' + (r.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar') + '</small></td>' +
-          '<td>Sin fecha<small>Crédito de recuperación</small></td>' +
-          '<td>' + workerName(r.employeeId) + '</td>' +
-          '<td class="planning-actions">' +
-          '<button type="button" data-recovery="' + esc(r.id) + '">Agendar recuperación</button>' +
-          '<a href="/clientes/' + encodeURIComponent(item.id) + '/ficha">Ver ficha</a>' +
-          '</td></tr>'),
-        ...item.packages.map(p => '<tr>' +
-          '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
-          '<td>' + serviceName(p.serviceId) + '<small>' + qty(p.sessionsToSchedule, 'sesión sin agendar', 'sesiones sin agendar') + ' · ' + qty(p.sessionsScheduled, 'ya reservada', 'ya reservadas') + '</small>' + (p.paymentPending ? '<small>Bono con pago pendiente</small>' : '') + '</td>' +
-          '<td>Caduca el ' + dateLabel(p.expiresAt) + '<small>' + p.daysRemaining + ' días</small></td>' +
-          '<td>Por elegir</td>' +
-          '<td class="planning-actions">' +
-          '<button type="button" data-package="' + esc(p.packageId) + '">Agendar sesión</button>' +
-          '<a href="/clientes/' + encodeURIComponent(item.id) + '/ficha">Ver bono</a>' +
-          '</td></tr>')
-      ]).join('') || '<tr><td colspan="5">No hay pendientes para esta búsqueda.</td></tr>';
+      rows.innerHTML = items.flatMap(item => {
+        const client = pendingData.clients ? pendingData.clients.find(c => c.id === item.id) : null;
+        const prefWorker = client?.assignedWorkerId ? workerName(client.assignedWorkerId) : null;
+        return [
+          ...item.bookings.map(b => '<tr>' +
+            '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
+            '<td>' + serviceName(b.serviceId) + '<small>' + (tab ? 'Cita sin trabajador' : 'Pendiente de reprogramar') + '</small></td>' +
+            '<td>' + esc(b.date) + ' · ' + esc(b.start) + '–' + esc(b.end) + '</td>' +
+            '<td>' + workerName(b.employeeId) + (!b.employeeId && prefWorker ? '<small class="pref-hint">⭐ Habitual: ' + esc(prefWorker) + '</small>' : '') + '</td>' +
+            '<td class="planning-actions">' +
+            '<button type="button" data-edit="' + esc(b.id) + '">' + (tab ? 'Asignar trabajador' : 'Reprogramar') + '</button>' +
+            '<a href="/index.html?fecha=' + encodeURIComponent(b.date) + '&reserva=' + encodeURIComponent(b.id) + '">Ver historial</a>' +
+            '</td></tr>'),
+          ...item.recoveries.map(r => '<tr>' +
+            '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
+            '<td>' + serviceName(r.serviceId) + '<small>' + (r.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar') + '</small></td>' +
+            '<td>Sin fecha<small>Crédito de recuperación</small></td>' +
+            '<td>' + workerName(r.employeeId) + '</td>' +
+            '<td class="planning-actions">' +
+            '<button type="button" data-recovery="' + esc(r.id) + '">Agendar recuperación</button>' +
+            '<a href="/clientes/' + encodeURIComponent(item.id) + '/ficha">Ver ficha</a>' +
+            '</td></tr>'),
+          ...item.packages.map(p => '<tr>' +
+            '<td><strong>' + clientLink(item.id, item.name) + '</strong></td>' +
+            '<td>' + serviceName(p.serviceId) + '<small>' + qty(p.sessionsToSchedule, 'sesión sin agendar', 'sesiones sin agendar') + ' · ' + qty(p.sessionsScheduled, 'ya reservada', 'ya reservadas') + '</small>' + (p.paymentPending ? '<small>Bono con pago pendiente</small>' : '') + '</td>' +
+            '<td>Caduca el ' + dateLabel(p.expiresAt) + '<small>' + p.daysRemaining + ' días</small></td>' +
+            '<td>Por elegir' + (prefWorker ? '<small class="pref-hint">⭐ Habitual: ' + esc(prefWorker) + '</small>' : '') + '</td>' +
+            '<td class="planning-actions">' +
+            '<button type="button" data-package="' + esc(p.packageId) + '">Agendar sesión</button>' +
+            '<a href="/clientes/' + encodeURIComponent(item.id) + '/ficha">Ver bono</a>' +
+            '</td></tr>')
+        ];
+      }).join('') || '<tr><td colspan="5">No hay pendientes para esta búsqueda.</td></tr>';
     }
   }
 
@@ -252,16 +261,19 @@
     const service = pendingData.services.find(s => s.id === pendingEditorData.serviceId);
     if (!service) { const err = $('editor-error'); if (err) { err.textContent = 'El servicio ya no está disponible.'; err.hidden = false; } return; }
 
+    const client = pendingData.clients ? pendingData.clients.find(c => c.id === pendingEditorData.clientId) : null;
+    const activeEmployees = pendingData.employees.filter(e => e.active !== false && (!service.employeeIds?.length || service.employeeIds.includes(e.id)));
+    const preferredEmployee = client?.assignedWorkerId && activeEmployees.some(e => e.id === client.assignedWorkerId) ? client.assignedWorkerId : null;
+
     const empSelect = $('planning-employee');
     if (empSelect) {
-      empSelect.innerHTML = pendingData.employees.filter(e => e.active !== false && (!service.employeeIds?.length || service.employeeIds.includes(e.id)))
-        .map(e => '<option value="' + e.id + '">' + e.name + '</option>').join('');
-      empSelect.value = pendingEditorData.employeeId || empSelect.options[0]?.value || '';
+      empSelect.innerHTML = activeEmployees.map(e => '<option value="' + e.id + '">' + esc(e.name) + '</option>').join('');
+      empSelect.value = pendingEditorData.employeeId || preferredEmployee || empSelect.options[0]?.value || '';
     }
 
     const roomSelect = $('planning-room');
     if (roomSelect) {
-      roomSelect.innerHTML = pendingData.rooms.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+      roomSelect.innerHTML = pendingData.rooms.map(r => '<option value="' + r.id + '">' + esc(r.name) + '</option>').join('');
       roomSelect.value = pendingEditorData.roomId || pendingData.rooms[0]?.id || '';
     }
 
@@ -290,6 +302,32 @@
       orig.textContent = txt;
     }
 
+    // Preferencias del cliente
+    const prefBox = $('planning-client-preferences');
+    if (prefBox) {
+      const assignedEmp = client?.assignedWorkerId ? pendingData.employees.find(e => e.id === client.assignedWorkerId) : null;
+      const daysMap = { L: 'Lunes', M: 'Martes', X: 'Miércoles', J: 'Jueves', V: 'Viernes', S: 'Sábado', D: 'Domingo' };
+      const slotsMap = { MANANA: 'Mañanas (09:00–14:00)', MEDIODIA: 'Mediodía (14:00–16:00)', TARDE: 'Tardes (16:00–21:00)' };
+      const prefDays = client?.availability?.days?.map(d => daysMap[d] || d).join(', ');
+      const prefSlots = [
+        ...(client?.contactSlot ? [slotsMap[client.contactSlot] || client.contactSlot] : []),
+        ...(client?.availability?.slots ? client.availability.slots.filter(s => s !== client.contactSlot).map(s => slotsMap[s] || s) : [])
+      ].join(' · ');
+      const items = [];
+      if (assignedEmp) items.push('<span class="pref-pill pref-pill-worker">⭐ Entrenador habitual: <strong>' + esc(assignedEmp.name) + '</strong></span>');
+      if (prefDays) items.push('<span class="pref-pill pref-pill-days">📅 Días: <strong>' + esc(prefDays) + '</strong></span>');
+      if (prefSlots) items.push('<span class="pref-pill pref-pill-time">⏰ Horario: <strong>' + esc(prefSlots) + '</strong></span>');
+      if (client?.objective) items.push('<span class="pref-pill pref-pill-obj">🎯 Objetivo: <em>' + esc(client.objective) + '</em></span>');
+      if (client?.injuryNotes) items.push('<span class="pref-pill pref-pill-injury">⚠️ Consideración: <em>' + esc(client.injuryNotes) + '</em></span>');
+      if (items.length) {
+        prefBox.hidden = false;
+        prefBox.innerHTML = '<div class="pref-card-title">💡 Preferencias del cliente</div><div class="pref-pills-row">' + items.join('') + '</div>';
+      } else {
+        prefBox.hidden = true;
+        prefBox.innerHTML = '';
+      }
+    }
+
     $('planning-editor').showModal();
   }
 
@@ -306,7 +344,25 @@
       const expiry = pkg ? dayKey(pkg.expiresAt) + 'T' + timeKey(pkg.expiresAt) : null;
       const valid = (result || []).filter(slot => (!dateVal || dayKey(Date.now()) <= dateVal || slot.start > timeKey(Date.now())) && (!expiry || dateVal + 'T' + slot.end <= expiry));
       if (!valid.length) { $('editor-slots').innerHTML = '<p>No hay huecos disponibles. Prueba otro día o trabajador.</p>'; }
-      else { $('editor-slots').innerHTML = valid.map(s => '<button type="button" class="slot-btn" data-slot="' + esc(s.start) + '">' + esc(s.start) + '</button>').join(''); }
+      else {
+        const client = pendingData.clients ? pendingData.clients.find(c => c.id === pendingEditorData?.clientId) : null;
+        const targetSlots = [
+          ...(client?.contactSlot ? [client.contactSlot] : []),
+          ...(client?.availability?.slots || [])
+        ];
+        const isSlotPreferred = slotStart => {
+          if (!targetSlots.length) return false;
+          const [h] = slotStart.split(':').map(Number);
+          if (targetSlots.includes('MANANA') && h >= 6 && h < 14) return true;
+          if (targetSlots.includes('MEDIODIA') && h >= 14 && h < 16) return true;
+          if (targetSlots.includes('TARDE') && h >= 16 && h < 23) return true;
+          return false;
+        };
+        $('editor-slots').innerHTML = valid.map(s => {
+          const pref = isSlotPreferred(s.start);
+          return '<button type="button" class="slot-btn' + (pref ? ' is-preferred-slot' : '') + '" data-slot="' + esc(s.start) + '">' + (pref ? '⭐ ' : '') + esc(s.start) + (pref ? ' (Preferencia)' : '') + '</button>';
+        }).join('');
+      }
     }).catch(e => { $('editor-error').textContent = e.message; $('editor-error').hidden = false; });
   }
 

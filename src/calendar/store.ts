@@ -108,7 +108,7 @@ export class Store {
     const clientsQuery = this.clientsDb.client.findMany({
       where: await clientScope(this.clientsDb,externalGym.id),
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true, availability: true, contactSlot: true, objective: true, injuryNotes: true, preferredName: true },
     });
     const servicesQuery = this.clientsDb.service.findMany({
       // Packs are commercial products, not schedulable session types. A booking
@@ -143,6 +143,11 @@ export class Store {
       status: client.status === "ACTIVO" || client.status === "LEAD" ? "ACTIVE" as const : client.status === "BAJA" ? "BLOCKED" as const : "INACTIVE" as const,
       birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : "",
       assignedWorkerId: (client as any).assignedWorkerId || null,
+      availability: (client as any).availability || null,
+      contactSlot: (client as any).contactSlot || null,
+      objective: (client as any).objective || null,
+      injuryNotes: (client as any).injuryNotes || null,
+      preferredName: (client as any).preferredName || null,
     }));
     if (services.length) {
       const saved = config.services;
