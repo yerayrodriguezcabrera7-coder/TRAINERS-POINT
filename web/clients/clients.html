@@ -118,26 +118,23 @@
     <dialog id="create-dialog" class="client-dialog" aria-labelledby="dialog-title">
       <form id="create-form" novalidate="">
         <div class="intake-header">
-          <div>
-            <p class="eyebrow">NUEVA FICHA</p>
-            <h2 id="dialog-title">Añadir cliente</h2>
-          </div>
+          <h2 id="dialog-title">Añadir cliente</h2>
           <button class="icon-button" id="close-dialog" type="button" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
         </div>
-        <div class="intake-progress" aria-live="polite">
+        <div class="intake-progress" aria-live="polite" style="display:none;">
           <span id="intake-step-label">Paso 1 de 4</span>
           <div class="intake-progress-track"><span id="intake-progress-value"></span></div>
         </div>
         <div class="intake-layout">
           <nav class="intake-step-list" aria-label="Pasos del alta">
-            <button type="button" data-intake-nav="0" aria-current="step"><span>01</span>Quién es</button>
-            <button type="button" data-intake-nav="1"><span>02</span>Cómo es</button>
-            <button type="button" data-intake-nav="2"><span>03</span>Salud y horario</button>
-            <button type="button" data-intake-nav="3"><span>04</span>Propuesta inicial</button>
+            <button type="button" data-intake-nav="0" aria-current="step"><span>1</span>Contacto</button>
+            <button type="button" data-intake-nav="1"><span>2</span>Preferencias</button>
+            <button type="button" data-intake-nav="2"><span>3</span>Salud y horario</button>
+            <button type="button" data-intake-nav="3"><span>4</span>Propuesta</button>
           </nav>
           <div class="intake-content">
             <section class="intake-step" data-intake-step="0" aria-labelledby="intake-title-1">
-              <p class="eyebrow">PASO 1</p><h3 id="intake-title-1">Quién es</h3><p class="intake-help">Los datos para encontrar su ficha y contactar.</p>
+              <h3 id="intake-title-1" class="step-heading">Datos de contacto</h3>
               <div class="form-grid intake-fields">
                 <label><span>Marca del cliente</span><select name="brand" id="create-brand" required><option value="TRAINERS_POINT">Trainers Point</option><option value="COBOSU">Cobosu</option></select></label>
                 <label class="form-field"><span>Nombre <b>*</b></span><input name="firstName" required="" maxlength="100" autocomplete="given-name" placeholder="Ej. Laura" aria-describedby="intake-error-firstName"><span class="intake-field-error" id="intake-error-firstName" data-field-error="firstName" aria-live="polite" hidden=""></span></label>
@@ -152,7 +149,7 @@
             </section>
 
             <section class="intake-step" data-intake-step="1" aria-labelledby="intake-title-2" hidden="">
-              <p class="eyebrow">PASO 2</p><h3 id="intake-title-2">Cómo es</h3><p class="intake-help">Preferencias para preparar su propuesta.</p>
+              <h3 id="intake-title-2" class="step-heading">Preferencias y objetivos</h3>
               <fieldset class="intake-choice-group">
                 <legend>Sexo</legend>
                 <div class="intake-segments">
@@ -160,7 +157,6 @@
                   <label><input type="radio" name="sex" value="HOMBRE"><span>Hombre</span></label>
                   <label><input type="radio" name="sex" value="NO_INDICA"><span>Prefiero no indicarlo</span></label>
                 </div>
-                <small>Lo usamos para adaptar las medidas y las propuestas. Puedes dejarlo vacío.</small>
               </fieldset>
               <div class="form-grid intake-fields">
                 <label class="form-field"><span>Fecha de nacimiento</span><input name="birthDate" type="date" autocomplete="bday"></label>
@@ -194,7 +190,7 @@
             </section>
 
             <section class="intake-step" data-intake-step="2" aria-labelledby="intake-title-3" hidden="">
-              <p class="eyebrow">PASO 3</p><h3 id="intake-title-3">Salud y horario</h3><p class="intake-help">Solo para que la entrenadora prepare bien la primera sesión.</p>
+              <h3 id="intake-title-3" class="step-heading">Salud y disponibilidad</h3>
               <div class="form-grid intake-fields">
                 <fieldset class="intake-choice-group form-field-wide">
                   <legend>Lesiones o molestias</legend>
@@ -214,7 +210,7 @@
                 <fieldset class="intake-choice-group form-field-wide"><legend>Franjas disponibles</legend><div class="intake-chips">
                   <label><input type="checkbox" name="availabilitySlot" value="MANANA"><span>Mañana</span></label><label><input type="checkbox" name="availabilitySlot" value="MEDIODIA"><span>Mediodía</span></label><label><input type="checkbox" name="availabilitySlot" value="TARDE"><span>Tarde</span></label>
                 </div></fieldset>
-                <label class="form-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"><small>Se guarda como preferencia; no crea una reserva en el calendario.</small></label>
+                <label class="form-field"><span>Preferencia de primera sesión</span><input name="firstSessionPreference" type="datetime-local"></label>
                 <fieldset class="intake-choice-group form-field-wide intake-consents">
                   <legend>Consentimientos</legend>
                   <label><input name="consentData" type="checkbox" required="" aria-describedby="intake-error-consentData"><span>Uso de datos personales <b>*</b></span></label>
@@ -226,7 +222,7 @@
             </section>
 
             <section class="intake-step" data-intake-step="3" aria-labelledby="intake-title-4" hidden="">
-              <p class="eyebrow">PASO 4</p><h3 id="intake-title-4">Propuesta inicial</h3><p class="intake-help">Precios y duración calculados con el catálogo actual.</p>
+              <h3 id="intake-title-4" class="step-heading">Propuesta inicial</h3>
               <p id="proposal-reason" class="proposal-reason"></p>
               <p id="proposal-error" class="proposal-error" role="alert" hidden=""></p>
               <div id="proposal-empty" class="proposal-empty" hidden=""><p>Aún no hay servicios creados.</p><button id="open-intake-service-create" class="button button-outline" type="button">Crear servicio</button></div>
@@ -238,13 +234,12 @@
         <div class="intake-footer">
           <div class="intake-footer-start">
             <button class="button button-outline" id="intake-back" type="button" hidden="">Atrás</button>
-            <span class="intake-save-note">Se guarda al final del paso 4</span>
           </div>
           <div class="intake-footer-actions">
             <button class="button button-outline" id="cancel-create" type="button">Cancelar</button>
             <button class="button button-primary" id="intake-next" type="button">Siguiente</button>
             <button class="button button-outline" id="create-client-only" type="submit" value="createOnly" hidden="">Crear solo el cliente</button>
-            <button class="button button-primary" id="submit-create" type="submit" value="addProposal" hidden="">Crear cliente y añadir esta propuesta</button>
+            <button class="button button-primary" id="submit-create" type="submit" value="addProposal" hidden="">Crear cliente y añadir propuesta</button>
           </div>
         </div>
       </form>
