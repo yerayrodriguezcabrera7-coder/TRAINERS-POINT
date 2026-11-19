@@ -24,38 +24,52 @@
         <h1 id="calendar-heading-title">Calendario del equipo<span style="color:var(--red)">.</span></h1>
         <p id="today-label"></p>
       </div>
-      <div class="heading-actions"><button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button><button class="button primary" id="new-booking"><span aria-hidden="true">+</span> Nueva reserva</button></div>
+      <div class="heading-actions">
+        <!-- Botón con desplegable de pendientes de asignación -->
+        <div class="pending-dropdown-wrapper" id="planning-banner" hidden>
+          <button type="button" class="button secondary pending-dropdown-trigger" id="planning-banner-header" aria-expanded="false" aria-controls="planning-banner-content" aria-haspopup="dialog" title="Ver clientes y citas pendientes de asignación o reprogramación">
+            <span class="planning-banner-icon">⚠</span>
+            <span id="planning-banner-count">Pendientes</span>
+            <span class="planning-banner-arrow">▾</span>
+          </button>
+          <div id="planning-banner-content" class="pending-dropdown-panel" hidden>
+            <div class="pending-dropdown-panel-header">
+              <div class="pending-panel-title">
+                <div class="pending-panel-title-text">
+                  <strong>Pendientes de asignación</strong>
+                  <span class="pending-panel-badge" id="pending-dropdown-badge">0</span>
+                </div>
+                <p class="pending-panel-subtitle">Organiza bonos, citas sin trabajador y reprogramaciones</p>
+              </div>
+              <button type="button" class="panel-close-btn" id="close-planning-banner" aria-label="Cerrar panel">×</button>
+            </div>
+            <nav class="planning-banner-tabs" role="tablist">
+              <button role="tab" class="planning-banner-tab active" data-tab="todos" aria-selected="true" id="planning-tab-todos">Todos</button>
+              <button role="tab" class="planning-banner-tab" data-tab="asignacion" aria-selected="false" id="planning-tab-asignacion">Por organizar</button>
+              <button role="tab" class="planning-banner-tab" data-tab="reprogramacion" aria-selected="false" id="planning-tab-reprogramacion">Reprogramar / Recuperar</button>
+            </nav>
+            <div class="planning-banner-toolbar">
+              <label for="planning-search">Buscar cliente o servicio<input type="search" id="planning-search" placeholder="Nombre del cliente o servicio" autocomplete="off"></label>
+              <button id="planning-refresh" type="button" class="outline-button">Actualizar</button>
+            </div>
+            <div id="planning-urgent-panel" class="planning-urgent-panel" hidden>
+              <div class="planning-urgent-list" id="planning-urgent-list"></div>
+            </div>
+            <div class="planning-banner-body">
+              <div class="history-scroll"><table class="planning-table" role="grid"><thead><tr><th>Cliente</th><th>Servicio y pendientes</th><th>Fecha o caducidad</th><th>Trabajador</th><th>Acciones</th></tr></thead><tbody id="planning-rows"></tbody></table></div>
+              <p id="planning-list-summary" class="planning-summary" role="status"></p>
+            </div>
+            <div id="planning-recoveries-history" class="planning-recoveries-panel" hidden>
+              <h3>Estado de créditos de recuperación</h3>
+              <div id="planning-recoveries-list"></div>
+            </div>
+          </div>
+        </div>
+        <button class="button secondary" id="schedule-button"><span aria-hidden="true">◷</span> Horarios</button>
+        <button class="button primary" id="new-booking"><span aria-hidden="true">+</span> Nueva reserva</button>
+      </div>
     </header>
     <div id="storage-warning" class="warning" role="alert" hidden=""></div>
-    <!-- Pending & Recoveries collapsible banner -->
-    <section id="planning-banner" class="planning-banner" hidden aria-label="Pendientes y Recuperaciones">
-      <button type="button" class="planning-banner-header" aria-expanded="false" aria-controls="planning-banner-content">
-        <span class="planning-banner-icon">⚠</span>
-        <span id="planning-banner-count">0 pendientes</span>
-        <span class="planning-banner-arrow">▾</span>
-      </button>
-      <div id="planning-banner-content" class="planning-banner-content" hidden>
-        <nav class="planning-banner-tabs" role="tablist">
-          <button role="tab" class="planning-banner-tab active" data-tab="asignacion" aria-selected="true">Por organizar</button>
-          <button role="tab" class="planning-banner-tab" data-tab="reprogramacion" aria-selected="false">Reprogramar / Recuperar</button>
-        </nav>
-        <div class="planning-banner-toolbar">
-          <label for="planning-search">Buscar cliente o servicio<input type="search" id="planning-search" placeholder="Nombre del cliente o servicio" autocomplete="off"></label>
-          <button id="planning-refresh" type="button" class="outline-button">Actualizar</button>
-        </div>
-        <div id="planning-urgent-panel" class="planning-urgent-panel" hidden>
-          <div class="planning-urgent-list" id="planning-urgent-list"></div>
-        </div>
-        <div class="planning-banner-body">
-          <div class="history-scroll"><table class="planning-table" role="grid"><thead><tr><th>Cliente</th><th>Servicio y pendientes</th><th>Fecha o caducidad</th><th>Trabajador</th><th>Acciones</th></tr></thead><tbody id="planning-rows"></tbody></table></div>
-          <p id="planning-list-summary" class="planning-summary" role="status"></p>
-        </div>
-        <div id="planning-recoveries-history" class="planning-recoveries-panel" hidden>
-          <h3>Estado de créditos de recuperación</h3>
-          <div id="planning-recoveries-list"></div>
-        </div>
-      </div>
-    </section>
     <div id="planning-alerts" class="planning-alerts" aria-live="polite" hidden></div>
     <section class="calendar-panel" aria-label="Calendario de reservas">
       <div class="calendar-toolbar">

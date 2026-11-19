@@ -452,12 +452,7 @@ function renderCalendarClientSearch() {
 }
 function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${dualMissingPartner(b)?', Falta por asignar 2ª persona':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }
 
-function sundayParkingColumn() {
-  return { id: '__unassigned', name: 'Sin sitio asignado', color: '#b86b00', schedule: data.schedule, isSundayParking: true };
-}
-
 function employeesForDate(date, dayBookings, allEmployees) {
-  const sunday = isSunday(date);
   const isCobosuView = activeBrandView() === 'COBOSU';
 
   if (isCobosuView) {
@@ -468,24 +463,13 @@ function employeesForDate(date, dayBookings, allEmployees) {
   if (state.employee !== 'all') {
     if (state.employee === COBOSU_ID) return [];
     if (state.employee === '__unassigned') {
-      return [sunday ? sundayParkingColumn() : { id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
+      return [{ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule }];
     }
     const emp = allEmployees.find(e => e.id === state.employee);
     return emp ? [emp] : [];
   }
 
-  if (sunday) {
-    const cols = currentUser?.role !== 'TRAINER' ? [sundayParkingColumn()] : [];
-    const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
-    for (const emp of allEmployees) {
-      if (emp.id !== COBOSU_ID && emp.id !== '__unassigned' && bookingEmpIds.has(emp.id)) {
-        cols.push(emp);
-      }
-    }
-    return cols;
-  }
-
-  // Trainers Point: cuadrante de turnos del equipo (Cobosu NUNCA aparece aquí)
+  // Trainers Point: cuadrante de turnos del equipo (Lunes a Domingo completo)
   const scheduled = [];
 
   for (const emp of allEmployees) {
@@ -498,7 +482,7 @@ function employeesForDate(date, dayBookings, allEmployees) {
 
   for (const emp of allEmployees) {
     if (emp.id === '__unassigned' || emp.id === COBOSU_ID || emp.active === false || scheduled.some(item => item.id === emp.id)) continue;
-    if (!C.employeePeriods(emp, date, data.schedule).length) scheduled.push(emp);
+    if (C.employeePeriods(emp, date, data.schedule).length) scheduled.push(emp);
   }
 
   const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
@@ -526,7 +510,7 @@ function gridHourBounds(dates, bookings) {
   }
   const visibleDates = new Set(dates);
   for (const b of bookings) {
-    if (!visibleDates.has(b.date) || (isSunday(b.date) && !b.employeeId)) continue;
+    if (!visibleDates.has(b.date)) continue;
     minMin = Math.min(minMin, C.minutes(b.start));
     maxMin = Math.max(maxMin, C.minutes(b.end));
   }
@@ -568,14 +552,13 @@ function renderTimeGrid(dates, bookings, employees) {
 
   dateLayouts.forEach((d, dayIdx) => {
     const today = d.date === todayKey();
-    const sunday = isSunday(d.date);
     const isAlt = dayIdx % 2 === 1;
     const hasNextDay = dayIdx < dateLayouts.length - 1;
-    html += `<div class="day-heading ${today ? 'today' : ''} ${sunday ? 'is-sunday-parking' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+    html += `<div class="day-heading ${today ? 'today' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
       <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
       <strong>${C.parseDate(d.date).getDate()}</strong>
       <span>${prettyDate(d.date, { month: 'short' })}</span>
-      ${!sunday && !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">+</button>` : ''}
+      ${!isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">+</button>` : ''}
     </div>`;
   });
 
@@ -589,13 +572,12 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
-        const periods = isParking ? [{ open: '00:00', close: '23:59' }] : isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = isParking ? 'Arrastrar a L–S' : isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Sin turno'));
-        const isOff = !isParking && !periods.length && employee.id !== '__unassigned';
+        const periods = isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
+        const shiftText = isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Sin turno'));
+        const isOff = !periods.length && employee.id !== '__unassigned';
         const isEditable = !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
-        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
           <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
@@ -618,52 +600,34 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
-        const isParking = Boolean(employee.isSundayParking);
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
-        const isOff = !isParking && employee.id !== '__unassigned' && (isCobosu ? C.hoursFor(d.date, data.schedule).closed : C.employeePeriods(employee, d.date, data.schedule).length === 0);
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isParking ? 'is-sunday-parking' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
-        const absent = !isCobosu && !isParking && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
-        const serviceWorker = isCobosu || isParking || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
+        const isOff = employee.id !== '__unassigned' && (isCobosu ? C.hoursFor(d.date, data.schedule).closed : C.employeePeriods(employee, d.date, data.schedule).length === 0);
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
+        const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
         for (let slot = startHour * 2; slot < endHour * 2; slot++) {
           const start = slot * 30;
-          const serviceOpen = isParking || !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
-          const open = isParking || (!absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule));
+          const serviceOpen = !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
+          const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule);
           const label = `${dayLabel}, ${C.timeLabel(start)}, ${employee.name}`;
-          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${isParking ? 'Crear reserva sin asignar en domingo' : open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
+          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
         }
         const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
-        if (isParking) {
-          html += '<div class="sunday-parking-list">';
-          if (!dayColBookings.length) {
-            html += '<div class="sunday-parking-empty">Arrastra aquí clientes sin sitio asignado y llévalos luego a su día</div>';
-          } else {
-            dayColBookings.forEach(b => {
-              const clientName = lookup('clients', b.clientId).name;
-              const serviceObj = lookup('services', b.serviceId);
-              const dur = Math.max(15, C.minutes(b.end) - C.minutes(b.start));
-              const isDraggable = canDragBooking(b);
-              const color = serviceObj.color || '#317b9b';
-              html += `<button class="event sunday-parking-card ${b.status} unassigned ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">Sin sitio asignado · ${dur} min</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceObj.name)}</div><div class="event-meta">Arrastra al día y entrenador${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
-            });
-          }
-          html += '</div>';
-        } else {
-          const placed = C.layoutEvents(dayColBookings);
-          placed.forEach(({ event: b, lane, count }) => {
-            const startMin = C.minutes(b.start);
-            const endMin = C.minutes(b.end);
-            const top = (startMin - offsetMin) * 1.4;
-            const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
-            const width = 100 / count;
-            const left = lane * width;
-            const color = lookup('services', b.serviceId).color || '#317b9b';
-            const clientName = lookup('clients', b.clientId).name;
-            const serviceName = lookup('services', b.serviceId).name;
-            const isDraggable = canDragBooking(b);
-            html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceName)}</div><div class="event-meta">${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
-          });
-        }
+        const placed = C.layoutEvents(dayColBookings);
+        placed.forEach(({ event: b, lane, count }) => {
+          const startMin = C.minutes(b.start);
+          const endMin = C.minutes(b.end);
+          const top = (startMin - offsetMin) * 1.4;
+          const height = Math.max((endMin - startMin) * 1.4 - 2, 22);
+          const width = 100 / count;
+          const left = lane * width;
+          const color = lookup('services', b.serviceId).color || '#317b9b';
+          const clientName = lookup('clients', b.clientId).name;
+          const serviceName = lookup('services', b.serviceId).name;
+          const isDraggable = canDragBooking(b);
+          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceName)}</div><div class="event-meta">${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+        });
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
         html += '</div>';
       });
@@ -935,8 +899,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const duration = service.duration || 60;
   const defaultEmp = isCobosuView
     ? COBOSU_ID
-    : ((sunday || employeeId === '__unassigned') ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false)?.id : state.employee)));
-  const values = b || {clientId:'',employeeId:defaultEmp,serviceId:service.id,date,start:C.timeLabel(start),end:C.timeLabel(sunday ? Math.min(start+duration, 1410) : Math.min(start+duration,C.minutes(hours.close))),status:defaultEmp ? 'confirmed' : 'pending',notes:''};
+    : (employeeId === '__unassigned' ? '' : (employeeId || (state.employee === 'all' ? data.employees.find(e=>e.active!==false)?.id : state.employee)));
+  const values = b || {clientId:'',employeeId:defaultEmp,serviceId:service.id,date,start:C.timeLabel(start),end:C.timeLabel(hours && !hours.closed ? Math.min(start+duration,C.minutes(hours.close)) : Math.min(start+duration, 1410)),status:defaultEmp ? 'confirmed' : 'pending',notes:''};
   if (isCobosuView && !values.employeeId) values.employeeId = COBOSU_ID;
   for (const [field,key] of Object.entries({client:'clientId',employee:'employeeId',service:'serviceId',date:'date',start:'start',end:'end',status:'status'})) $('booking-'+field).value = values[key] || '';
   $('reschedule-date').value = values.date;
@@ -2232,7 +2196,7 @@ $('calendar').addEventListener('click',event => {
   const slot=event.target.closest('[data-slot]');
   if(slot&&!slot.disabled){if(currentUser?.role==='TRAINER')return;showBooking(null,slot.dataset.slot,Number(slot.dataset.minute),slot.dataset.employee);return;}
   const cell=event.target.closest('[data-month-cell]');
-  if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;if(isSunday(date)){showBooking(null,date,540,'__unassigned');return;}const hours=C.hoursFor(date,data.schedule);if(!hours.closed)showBooking(null,date,C.minutes(hours.open));}
+  if(cell){if(currentUser?.role==='TRAINER')return;const date=cell.dataset.monthCell;const hours=C.hoursFor(date,data.schedule);showBooking(null,date,hours && !hours.closed ? C.minutes(hours.open) : 540);}
 });
 
 function clearDropUI() {
@@ -2307,8 +2271,8 @@ async function commitMovedBooking(orig, moved) {
     toast(err, true);
     return;
   }
-  const whenLabel = (isSunday(moved.date) && !moved.employeeId)
-    ? `Sin sitio asignado (${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })})`
+  const whenLabel = !moved.employeeId
+    ? `Sin asignar (${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })})`
     : `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end}`;
   if (serverMode) {
     if (state.saving) return;
@@ -2397,12 +2361,6 @@ $('calendar').addEventListener('dragover', event => {
   if (col) {
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    if (col.classList.contains('is-sunday-parking')) {
-      document.querySelectorAll('#calendar .drop-preview').forEach(el => el.remove());
-      document.querySelectorAll('#calendar .is-drop-target').forEach(el => { if (el !== col) el.classList.remove('is-drop-target'); });
-      col.classList.add('is-drop-target');
-      return;
-    }
     const target = computeColumnDrop(col, event.clientY, orig);
     const moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
     const err = validateMovedBooking(moved);
@@ -2451,14 +2409,12 @@ $('calendar').addEventListener('drop', event => {
   event.preventDefault();
   suppressClickUntil = Date.now() + 250;
   let moved;
-  if (col && col.classList.contains('is-sunday-parking')) {
-    moved = buildMovedCandidate(orig, col.dataset.dropDate, orig.start, orig.end, null);
-  } else if (col) {
+  if (col) {
     const target = computeColumnDrop(col, event.clientY, orig);
     moved = buildMovedCandidate(orig, target.date, target.start, target.end, target.employeeId);
   } else {
     const dropDate = dayBox.dataset.dropDay || dayBox.dataset.monthCell;
-    const dropEmp = isSunday(dropDate) ? null : (orig.employeeId || null);
+    const dropEmp = orig.employeeId || null;
     moved = buildMovedCandidate(orig, dropDate, orig.start, orig.end, dropEmp);
   }
   dragState = null;

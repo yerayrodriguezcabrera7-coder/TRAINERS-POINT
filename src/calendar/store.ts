@@ -193,6 +193,7 @@ export class Store {
     }
   }
   async seed(gym: string, config: Config) {
+    queryCache.clear();
     await this.pool.query(
       "INSERT INTO calendar.gyms(id,name,config) VALUES($1,$1,$2) ON CONFLICT (id) DO UPDATE SET name=COALESCE(calendar.gyms.name, EXCLUDED.name)",
       [gym, configSchema.parse(config)],
@@ -357,14 +358,14 @@ export class Store {
       result = (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null})).map(g => g as any);
     }
 
-    queryCache.set(cacheKey, result);
+    queryCache.set(cacheKey, structuredClone(result));
     return result;
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
     const cacheKey = `state:${gym}`;
     const cached = queryCache.get<any>(cacheKey);
-    if (cached) return cached;
+    if (cached) return structuredClone(cached);
 
     const { rows } = await this.pool.query(
       `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings WHERE gym_id=g.id),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
@@ -392,7 +393,7 @@ export class Store {
       revision: Number(rows[0].revision),
       version: 1,
     };
-    queryCache.set(cacheKey, result);
+    queryCache.set(cacheKey, structuredClone(result));
     return result;
   }
   // The mirror and calendar JSON are written on the same PostgreSQL connection/transaction.

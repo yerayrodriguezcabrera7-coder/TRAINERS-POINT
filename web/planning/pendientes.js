@@ -2,7 +2,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const type = new URLSearchParams(location.search).get('tipo') === 'reprogramacion' ? 'reprogramacion' : 'asignacion';
+  const typeParam = new URLSearchParams(location.search).get('tipo');
+  const type = typeParam === 'reprogramacion' ? 'reprogramacion' : typeParam === 'todos' ? 'todos' : 'asignacion';
   let data, packages = [], recoveries = [], editing, loading, saving = false, activeFilter = 'all';
   async function api(path, method = 'GET', body) {
     const response = await fetch('/api/' + path, {method, headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
@@ -16,7 +17,7 @@
   const timeKey = value => new Intl.DateTimeFormat('en-GB',{timeZone:data.timezone || 'Europe/Madrid',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value));
   const dateLabel = value => new Intl.DateTimeFormat('es-ES', {timeZone:data.timezone || 'Europe/Madrid',dateStyle:'medium'}).format(new Date(value));
   const quantity = (n,one,many) => `${n} ${n===1 ? one : many}`;
-  const assignmentBookings = () => data.bookings.filter(b => !b.employeeId && ['PENDING','CONFIRMED'].includes(b.status));
+  const assignmentBookings = () => data.bookings.filter(b => !b.employeeId && ['PENDING','CONFIRMED'].includes(String(b.status || '').toUpperCase()));
   const rescheduleBookings = () => data.bookings.filter(b => b.needsReschedule);
   const pendingRecoveries = () => recoveries.filter(r => r.status === 'PENDING' || (r.status === 'RESCHEDULE_PENDING' && !data.bookings.some(b => b.recoveryId === r.id && b.needsReschedule)));
   const clientLink = (id, label) => `<a href="/clientes/${encodeURIComponent(id)}/ficha">${esc(label)}</a>`;
@@ -27,20 +28,25 @@
       if (!clients.has(id)) clients.set(id,{id,name:label,packages:[],bookings:[],recoveries:[],deadline:'9999-12-31',pressure:0});
       return clients.get(id);
     };
-    if (type === 'asignacion') {
+    if (type === 'asignacion' || type === 'todos') {
       for (const pkg of packages) {
         const item=group(pkg.clientId,pkg.clientName);
         item.packages.push(pkg);
         if(dayKey(pkg.expiresAt)<item.deadline)item.deadline=dayKey(pkg.expiresAt);
         item.pressure+=pkg.sessionsToSchedule/Math.max(1,pkg.daysRemaining);
       }
+      for (const booking of assignmentBookings()) {
+        const item=group(booking.clientId,name('clients',booking.clientId));
+        item.bookings.push(booking);
+        if(booking.date<item.deadline)item.deadline=booking.date;
+      }
     }
-    for (const booking of type === 'asignacion' ? assignmentBookings() : rescheduleBookings()) {
-      const item=group(booking.clientId,name('clients',booking.clientId));
-      item.bookings.push(booking);
-      if(booking.date<item.deadline)item.deadline=booking.date;
-    }
-    if (type === 'reprogramacion') {
+    if (type === 'reprogramacion' || type === 'todos') {
+      for (const booking of rescheduleBookings()) {
+        const item=group(booking.clientId,name('clients',booking.clientId));
+        item.bookings.push(booking);
+        if(booking.date<item.deadline)item.deadline=booking.date;
+      }
       for (const rec of pendingRecoveries()) {
         const item=group(rec.clientId,name('clients',rec.clientId));
         item.recoveries.push(rec);
@@ -59,39 +65,50 @@
   function render() {
     const assignments=assignmentBookings(), reschedules=rescheduleBookings(), pendingRecs=pendingRecoveries();
     const allClients=new Set([...assignments.map(b=>b.clientId),...packages.map(p=>p.clientId)]);
+    const reschedClients=new Set([...reschedules.map(b=>b.clientId),...pendingRecs.map(r=>r.clientId)]);
+    const totalClients=new Set([...allClients,...reschedClients]);
+    if ($('all-tab')) $('all-tab').textContent=`Todos (${quantity(totalClients.size,'cliente','clientes')})`;
     $('assignment-tab').textContent=`Por organizar (${quantity(allClients.size,'cliente','clientes')})`;
     $('reschedule-tab').textContent=`Reprogramar / Recuperar (${reschedules.length + pendingRecs.length})`;
-    $(type === 'asignacion' ? 'assignment-tab' : 'reschedule-tab').setAttribute('aria-current','page');
-    document.querySelector('h1').textContent=type === 'asignacion' ? 'Pendientes de asignación' : 'Pendientes de reprogramación y recuperación';
-    $('page-description').textContent=type === 'asignacion' ? 'Sesiones disponibles de bonos y citas sin trabajador, organizadas desde el centro activo.' : 'Reprograma citas aplazadas o agenda sesiones pendientes de recuperar sin volver a cobrar.';
+    const activeTab = $(type === 'todos' ? 'all-tab' : type === 'reprogramacion' ? 'reschedule-tab' : 'assignment-tab');
+    if (activeTab) activeTab.setAttribute('aria-current','page');
+    document.querySelector('h1').textContent=type === 'todos' ? 'Todos los pendientes' : type === 'asignacion' ? 'Pendientes de asignación' : 'Pendientes de reprogramación y recuperación';
+    $('page-description').textContent=type === 'todos' ? 'Vista completa de todas las sesiones de bonos, citas sin trabajador y reprogramaciones.' : type === 'asignacion' ? 'Sesiones disponibles de bonos y citas sin trabajador, organizadas desde el centro activo.' : 'Reprograma citas aplazadas o agenda sesiones pendientes de recuperar sin volver a cobrar.';
     const items=groups();
     const free=items.reduce((sum,item)=>sum+item.packages.reduce((n,p)=>n+p.sessionsToSchedule,0),0);
     const bookings=items.reduce((sum,item)=>sum+item.bookings.length,0);
     const recsCount=items.reduce((sum,item)=>sum+item.recoveries.length,0);
-    $('list-summary').textContent=type === 'asignacion' ? `${items.length} clientes · ${free} sesiones de bono sin agendar · ${bookings} citas sin trabajador` : `${items.length} clientes · ${bookings} citas por reprogramar · ${recsCount} sesiones por recuperar`;
-    $('urgent-panel').hidden=type !== 'asignacion' || !items.length;
+    $('list-summary').textContent=type === 'todos' ? `${items.length} clientes · ${free} sesiones de bono · ${bookings} citas · ${recsCount} recuperaciones` : type === 'asignacion' ? `${items.length} clientes · ${free} sesiones de bono sin agendar · ${bookings} citas sin trabajador` : `${items.length} clientes · ${bookings} citas por reprogramar · ${recsCount} sesiones por recuperar`;
+    $('urgent-panel').hidden=!items.length;
     $('urgent-count').textContent=`${Math.min(4,items.length)} de ${items.length} clientes`;
-    $('urgent-list').innerHTML=type !== 'asignacion' ? '' : items.slice(0,4).map((item,index)=>{
-      const pkg=item.packages[0], booking=item.bookings[0];
+    $('urgent-list').innerHTML=!items.length ? '' : items.slice(0,4).map((item,index)=>{
+      const pkg=item.packages[0], booking=item.bookings[0], rec=item.recoveries[0];
       const prioritizeBooking=booking && (!pkg || booking.date<=dayKey(pkg.expiresAt));
-      const reason=!prioritizeBooking && pkg ? `Bono: ${pkg.daysRemaining <= 1 ? 'caduca hoy o mañana' : `caduca en ${pkg.daysRemaining} días`}` : 'Cita sin trabajador asignado';
+      const reason=!prioritizeBooking && pkg ? `Bono: ${pkg.daysRemaining <= 1 ? 'caduca hoy o mañana' : `caduca en ${pkg.daysRemaining} días`}` : (booking?.needsReschedule ? 'Cita pendiente de reprogramar' : booking ? 'Cita sin trabajador asignado' : 'Sesión pendiente de recuperar');
       const total=item.packages.reduce((n,p)=>n+p.sessionsToSchedule,0);
       const isCritical = (!prioritizeBooking && pkg && pkg.daysRemaining <= 2) || (prioritizeBooking && booking && booking.date <= dayKey(Date.now() + 86400000));
       const client = data?.clients ? data.clients.find(c => c.id === item.id) : null;
       const prefWorker = client?.assignedWorkerId ? name('employees', client.assignedWorkerId) : null;
       const prefSlotLabel = client?.contactSlot === 'MANANA' ? 'Mañanas' : client?.contactSlot === 'TARDE' ? 'Tardes' : client?.contactSlot === 'MEDIODIA' ? 'Mediodía' : null;
       const prefSummary = [prefWorker ? `⭐ ${prefWorker}` : '', prefSlotLabel ? `⏰ ${prefSlotLabel}` : ''].filter(Boolean).join(' · ');
-      return `<article class="pending-urgent-card ${isCritical ? 'is-critical' : ''}"><div class="pending-card-top"><span class="pending-rank">Prioridad ${index+1}</span>${isCritical ? '<span class="urgency-pill critical">Urgente</span>' : '<span class="urgency-pill normal">Próximo</span>'}</div><h3>${esc(item.name)}</h3><p class="pending-reason">${esc(reason)}</p><p>${[...(total ? [quantity(total,'sesión de bono sin agendar','sesiones de bono sin agendar')] : []),...(item.bookings.length ? [quantity(item.bookings.length,'cita sin trabajador','citas sin trabajador')] : [])].join(' · ')}</p>${!prioritizeBooking && pkg ? `<small>Caducidad más próxima: ${esc(dateLabel(pkg.expiresAt))}</small>` : `<small>Cita: ${esc(booking.date)} · ${esc(booking.start)}</small>`}${prefSummary ? `<small class="pref-hint">${esc(prefSummary)}</small>` : ''}<button type="button" ${prioritizeBooking ? `data-edit="${esc(booking.id)}"` : `data-package="${esc(pkg.packageId)}"`}>${prioritizeBooking ? 'Organizar cita' : 'Agendar una sesión'}</button></article>`;
+      const dateText = !prioritizeBooking && pkg ? `<small>Caducidad más próxima: ${esc(dateLabel(pkg.expiresAt))}</small>` : booking ? `<small>Cita: ${esc(booking.date)} · ${esc(booking.start)}</small>` : '<small>Recuperación sin fecha límite</small>';
+      const actionBtn = prioritizeBooking ? `<button type="button" data-edit="${esc(booking.id)}">${booking.needsReschedule ? 'Reprogramar cita' : 'Organizar cita'}</button>` : pkg ? `<button type="button" data-package="${esc(pkg.packageId)}">Agendar una sesión</button>` : rec ? `<button type="button" data-recovery="${esc(rec.id)}">Agendar recuperación</button>` : '';
+      return `<article class="pending-urgent-card ${isCritical ? 'is-critical' : ''}"><div class="pending-card-top"><span class="pending-rank">Prioridad ${index+1}</span>${isCritical ? '<span class="urgency-pill critical">Urgente</span>' : '<span class="urgency-pill normal">Próximo</span>'}</div><h3>${esc(item.name)}</h3><p class="pending-reason">${esc(reason)}</p><p>${[...(total ? [quantity(total,'sesión de bono sin agendar','sesiones de bono sin agendar')] : []),...(item.bookings.length ? [quantity(item.bookings.length,'cita','citas')] : []),...(item.recoveries.length ? [quantity(item.recoveries.length,'recuperación','recuperaciones')] : [])].join(' · ')}</p>${dateText}${prefSummary ? `<small class="pref-hint">${esc(prefSummary)}</small>` : ''}${actionBtn}</article>`;
     }).join('');
     $('rows').innerHTML=items.flatMap(item=>{
       const client = data?.clients ? data.clients.find(c => c.id === item.id) : null;
       const prefWorker = client?.assignedWorkerId ? name('employees', client.assignedWorkerId) : null;
       return [
-        ...item.bookings.map(booking=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',booking.serviceId))}<small>${type === 'asignacion' ? 'Cita sin trabajador' : 'Pendiente de reprogramar'}</small></td><td>${esc(booking.date)} · ${esc(booking.start)}–${esc(booking.end)}</td><td>${esc(name('employees',booking.employeeId))}${!booking.employeeId && prefWorker ? `<small class="pref-hint">⭐ Habitual: ${esc(prefWorker)}</small>` : ''}</td><td class="pending-actions"><button type="button" data-edit="${esc(booking.id)}">${type === 'asignacion' ? 'Asignar trabajador' : 'Reprogramar'}</button><a href="/index.html?fecha=${encodeURIComponent(booking.date)}&reserva=${encodeURIComponent(booking.id)}">Ver historial</a></td></tr>`),
+        ...item.bookings.map(booking=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',booking.serviceId))}<small>${booking.needsReschedule ? 'Pendiente de reprogramar' : 'Cita sin trabajador'}</small></td><td>${esc(booking.date)} · ${esc(booking.start)}–${esc(booking.end)}</td><td>${esc(name('employees',booking.employeeId))}${!booking.employeeId && prefWorker ? `<small class="pref-hint">⭐ Habitual: ${esc(prefWorker)}</small>` : ''}</td><td class="pending-actions"><button type="button" data-edit="${esc(booking.id)}">${booking.needsReschedule ? 'Reprogramar' : 'Asignar trabajador'}</button><a href="/index.html?fecha=${encodeURIComponent(booking.date)}&reserva=${encodeURIComponent(booking.id)}">Ver historial</a></td></tr>`),
         ...item.recoveries.map(rec=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(name('services',rec.serviceId))}<small>${rec.status === 'RESCHEDULE_PENDING' ? 'Recuperación pendiente de reprogramar' : 'Sesión pendiente de recuperar'}</small></td><td>Sin fecha límite<small>Crédito de recuperación</small></td><td>${esc(name('employees',rec.employeeId))}</td><td class="pending-actions"><button type="button" data-recovery="${esc(rec.id)}">Agendar recuperación</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver ficha</a></td></tr>`),
         ...item.packages.map(pkg=>`<tr><td><strong>${clientLink(item.id,item.name)}</strong></td><td>${esc(pkg.serviceName)}<small>${quantity(pkg.sessionsToSchedule,'sesión sin agendar','sesiones sin agendar')} · ${quantity(pkg.sessionsScheduled,'ya reservada','ya reservadas')}</small>${pkg.paymentPending ? '<small class="tag-unpaid">⚠️ Bono con pago pendiente</small>' : ''}</td><td>Caduca el ${esc(dateLabel(pkg.expiresAt))}<small class="${pkg.daysRemaining <= 2 ? 'tag-critical' : ''}">${pkg.daysRemaining} días restantes</small></td><td>Por elegir${prefWorker ? `<small class="pref-hint">⭐ Habitual: ${esc(prefWorker)}</small>` : ''}</td><td class="pending-actions"><button type="button" data-package="${esc(pkg.packageId)}">Agendar una sesión</button><a href="/clientes/${encodeURIComponent(item.id)}/ficha">Ver bono y ficha</a></td></tr>`)
       ];
-    }).join('') || '<tr><td colspan="5">No hay sesiones ni citas pendientes para esta búsqueda.</td></tr>';
+    }).join('') || (() => {
+      const otherCount = type === 'asignacion' ? (reschedules.length + pendingRecs.length) : (assignments.length + packages.length);
+      return otherCount > 0 && type !== 'todos'
+        ? `<tr><td colspan="5">No hay pendientes en esta pestaña. Tienes <strong>${otherCount} pendiente(s)</strong> en <a href="?tipo=${type === 'asignacion' ? 'reprogramacion' : 'asignacion'}">${type === 'asignacion' ? 'Reprogramar / Recuperar' : 'Por organizar'}</a> o puedes consultar <a href="?tipo=todos">Todos (${totalClients.size})</a>.</td></tr>`
+        : '<tr><td colspan="5">No hay sesiones ni citas pendientes para esta búsqueda.</td></tr>';
+    })();
     const historyPanel=$('recoveries-history-panel'), historyList=$('recoveries-history-list');
     if (historyPanel && historyList) {
       const states={RESCHEDULE_PENDING:'Pendiente de reprogramación',PENDING:'Pendiente de recuperar',SCHEDULED:'Recuperación programada',COMPLETED:'Recuperada',FORFEITED:'Resuelta sin recuperación'};
