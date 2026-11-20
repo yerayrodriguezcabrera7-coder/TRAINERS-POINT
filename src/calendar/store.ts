@@ -349,21 +349,10 @@ export class Store {
       result = (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null})).map(g => g as any);
     }
 
-<<<<<<< HEAD
-    queryCache.set(cacheKey, structuredClone(result));
-=======
->>>>>>> origin/main
     return result;
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
-<<<<<<< HEAD
-    const cacheKey = `state:${gym}`;
-    const cached = queryCache.get<any>(cacheKey);
-    if (cached) return structuredClone(cached);
-
-=======
->>>>>>> origin/main
     const { rows } = await this.pool.query(
       `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings WHERE gym_id=g.id),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
       [gym],
@@ -390,10 +379,6 @@ export class Store {
       revision: Number(rows[0].revision),
       version: 1,
     };
-<<<<<<< HEAD
-    queryCache.set(cacheKey, structuredClone(result));
-=======
->>>>>>> origin/main
     return result;
   }
   // The mirror and calendar JSON are written on the same PostgreSQL connection/transaction.
