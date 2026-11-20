@@ -96,12 +96,13 @@
 
   function updateStats() {
     const employees = manageData?.employees || [];
-    const total = employees.length;
+    const activeEmps = employees.filter(isActive);
+    const total = activeEmps.length;
     let trainers = 0;
     let reception = 0;
     let admin = 0;
 
-    employees.forEach(emp => {
+    activeEmps.forEach(emp => {
       const normalized = normalizeJobTitle(emp.jobTitle);
       if (normalized === 'Administración') admin++;
       else if (normalized === 'Recepción') reception++;
@@ -306,7 +307,19 @@
     }
 
     const deactivateButton = $('deactivate-professional');
-    deactivateButton.hidden = !emp || !isActive(emp);
+    if (deactivateButton) {
+      deactivateButton.hidden = !emp;
+      const currentlyActive = emp ? isActive(emp) : true;
+      if (currentlyActive) {
+        deactivateButton.textContent = 'Dar de baja';
+        deactivateButton.className = 'button button-outline professional-deactivate';
+        deactivateButton.title = 'Dar de baja a este trabajador. Se conservará su historial y no aparecerá en el cuadrante.';
+      } else {
+        deactivateButton.textContent = 'Reactivar profesional';
+        deactivateButton.className = 'button button-outline professional-reactivate';
+        deactivateButton.title = 'Reactivar a este profesional para que vuelva a estar disponible en el centro.';
+      }
+    }
 
     // Comprobar si el profesional tiene cuenta de usuario vinculada
     const accountBox = $('prof-user-account-box');
@@ -416,23 +429,43 @@
     $('deactivate-professional').addEventListener('click', async () => {
       if (!editingEmployee || !canProfessionals()) return;
       const employee = editingEmployee;
-      if (!confirm(`¿Dar de baja a ${employee.name || 'este profesional'}? Se conservarán su historial y sus reservas.`)) return;
+      const currentlyActive = isActive(employee);
+      const promptText = currentlyActive
+        ? `¿Dar de baja a ${employee.name || 'este profesional'}? Se conservarán su historial y sus reservas.`
+        : `¿Reactivar a ${employee.name || 'este profesional'} para que vuelva a estar disponible en el centro?`;
+
+      if (!confirm(promptText)) return;
 
       const button = $('deactivate-professional');
       button.disabled = true;
       try {
+        const newActiveState = !currentlyActive;
         await api(`manage/employees/${encodeURIComponent(employee.id)}`, 'PUT', {
-          record: { ...employee, active: false },
+          record: { ...employee, active: newActiveState },
           revision: manageData.revision,
         });
+
+        // Si tiene usuario vinculado y el admin tiene permisos, sincronizar también el usuario
+        const linkedUser = (manageData?.users || []).find(u => u.employeeId === employee.id);
+        if (linkedUser && manageData?.role === 'ADMIN') {
+          await api(`manage/users/${encodeURIComponent(linkedUser.id)}`, 'PUT', {
+            record: { ...linkedUser, enabled: newActiveState },
+            revision: manageData.revision,
+          }).catch(() => {});
+        }
+
         activeFilter = 'active';
         document.querySelectorAll('.filter-chip').forEach(filterChip => {
           const isActiveFilter = filterChip.dataset.filter === 'active';
           filterChip.setAttribute('aria-pressed', String(isActiveFilter));
           filterChip.classList.toggle('is-active', isActiveFilter);
         });
+        document.querySelectorAll('.stat-card').forEach(sc => {
+          sc.setAttribute('aria-pressed', String(sc.dataset.filter === 'active'));
+          sc.classList.toggle('is-active', sc.dataset.filter === 'active');
+        });
         $('professional-dialog').close();
-        showToast('Profesional dado de baja. Se conserva su historial.');
+        showToast(currentlyActive ? 'Profesional dado de baja. Se conserva su historial.' : 'Profesional reactivado con éxito.');
         await loadData();
       } catch (err) {
         showToast(err.message, true);

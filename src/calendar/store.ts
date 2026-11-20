@@ -111,9 +111,6 @@ export class Store {
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, notes: true, status: true, birthDate: true, assignedWorkerId: true, availability: true, contactSlot: true, objective: true, injuryNotes: true, preferredName: true },
     });
     const servicesQuery = this.clientsDb.service.findMany({
-      // Packs are commercial products, not schedulable session types. A booking
-      // uses the base service linked from its pack.
-      where: { type: { not: "PACK" } },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -152,7 +149,7 @@ export class Store {
     if (services.length) {
       const saved = config.services;
       const savedById = new Map(saved.map(service => [service.id, service]));
-      config.services = services.map(service => ({
+      const prismaServices = services.map(service => ({
         ...savedById.get(service.id),
         id: service.id,
         name: service.name,
@@ -160,7 +157,7 @@ export class Store {
         duration: service.durationMin,
         capacity: service.modality === "DUAL" ? 2 : 1,
         price: Number(service.price),
-        active: service.isActive,
+        active: service.isActive && service.type !== "PACK",
         modality: service.modality,
         type: service.type,
         trainingCount: service.trainingCount,
@@ -171,6 +168,9 @@ export class Store {
         color: service.color,
         serviceId: service.serviceId || null,
       }));
+      const prismaIds = new Set(prismaServices.map(s => s.id));
+      const preservedSaved = saved.filter(s => !prismaIds.has(s.id));
+      config.services = [...prismaServices, ...preservedSaved];
     }
     const allCenters = await this.centers();
     config.centers = allCenters;
