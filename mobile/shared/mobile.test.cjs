@@ -12,6 +12,8 @@ require.extensions['.ts'] = (module, filename) => {
 const { ApiClient } = require('./api.ts');
 const { apiBaseUrl } = require('./config.ts');
 const { upcomingBookings } = require('./calendar.ts');
+const { groupTrainerBookings, detectTrainerAgendaAlerts } = require('./trainer-agenda.ts');
+const { weekRoster } = require('./trainer-roster.ts');
 const { mobileCognito, CognitoPasswordRequired } = require('./cognito.ts');
 const realFetch = global.fetch;
 test.afterEach(() => { global.fetch = realFetch; });
@@ -164,6 +166,63 @@ test('worker attendance retains the booking version for concurrent change protec
   assert.deepEqual(calls[0].body, { action: 'COMPLETE', version: 4 });
   await api.getClientDetail('client');
   assert.equal(calls[1].url, 'https://gym.example/api/clients/client/progress');
+});
+
+test('dual sessions share one agenda card while retaining each client booking', () => {
+  const bookings = [
+    { id:'a', sessionId:'dual', clientId:'one', employeeId:'worker', date:'2030-10-22', start:'10:00', end:'11:00', status:'CONFIRMED' },
+    { id:'b', sessionId:'dual', clientId:'two', employeeId:'worker', date:'2030-10-22', start:'10:00', end:'11:00', status:'CONFIRMED' },
+    { id:'c', clientId:'three', employeeId:'worker', date:'2030-10-22', start:'12:00', end:'13:00', status:'CONFIRMED' },
+  ];
+  const groups = groupTrainerBookings(bookings, '2030-10-22');
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups[0].bookings.map(item => item.clientId), ['one', 'two']);
+  assert.deepEqual(groups[0].bookings.map(item => item.id), ['a', 'b']);
+});
+
+test('trainer alerts only on new appointments today or upcoming cancellations', () => {
+  const now = new Date(2030, 9, 22, 9, 0);
+  const base = { employeeId:'worker', date:'2030-10-22', start:'10:00', end:'11:00', status:'CONFIRMED' };
+  const old = [{ ...base, id:'cancel', clientId:'one' }, { ...base, id:'later', clientId:'two', start:'17:00' }];
+  const next = [
+    { ...old[0], status:'CANCELLED' },
+    old[1],
+    { ...base, id:'new', clientId:'three', start:'11:00' },
+    { ...base, id:'tomorrow', clientId:'four', date:'2030-10-23' },
+  ];
+  assert.deepEqual(detectTrainerAgendaAlerts(old, next, now).map(item => item.kind), ['CANCELLED_SOON', 'NEW_TODAY']);
+  assert.deepEqual(detectTrainerAgendaAlerts(next, next, now), []);
+});
+
+test('weekly roster combines regular shifts, date overrides and approved leave', () => {
+  const schedule = Array.from({ length: 7 }, () => ({ open:'09:00', close:'18:00', closed:false }));
+  const employee = { schedule, weeklyPeriods: Array.from({ length: 7 }, () => [{ open:'09:00', close:'12:00' }, { open:'16:00', close:'18:00' }]), shifts: [{ date:'2030-10-22', periods:[] }] };
+  const leaves = [{ status:'APPROVED', startDate:'2030-10-24', endDate:'2030-10-24' }];
+  const week = weekRoster(employee, leaves, new Date(2030, 9, 21, 12));
+  assert.equal(week[0].periods.length, 2);
+  assert.deepEqual(week[1].periods, []);
+  assert.equal(week[3].approved.status, 'APPROVED');
+});
+
+test('reception pending packages and booking writes match the server contract', async () => {
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, method: options.method, body: options.body ? JSON.parse(options.body) : null });
+    return json(url.endsWith('/api/pending-packages') ? { packages: [{ packageId: 'pkg-1' }] } : { id: 'booking-1' });
+  };
+  const api = new ApiClient({ baseUrl: 'https://gym.example' });
+  assert.deepEqual(await api.getPendingPackages(), [{ packageId: 'pkg-1' }]);
+  await api.createOfficeBooking({ clientId: 'client-1', packageId: 'pkg-1', status: 'CONFIRMED' });
+  await api.updateOfficeBooking({ id: 'booking-1', version: 3, packageId: 'pkg-1', end: '12:00' });
+  assert.deepEqual(calls.map(call => [call.method || 'GET', call.url]), [
+    ['GET', 'https://gym.example/api/pending-packages'],
+    ['POST', 'https://gym.example/api/bookings'],
+    ['PUT', 'https://gym.example/api/bookings/booking-1'],
+  ]);
+  assert.equal(calls[1].body.booking.packageId, 'pkg-1');
+  assert.equal(calls[2].body.booking.version, 3);
+  assert.equal(calls[2].body.booking.packageId, 'pkg-1');
+  assert.equal(calls[2].body.booking.end, undefined);
 });
 
 test('the agenda excludes cancelled, finished and past sessions and sorts upcoming ones', () => {

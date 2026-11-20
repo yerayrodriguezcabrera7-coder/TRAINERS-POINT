@@ -154,7 +154,7 @@ export const bookingSchema = z.object({
   end: time.optional(),
   status: z.enum(statuses),
   notes: z.string().max(2000).default(""),
-  sessionLog: z.object({ exercises: z.string().max(2000).default(""), feeling: z.enum(["GOOD", "TIRED", "PAIN"]).nullable().default(null) }).optional(),
+  sessionLog: z.object({ exercises: z.string().max(2000).default(""), feeling: z.enum(["GOOD", "TIRED", "EASY", "ADEQUATE", "LIMIT", "PAIN"]).nullable().default(null) }).optional(),
   nextSessionPlan: z.string().max(2000).optional(),
   recoveryId: id.nullable().optional(),
   chargeAmount: z.number().nonnegative().optional(),

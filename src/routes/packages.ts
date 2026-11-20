@@ -342,7 +342,7 @@ export async function packagesRoutes(request: IncomingMessage, response: ServerR
       if (mirror?.calendarGymId && calendarPool) {
         if (mirror.calendarGymId !== (request as any).selectedGym)
           throw new ApiError(404, 'Reserva desconocida en este centro.');
-        const store = new Store(calendarPool, prisma), state = await store.state(mirror.calendarGymId), previous = state.bookings.find((b: any) => b.id === attendanceMatch[1]);
+        const store = context.calendarStore || new Store(calendarPool, prisma), state = await store.state(mirror.calendarGymId), previous = state.bookings.find((b: any) => b.id === attendanceMatch[1]);
         if (!previous)
           throw new ApiError(404, 'Reserva desconocida.');
         const nextStatus = attendance === 'ASISTIO' ? 'COMPLETED' : attendance === 'NO_ASISTIO' ? 'NO_SHOW' : attendance === 'CANCELADA' ? 'CANCELLED' : 'CONFIRMED';

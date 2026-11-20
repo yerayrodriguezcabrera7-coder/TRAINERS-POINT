@@ -7,6 +7,7 @@ import { accessMigration, type Identity } from "./access";
 import { sharedStaffMigration, sharedStaff, saveStaff, saveSharedLeave, networkLock } from "./shared-staff";
 import { clientScope } from "../network/scope";
 import { queryCache } from "../cache/query-cache";
+import { agendaPushEvent, pushMigration, type SnsTrainerPush } from "../cloud/sns-trainer-push";
 import {
 ApiError,
 Booking,
@@ -85,7 +86,7 @@ function appendBookingHistory(old: Booking, b: Booking, actorId: string) {
   ];
 }
 export class Store {
-  constructor(public pool: Pool, public clientsDb?: PrismaClient) {}
+  constructor(public pool: Pool, public clientsDb?: PrismaClient, public trainerPush?: SnsTrainerPush) {}
 
   private async audit(db: PoolClient, gym: string, actorId: string, action: string, entityType: string, entityId: string, detail: string, metadata: Record<string, unknown> = {}) {
     if (!this.clientsDb) return;
@@ -194,6 +195,7 @@ export class Store {
   }
   async migrate() {
     await this.pool.query(migration);
+    await this.pool.query(pushMigration);
     await this.pool.query(sharedStaffMigration);
     await this.pool.query(accessMigration);
     if (this.clientsDb) {
@@ -212,30 +214,15 @@ export class Store {
       await this.pool.query("INSERT INTO calendar.shared_leaves(id,data) VALUES($1,$2) ON CONFLICT(id) DO NOTHING",[leave.id,leave]);
   }
   async listGyms() {
-    const cached = queryCache.get<Array<{
-      id: string;
-      name: string;
-      maxBookingsPerHour: number | null;
-    }>>('gyms:list');
-    if (cached) return cached;
-
-    const result = (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
+    return (await this.pool.query("SELECT id,name,config FROM calendar.gyms ORDER BY name NULLS LAST,id")).rows
       .map((row) => ({
         id: row.id as string,
         name: (row.name || row.id) as string,
         maxBookingsPerHour: row.config?.maxBookingsPerHour != null ? Number(row.config.maxBookingsPerHour) : null,
       }));
-    queryCache.set('gyms:list', result);
-    return result;
   }
   async gymExists(gym: string) {
-    const cacheKey = `gym:exists:${gym}`;
-    const cached = queryCache.get<boolean>(cacheKey);
-    if (cached !== undefined) return cached;
-
-    const exists = Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
-    queryCache.set(cacheKey, exists);
-    return exists;
+    return Boolean((await this.pool.query("SELECT 1 FROM calendar.gyms WHERE id=$1", [gym])).rowCount);
   }
   async createGym(name: string, templateGym: string) {
     const id = `${name.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "gimnasio"}-${randomUUID().slice(0, 8)}`;
@@ -303,10 +290,6 @@ export class Store {
     }
   }
   async centers(): Promise<any[]> {
-    const cacheKey = `centers:${this.clientsDb ? 'prisma' : 'raw'}`;
-    const cached = queryCache.get<any>(cacheKey);
-    if (cached) return cached;
-
     let result: any;
 
     if (this.clientsDb) {
@@ -366,15 +349,21 @@ export class Store {
       result = (await this.listGyms()).map(g=>({...g,address:'',city:'',province:'',schedule:null})).map(g => g as any);
     }
 
+<<<<<<< HEAD
     queryCache.set(cacheKey, structuredClone(result));
+=======
+>>>>>>> origin/main
     return result;
   }
   async state(gym: string) {
     // Single statement: config and bookings share a consistent snapshot.
+<<<<<<< HEAD
     const cacheKey = `state:${gym}`;
     const cached = queryCache.get<any>(cacheKey);
     if (cached) return structuredClone(cached);
 
+=======
+>>>>>>> origin/main
     const { rows } = await this.pool.query(
       `SELECT config,revision,COALESCE((SELECT jsonb_agg(data ORDER BY data->>'date',data->>'start') FROM calendar.bookings WHERE gym_id=g.id),'[]'::jsonb) bookings FROM calendar.gyms g WHERE id=$1`,
       [gym],
@@ -401,7 +390,10 @@ export class Store {
       revision: Number(rows[0].revision),
       version: 1,
     };
+<<<<<<< HEAD
     queryCache.set(cacheKey, structuredClone(result));
+=======
+>>>>>>> origin/main
     return result;
   }
   // The mirror and calendar JSON are written on the same PostgreSQL connection/transaction.
@@ -479,7 +471,8 @@ export class Store {
   }
   async save(gym: string, raw: unknown, id?: string, newClient?: unknown, actorId="system", expectedEmployeeId?:string, syncSession=false) {
     const input = bookingSchema.parse(raw);
-    return this.transaction(gym, async (db, c, bookings) => {
+    let notification: ReturnType<typeof agendaPushEvent> = null;
+    const saved = await this.transaction(gym, async (db, c, bookings) => {
       const old = id ? bookings.find((b) => b.id === id) : undefined;
       if(expectedEmployeeId && old?.employeeId!==expectedEmployeeId)throw new ApiError(404,"Reserva desconocida.");
       if (id && !old) throw new ApiError(404, "Reserva desconocida.");
@@ -595,8 +588,14 @@ export class Store {
       await this.audit(db, gym, actorId, !old ? 'BOOKING_CREATED' : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? 'BOOKING_CANCELLED' : 'BOOKING_UPDATED', 'Booking', b.id,
         !old ? `Reserva creada para ${b.date}, ${b.start}–${b.end}.` : b.status === 'CANCELLED' && old.status !== 'CANCELLED' ? `Reserva cancelada del ${old.date}, ${old.start}–${old.end}.` : `Reserva modificada: ${old.date} ${old.start} → ${b.date} ${b.start}.`,
         { clientId: b.clientId, serviceId: b.serviceId, employeeId: b.employeeId, previousStatus: old?.status || null, status: b.status });
+      notification = agendaPushEvent(old,b,c.timezone);
       return b;
     });
+    if (notification && this.trainerPush) {
+      try { await this.trainerPush.publish(gym,notification); }
+      catch (error) { console.error("No se pudo publicar el aviso de agenda en SNS:", error); }
+    }
+    return saved;
   }
   async workerAction(gym:string,id:string,actor:{id:string;employeeId:string|null},raw:unknown){
     const input=workerActionSchema.parse(raw);
@@ -624,21 +623,29 @@ export class Store {
     return (await this.pool.query("SELECT data,gym_id FROM calendar.recoveries WHERE gym_id=$1 OR data->>'clientId'=ANY($2::text[]) ORDER BY data->>'createdAt' DESC",[gym,await this.sharedRecoveryClients(gym)])).rows.map(r=>({...r.data,originCenterId:r.gym_id}));
   }
   async deferBooking(gym: string, id: string, actor: {id:string;role:string;employeeId:string|null}, exception = false) {
-    return this.transaction(gym,async(db,c,bookings)=>{
+    let notification: ReturnType<typeof agendaPushEvent> = null;
+    const credit = await this.transaction(gym,async(db,c,bookings)=>{
       const b = bookings.find(b=>b.id===id);
       if (!b || (actor.role === "TRAINER" && b.employeeId !== actor.employeeId)) throw new ApiError(404,"Reserva desconocida.");
       if (!["CONFIRMED"].includes(b.status) || b.recoveryId) throw new ApiError(409,"Solo una sesión confirmada original puede dejarse pendiente.");
       const remaining = DateTime.fromISO(`${b.date}T${b.start}`,{zone:c.timezone}).toMillis()-Date.now();
       if (remaining <= 0) throw new ApiError(409,"La sesión ya ha comenzado.");
       if (remaining < 2*3600000 && !(actor.role === "ADMIN" && exception)) throw new ApiError(409,"Se requieren dos horas de antelación o una excepción de administración.");
+      const previous = {...b};
       const credit = {id:randomUUID(), originalId:b.id, clientId:b.clientId, serviceId:b.serviceId, employeeId:b.employeeId, status:"PENDING", bookingId:null, createdAt:new Date().toISOString(), actorId:actor.id, exception:remaining<2*3600000};
       await db.query("INSERT INTO calendar.recoveries(gym_id,id,original_id,data) VALUES($1,$2,$3,$4)",[gym,credit.id,b.id,credit]);
       b.status="CANCELLED"; b.version++;
       await this.syncPackageBooking(db,gym,b,c);
       await db.query("UPDATE calendar.bookings SET data=$3 WHERE gym_id=$1 AND id=$2",[gym,b.id,b]);
       await this.audit(db, gym, actor.id, 'BOOKING_CANCELLED', 'Booking', b.id, `Reserva cancelada y convertida en recuperación pendiente para ${b.date}, ${b.start}–${b.end}.`, { clientId: b.clientId, serviceId: b.serviceId, recoveryId: credit.id, exception: credit.exception });
+      notification = agendaPushEvent(previous,b,c.timezone);
       return credit;
     });
+    if (notification && this.trainerPush) {
+      try { await this.trainerPush.publish(gym,notification); }
+      catch (error) { console.error("No se pudo publicar el aviso de agenda en SNS:", error); }
+    }
+    return credit;
   }
   async configure(gym: string, raw: unknown, revision: number) {
     const config = configSchema.parse(raw);
@@ -1023,7 +1030,7 @@ export class Store {
   }
 
   async saveSessionLog(gym:string,id:string,actor:Identity,raw:unknown) {
-    const input=z.object({version:z.number().int().positive(),exercises:z.string().max(2000),feeling:z.enum(['GOOD','TIRED','PAIN']).nullable(),nextSessionPlan:z.string().max(2000)}).parse(raw);
+    const input=z.object({version:z.number().int().positive(),exercises:z.string().max(2000),feeling:z.enum(['GOOD','TIRED','EASY','ADEQUATE','LIMIT','PAIN']).nullable(),nextSessionPlan:z.string().max(2000)}).parse(raw);
     return this.transaction(gym,async(db,_c,bookings)=>{
       const booking=bookings.find(b=>b.id===id && (actor.role!=='TRAINER' || b.employeeId===actor.employeeId));
       if(!booking)throw new ApiError(404,'Reserva desconocida.');

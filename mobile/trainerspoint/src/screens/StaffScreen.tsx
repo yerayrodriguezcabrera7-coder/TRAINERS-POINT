@@ -110,6 +110,7 @@ export function StaffScreen({
 
   // Assignment modal states
   const [assignedBooking, setAssignedBooking] = useState<Booking | null>(null);
+  const [assignmentSource, setAssignmentSource] = useState<{ kind: "package" | "recovery"; id: string } | null>(null);
   const [assignForm, setAssignForm] = useState({
     employeeId: "",
     date: localDay(),
@@ -181,7 +182,9 @@ export function StaffScreen({
           setPendingPackages(packages);
           setRecoveries(recs);
         }
-      } catch { /* silent */ }
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "No se pudieron cargar los pendientes.");
+      }
       finally {
         if (!cancelled) setPendingLoading(false);
       }
@@ -216,6 +219,7 @@ export function StaffScreen({
       b.needsReschedule ||
       (!b.employeeId && ["PENDING", "CONFIRMED"].includes(b.status))
   );
+  const actionableRecoveries = recoveries.filter(rec => ["PENDING", "RESCHEDULE_PENDING"].includes(rec.status));
 
   const term = search.trim().toLocaleLowerCase("es");
 
@@ -255,23 +259,40 @@ export function StaffScreen({
       return;
     }
     setIsAssigning(true);
+    setError("");
     try {
-      const updated: Booking = await api.assignBooking(
-        assignedBooking.id,
-        {
-          employeeId: assignForm.employeeId || undefined,
-          date: assignForm.date,
-          start: assignForm.start,
-          roomId: assignForm.roomId,
-          // Must include all required fields — the server rewrite (normalize) overwrites the full booking.
+      const changes = {
+        employeeId: assignForm.employeeId,
+        date: assignForm.date,
+        start: assignForm.start,
+        roomId: assignForm.roomId,
+        status: "CONFIRMED" as const,
+        needsReschedule: false,
+      };
+      if (assignmentSource) {
+        await api.createOfficeBooking({
           clientId: assignedBooking.clientId,
           serviceId: assignedBooking.serviceId,
-          status: assignedBooking.status,
-        }
-      );
-      await load(true);
+          notes: "",
+          ...changes,
+          ...(assignmentSource.kind === "package"
+            ? { packageId: assignmentSource.id }
+            : { recoveryId: assignmentSource.id }),
+        });
+      } else {
+        await api.updateOfficeBooking({ ...assignedBooking, ...changes });
+      }
       resetAssignForm();
       setAssignedBooking(null);
+      setAssignmentSource(null);
+      await load(true);
+      try {
+        const [packages, recs] = await Promise.all([api.getPendingPackages(), api.getRecoveries()]);
+        setPendingPackages(packages);
+        setRecoveries(recs);
+      } catch (reason) {
+        setError(reason instanceof Error ? `Reserva guardada. No se pudieron actualizar los pendientes: ${reason.message}` : "Reserva guardada. Actualiza los pendientes para ver los cambios.");
+      }
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "No se pudo asignar la reserva."
@@ -289,6 +310,7 @@ export function StaffScreen({
       roomId: booking.roomId,
     });
     setAssignedBooking(booking);
+    setAssignmentSource(null);
     setSelected(null);
   }
 
@@ -737,7 +759,7 @@ export function StaffScreen({
                 onPress={() => setPendingSubTab("reprogramacion")}
               >
                 <Text style={pendingSubTab === "reprogramacion" ? styles.subTabTextActive : styles.subTabText}>
-                  Reprogramar/Recuperar ({recoveries.length})
+                  Reprogramar/Recuperar ({actionableRecoveries.length})
                 </Text>
               </Pressable>
             </View>
@@ -773,7 +795,7 @@ export function StaffScreen({
                               start: "",
                               roomId: "",
                             });
-                            // Store the pending package context so the modal knows it's a new booking
+                            setAssignmentSource({ kind: "package", id: pkg.packageId });
                             setAssignedBooking({
                               id: "__pkg__" + pkg.packageId,
                               clientId: pkg.clientId || "",
@@ -789,7 +811,7 @@ export function StaffScreen({
                               centerId: null,
                               centerName: null,
                               centerAddress: null,
-                              needsReschedule: false,
+                            needsReschedule: false,
                             } as any);
                           }
                         }}
@@ -841,12 +863,12 @@ export function StaffScreen({
                     color="#ed691d"
                     size="large"
                   />
-                ) : recoveries.length === 0 ? (
+                ) : actionableRecoveries.length === 0 ? (
                   <Text style={styles.empty}>
                     No hay recuperaciones pendientes.
                   </Text>
                 ) : (
-                  recoveries.map((rec: any) => {
+                  actionableRecoveries.map((rec: any) => {
                     const client = clients.find((c) => c.id === rec.clientId);
                     const service = data?.services.find((s) => s.id === rec.serviceId);
                     return (
@@ -854,13 +876,20 @@ export function StaffScreen({
                         key={rec.id}
                         accessibilityRole="button"
                         onPress={() => {
-                          // Recreaciones: create a virtual booking for the assign modal
+                          if (rec.status === "RESCHEDULE_PENDING") {
+                            const existing = bookings.find(b => b.id === rec.bookingId);
+                            if (existing) openAssignModal(existing);
+                            else setError("No se encontró la reserva original de esta recuperación.");
+                            return;
+                          }
+                          if (rec.status !== "PENDING") return;
                           setAssignForm({
                             employeeId: rec.employeeId || "",
                             date: rec.date || localDay(),
                             start: rec.start || "",
                             roomId: "",
                           });
+                          setAssignmentSource({ kind: "recovery", id: rec.id });
                           setAssignedBooking({
                             id: "__rec__" + rec.id,
                             clientId: rec.clientId || "",
@@ -876,7 +905,7 @@ export function StaffScreen({
                             centerId: null,
                             centerName: null,
                             centerAddress: null,
-                            needsReschedule: true,
+                              needsReschedule: false,
                           } as any);
                         }}
                         style={styles.bookingCard}
@@ -924,8 +953,8 @@ export function StaffScreen({
               </>
             )}
 
-            {/* Also show unassigned bookings if no pending sub-tab data */}
-            {pendingSubTab === "asignacion" && pendingPackages.length === 0 && pending.length > 0 && (
+            {/* Reservas pendientes, además de los bonos por organizar */}
+            {pendingSubTab === "asignacion" && pending.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>
                   Reservas sin asignar · {pending.length}
@@ -1120,7 +1149,7 @@ export function StaffScreen({
 
           <Text style={styles.note}>
             {office
-              ? "La asignación, creación y modificación de citas se realizan en el panel de gestión del centro."
+              ? "Puedes organizar bonos y reprogramar citas aquí. Los demás cambios se gestionan en el panel del centro."
               : "Para solicitar cambios en una cita, contacta con recepción. La configuración y los permisos los gestiona administración."}
           </Text>
         </View>
@@ -1230,7 +1259,7 @@ export function StaffScreen({
         visible={assignedBooking !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => { resetAssignForm(); setAssignedBooking(null); }}
+        onRequestClose={() => { resetAssignForm(); setAssignedBooking(null); setAssignmentSource(null); }}
       >
         <View style={styles.overlay}>
           <View style={styles.modalPanel}>
@@ -1357,12 +1386,14 @@ export function StaffScreen({
                     </View>
                   )}
 
+                  {!!error && <Text style={styles.errorText}>⚠ {error}</Text>}
                   <View style={styles.assignmentActions}>
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => {
                         resetAssignForm();
                         setAssignedBooking(null);
+                        setAssignmentSource(null);
                       }}
                       style={styles.assignCancelBtn}
                     >

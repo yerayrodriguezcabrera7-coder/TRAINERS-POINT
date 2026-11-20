@@ -52,16 +52,19 @@ export interface Booking {
   centerAddress?: string;
   centerId?: string;
   needsReschedule?: boolean;
+  packageId?: string | null;
+  recoveryId?: string | null;
+  sessionId?: string | null;
   status: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
   notes?: string;
-  sessionLog?: { exercises: string; feeling: "GOOD" | "TIRED" | "PAIN" | null };
+  sessionLog?: { exercises: string; feeling: "GOOD" | "TIRED" | "EASY" | "ADEQUATE" | "LIMIT" | "PAIN" | null };
   nextSessionPlan?: string;
 }
 
 export interface CalendarData {
   bookings: Booking[];
   services: Array<{ id: string; name: string; color?: string }>;
-  employees: Array<{ id: string; name: string }>;
+  employees: Array<{ id: string; name: string; schedule?: Array<{open:string;close:string;closed:boolean}>; weeklyPeriods?: Array<Array<{open:string;close:string}>>; shifts?: Array<{date:string;periods:Array<{open:string;close:string}>}> }>;
   rooms: Array<{ id: string; name: string }>;
   clients?: Array<{ id: string; name: string; email?: string; phone?: string; status?: string }>;
   centers?: Array<{ id: string; name: string }>;

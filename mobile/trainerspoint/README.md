@@ -6,7 +6,11 @@ Aplicación con entrada a cuentas de clientes y trabajadores, construida sobre e
 
 La cuenta real del entrenador abre una pantalla propia con fichaje, pausas y horas trabajadas del día. `expo-location` solicita ubicación al fichar; el servidor comprueba el radio del centro configurado y devuelve un error si la precisión es insuficiente o se está fuera. El fichaje de la web sigue admitiendo operaciones sin GPS para los usos ya existentes.
 
+La cuenta real del cliente consulta `/api/client-calendar` y `/api/mobile/client/home` para mostrar sus propias reservas, bonos, medidas, plan activo y perfil. El servidor obtiene la ficha desde la identidad autenticada; no acepta un identificador de cliente enviado en la URL para esta consulta.
+
 La agenda diaria muestra las citas asignadas. Al abrir una cita se pueden registrar asistencia, medidas, cargas, sensaciones y el objetivo de la siguiente sesión. El objetivo anterior aparece arriba al abrir la próxima cita del mismo cliente. «Pendiente de reubicar» libera el horario y deja la cita visible a recepción. La pestaña «Mis clientes» permite buscar, consultar el bono, las últimas sesiones, la evolución de peso y dejar un aviso interno. El servidor comprueba la asignación antes de devolver la ficha o guardar medidas.
+
+La agenda agrupa las sesiones duales en una tarjeta y permite gestionar la asistencia y el diario de cada cliente por separado. El selector de fecha permite saltar a cualquier día. La pestaña «Turnos» muestra horario semanal, excepciones y ausencias aprobadas, y envía nuevas solicitudes a administración. Mientras la app está abierta consulta los cambios de agenda cada 15 segundos y muestra un aviso con sonido si aparece una cita nueva hoy o se cancela una cita de las próximas dos horas. El sonido puede depender de los ajustes del dispositivo o de la autorización de reproducción del navegador; las notificaciones remotas con la app cerrada requieren las aplicaciones de plataforma SNS descritas más abajo.
 
 Para activar las medidas de grasa corporal hay que aplicar la migración Prisma `20261118000100_body_fat_measurement` junto con el despliegue del backend. Para fichar desde el móvil, cada centro necesita coordenadas y radio configurados. La demostración sigue siendo ficticia y no escribe en estos endpoints.
 
@@ -72,14 +76,15 @@ Para una revisión visual desde el navegador del teléfono, se puede arrancar `n
 
 ## Trabajo pendiente para la primera fase real
 
-- Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. Actualmente la sesión se mantiene en memoria; al cerrar o recargar se debe iniciar sesión de nuevo. No se guardan contraseñas.
-- Integrar bonos en la cuenta real; las reservas ya se consultan en el mismo backend de la web, sin duplicar bases de datos.
+- Validar el acceso con cuentas reales de cada centro y la ejecución en dispositivos físicos. En Android/iOS la sesión del backend se conserva mediante `expo-secure-store`, se valida de nuevo al abrir la app y se elimina al cerrar sesión o recibir un 401. No se guardan contraseñas ni tokens de Cognito.
+- Validar el recorrido de la cuenta real en teléfonos Android y iOS; la vista web y las pruebas de integración no sustituyen esa comprobación.
 - Configurar proveedor de cobro aprobado por la empresa. Confirmar pagos en el servidor mediante eventos firmados e idempotentes antes de activar bonos o marcar deudas como pagadas. La app no debe poder declarar un pago recibido.
-- Integrar notificaciones: permisos del dispositivo, tokens, tareas programadas, preferencias y control de duplicados.
+- Completar las preferencias de avisos, los recordatorios programados y el control de duplicados entre dispositivos.
+- Los avisos de cambios de agenda usan el tema SNS `trainerspoint-avisos` en `eu-south-2`. Para recibir push con la app cerrada hay que crear aplicaciones de plataforma SNS para APNs y FCM y configurar sus ARN en el backend; el ARN del tema por sí solo no permite registrar dispositivos. El backend usa la cadena de credenciales AWS habitual (preferentemente rol IAM) y necesita permisos `sns:CreatePlatformEndpoint`, `sns:Subscribe`, `sns:SetSubscriptionAttributes`, `sns:Unsubscribe` y `sns:Publish`. Android necesita una compilación de desarrollo o producción y la configuración nativa de Firebase; Expo Go no recibe push remoto. La app registra el token nativo al iniciar sesión como entrenador y retira su suscripción al cerrar sesión. El tema entrega solo avisos genéricos a la suscripción filtrada por centro y entrenador; la agenda se consulta mediante la API autenticada. Los avisos sonoros locales siguen disponibles si falta la configuración push.
 - Mantener las dependencias de SDK 58 y los parches de herramientas transitivas alineados; los overrides de glob/minimatch corrigen avisos de seguridad del empaquetador.
 - Probar en Android/iOS reales, accesibilidad, recuperación de cuenta y errores de red.
 
-Rutinas, nutrición, medidas y actividades aparecen únicamente como futuras ampliaciones.
+Nutrición y actividades siguen como futuras ampliaciones.
 
 ## Comprobaciones realizadas en esta entrega
 

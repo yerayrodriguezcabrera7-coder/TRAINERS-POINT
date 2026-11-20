@@ -62,12 +62,18 @@ export function mobileStaffView(state: MobileState, actor: Identity) {
       version: booking.version, centerName: booking.centerName, centerAddress: booking.centerAddress,
       needsReschedule: booking.needsReschedule, notes: booking.notes,
       sessionLog: booking.sessionLog, nextSessionPlan: booking.nextSessionPlan,
+      sessionId: booking.sessionId,
+      ...(["ADMIN", "RECEPTION"].includes(actor.role) ? {
+        packageId: booking.packageId, recoveryId: booking.recoveryId,
+      } : {}),
     })),
     clients: state.clients.filter(client => clientIds.has(client.id)).map(client => ({
       id: client.id, name: client.name, phone: client.phone, email: client.email, status: client.status,
     })),
     employees: state.employees.filter(employee => actor.role !== "TRAINER" || employee.id === actor.employeeId)
-      .map(employee => ({ id: employee.id, name: employee.name })),
+      .map(employee => ({ id: employee.id, name: employee.name,
+        ...(actor.role === "TRAINER" ? { schedule: employee.schedule, weeklyPeriods: employee.weeklyPeriods, shifts: employee.shifts } : {}),
+      })),
     services: state.services.map(service => ({ id: service.id, name: service.name, color: service.color })),
     rooms: state.rooms.map(room => ({ id: room.id, name: room.name })),
     centers: (state.centers || []).filter(center => actor.role !== "TRAINER" || centerIds.has(center.id))

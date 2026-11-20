@@ -1,5 +1,5 @@
-import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery } from "./types";
-import type { AttendanceData, TrainerClientDetail } from "./trainer-types";
+import type { Booking, CalendarData, ClientReservation, Identity, LoginRequest, LoginResponse, SlotQuery, ServicePackage, Measurement, TrainingPlan } from "./types";
+import type { AttendanceData, TrainerClientDetail, TrainerLeave, LeaveKind } from "./trainer-types";
 import type { CognitoAuth } from "./cognito";
 export { CognitoPasswordRequired } from "./cognito";
 
@@ -102,7 +102,11 @@ export class ApiClient {
     return this.request("/api/password/change", { method: "POST", body: JSON.stringify({ currentPassword, newPassword, confirmPassword }) });
   }
   getClientCalendar() { return this.request<CalendarData>("/api/client-calendar"); }
+  getClientHome() { return this.request<{profile:{id:string;firstName:string;lastName:string;email:string;phone:string;status:string;objective?:string|null};packages:ServicePackage[];measurements:Measurement[];trainingPlans:TrainingPlan[]}>("/api/mobile/client/home"); }
   getStaffCalendar() { return this.request<CalendarData>("/api/mobile/calendar"); }
+  getTrainerPushAvailability() { return this.request<{ios:boolean;android:boolean}>("/api/mobile/push"); }
+  registerTrainerPush(platform:"ios"|"android", token:string) { return this.request<{ok:boolean}>("/api/mobile/push",{method:"POST",body:JSON.stringify({platform,token})}); }
+  unregisterTrainerPush(platform:"ios"|"android", token:string) { return this.request<{ok:boolean}>("/api/mobile/push",{method:"DELETE",body:JSON.stringify({platform,token})}); }
   getAttendance(day: string) { return this.request<AttendanceData>(`/api/attendance?from=${encodeURIComponent(day)}&to=${encodeURIComponent(day)}`); }
   clock(employeeId: string, action: "IN" | "OUT", geo: {latitude:number;longitude:number;accuracy:number|null}) {
     return this.request<{clockIn:string;clockOut:string|null;geoIn?:{inGeofence:boolean};geoOut?:{inGeofence:boolean}}>("/api/attendance/clock",{method:"POST",body:JSON.stringify({employeeId,action,geo})});
@@ -116,8 +120,12 @@ export class ApiClient {
   markAttendance(bookingId:string,attendance:"ASISTIO"|"NO_ASISTIO"|"REPROGRAMAR",version:number) {
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/attendance`,{method:"PATCH",body:JSON.stringify({attendance,version})});
   }
-  saveSession(bookingId:string, data:{version:number;exercises:string;feeling:"GOOD"|"TIRED"|"PAIN"|null;nextSessionPlan:string}) {
+  saveSession(bookingId:string, data:{version:number;exercises:string;feeling:"GOOD"|"TIRED"|"EASY"|"ADEQUATE"|"LIMIT"|"PAIN"|null;nextSessionPlan:string}) {
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}/session`,{method:"PATCH",body:JSON.stringify(data)});
+  }
+  getLeaves() { return this.request<TrainerLeave[]>("/api/leaves"); }
+  requestLeave(data:{type:LeaveKind;startDate:string;endDate:string;note:string}) {
+    return this.request("/api/leaves",{method:"POST",body:JSON.stringify(data)});
   }
   getClientSlots(query: SlotQuery) {
     const params = new URLSearchParams({ ...query });
@@ -129,24 +137,14 @@ export class ApiClient {
   // Clients have no cancellation endpoint: direct them to reception.
   // Office changes retain the version so the server rejects stale edits.
   updateOfficeBooking(booking: Booking) {
+    const { end: _derivedEnd, ...input } = booking;
     return this.request<Booking>(`/api/bookings/${encodeURIComponent(booking.id)}`, {
-      method: "PUT", body: JSON.stringify({ booking }),
+      method: "PUT", body: JSON.stringify({ booking: input }),
     });
   }
-  // Assign/update a booking (for office/reception)
-  assignBooking(bookingId: string, data: {
-    clientId?: string;
-    serviceId?: string;
-    employeeId?: string;
-    date?: string;
-    start?: string;
-    end?: string;
-    roomId?: string;
-    status?: string;
-    needsReschedule?: boolean;
-  }) {
-    return this.request<Booking>(`/api/bookings/${encodeURIComponent(bookingId)}`, {
-      method: "PUT", body: JSON.stringify({ booking: data }),
+  createOfficeBooking(booking: Record<string, unknown>) {
+    return this.request<Booking>("/api/bookings", {
+      method: "POST", body: JSON.stringify({ booking }),
     });
   }
   // Query available slots
@@ -162,7 +160,7 @@ export class ApiClient {
   }
   // Get pending packages (to contract/schedule)
   getPendingPackages() {
-    return this.request<any[]>("/api/pending-packages");
+    return this.request<{ packages: any[] }>("/api/pending-packages").then(result => result.packages);
   }
   // Get recovery credits
   getRecoveries() {

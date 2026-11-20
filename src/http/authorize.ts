@@ -47,7 +47,7 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
       return true;
     }
     if (identity.role === "CLIENT") {
-      const isMeOrLogout = ["/api/client-calendar", "/api/client-slots", "/api/recoveries"].includes(url.pathname) || url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
+      const isMeOrLogout = ["/api/client-calendar", "/api/client-slots", "/api/recoveries", "/api/mobile/client/home"].includes(url.pathname) || url.pathname === "/api/me" || url.pathname === "/api/logout" || url.pathname === "/api/password/change";
       if (!isMeOrLogout) {
         sendError(response, 403, "Tu perfil no tiene acceso a las funciones de gestión.");
         return true;

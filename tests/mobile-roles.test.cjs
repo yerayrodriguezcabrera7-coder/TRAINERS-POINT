@@ -7,14 +7,14 @@ const state = {
     { id: 'c2', name: 'Cliente dos', assignedWorkerId: 'e2' },
     { id: 'c3', name: 'Cliente tres', assignedWorkerId: 'e1' },
   ],
-  employees: [{ id: 'e1', name: 'Uno', schedule: ['private'] }, { id: 'e2', name: 'Dos' }],
+  employees: [{ id: 'e1', name: 'Uno', schedule: ['own shift'], weeklyPeriods: [[{open:'09:00',close:'12:00'}]] }, { id: 'e2', name: 'Dos', schedule: ['other shift'] }],
   services: [{ id: 's1', name: 'Personal', color: '#abcdef', price: 100 }],
   rooms: [{ id: 'r1', name: 'Sala' }],
   centers: [{ id: 'g1', name: 'Centro uno' }, { id: 'g2', name: 'Centro dos' }],
   users: [{ passwordHash: 'secret' }],
   clientDebts: { c1: 20, c2: 100 },
   bookings: [
-    { id: 'b1', clientId: 'c1', employeeId: 'e1', centerId: 'g1', date: '2030-01-01', status: 'CONFIRMED', history: [{ actor: 'other worker' }], chargeAmount: 100 },
+    { id: 'b1', clientId: 'c1', employeeId: 'e1', centerId: 'g1', date: '2030-01-01', status: 'CONFIRMED', history: [{ actor: 'other worker' }], chargeAmount: 100, packageId: 'pkg-1', sessionId: 'session-1' },
     { id: 'b2', clientId: 'c2', employeeId: 'e2', centerId: 'g2', date: '2030-01-01', status: 'CONFIRMED' },
     { id: 'b3', clientId: 'c2', employeeId: null, centerId: 'g2', date: '2030-01-02', status: 'PENDING', needsReschedule: true },
   ],
@@ -29,6 +29,9 @@ test('mobile worker sees only their own appointments, linked clients and centres
   assert.equal(view.clients[0].notes, undefined);
   assert.equal(view.bookings[0].history, undefined);
   assert.equal(view.bookings[0].chargeAmount, undefined);
+  assert.equal(view.bookings[0].packageId, undefined);
+  assert.equal(view.bookings[0].sessionId, 'session-1');
+  assert.deepEqual(view.employees[0].schedule, ['own shift']);
   assert.equal(view.services[0].price, undefined);
   assert.equal(view.users, undefined);
   assert.equal(view.clientDebts, undefined);
@@ -40,6 +43,9 @@ test('mobile reception sees all agendas and pending bookings without account or 
   assert.equal(view.clients.length, 3);
   assert.equal(view.employees.length, 2);
   assert.equal(view.bookings.find(b => b.id === 'b3').needsReschedule, true);
+  assert.equal(view.bookings[0].packageId, 'pkg-1');
+  assert.equal(view.bookings[0].sessionId, 'session-1');
+  assert.equal(view.employees[0].schedule, undefined);
   assert.equal(view.users, undefined);
   assert.equal(view.clientDebts, undefined);
 });

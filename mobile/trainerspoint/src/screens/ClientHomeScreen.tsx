@@ -18,6 +18,7 @@ import type {
   Measurement,
   TrainingPlan,
 } from "../../../shared/types";
+import { localDay } from "../../../shared/calendar";
 
 /* ────────────────── Colores ────────────────── */
 const COLORS = {
@@ -115,22 +116,20 @@ export default function ClientHomeScreen({
     inFlight.current = true;
     if (showSpinner) setLoading(true);
     try {
-      const [cal, pkgs, meas, plans] = await Promise.allSettled([
+      const [cal, home] = await Promise.allSettled([
         api.getClientCalendar(),
-        user.clientId ? api.getPackages(user.clientId) : Promise.resolve([]),
-        user.clientId ? api.getMeasurements(user.clientId) : Promise.resolve([]),
-        user.clientId ? api.getTrainingPlans(user.clientId) : Promise.resolve([]),
+        user.clientId ? api.getClientHome() : Promise.reject(new Error("La cuenta no tiene una ficha de cliente asociada.")),
       ]);
       if (active.current) {
-        setData(cal.status === "fulfilled" ? cal.value : null);
-        setPackages(pkgs.status === "fulfilled" ? pkgs.value : []);
-        setMeasurements(
-          meas.status === "fulfilled" ? meas.value : []
-        );
-        setTrainingPlans(
-          plans.status === "fulfilled" ? plans.value : []
-        );
-        setError("");
+        if (cal.status === "fulfilled") setData(cal.value);
+        if (home.status === "fulfilled") {
+          setPackages(home.value.packages);
+          setMeasurements(home.value.measurements);
+          setTrainingPlans(home.value.trainingPlans);
+          setProfile(home.value.profile);
+        }
+        const failed = cal.status === "rejected" ? cal.reason : home.status === "rejected" ? home.reason : null;
+        setError(failed instanceof Error ? failed.message : failed ? "No se pudieron cargar todos tus datos." : "");
         setUpdatedAt(
           new Date().toLocaleTimeString("es-ES", {
             hour: "2-digit",
@@ -152,17 +151,6 @@ export default function ClientHomeScreen({
     }
   }, [api, user.clientId]);
 
-  const loadProfile = useCallback(async () => {
-    try {
-      if (user.clientId) {
-        const profileData = await api.getClientProfile(user.clientId);
-        if (active.current) setProfile(profileData);
-      }
-    } catch {
-      /* Profile is optional */
-    }
-  }, [api, user.clientId]);
-
   /* ── Refresh ── */
   const onRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -174,7 +162,6 @@ export default function ClientHomeScreen({
   useEffect(() => {
     active.current = true;
     void loadAll();
-    void loadProfile();
     const timer = setInterval(() => {
       if (AppState.currentState === "active") void loadAll(false);
     }, 30000);
@@ -182,14 +169,14 @@ export default function ClientHomeScreen({
       active.current = false;
       clearInterval(timer);
     };
-  }, [loadAll, loadProfile]);
+  }, [loadAll]);
 
   /* ── Helpers ── */
   const upcoming = data
     ? data.bookings
         .filter(b =>
           ["PENDING", "CONFIRMED"].includes(b.status) &&
-          b.date > new Date().toISOString().split("T")[0]
+          (`${b.date} ${b.start}` > `${localDay()} ${new Date().toTimeString().slice(0,5)}`)
         )
         .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))
     : [];
@@ -537,6 +524,7 @@ export default function ClientHomeScreen({
                 diffFn: () => string | null;
               }> = [
                 { label: "Peso", value: m.weight, unit: "kg", diffFn: () => diff(m.weight, prev?.weight) },
+                { label: "Grasa", value: m.bodyFat, unit: "%", diffFn: () => diff(m.bodyFat, prev?.bodyFat) },
                 { label: "Cintura", value: m.waist, unit: "cm", diffFn: () => diff(m.waist, prev?.waist) },
                 { label: "Cadera", value: m.hip, unit: "cm", diffFn: () => diff(m.hip, prev?.hip) },
                 { label: "Pecho", value: m.chest, unit: "cm", diffFn: () => diff(m.chest, prev?.chest) },
@@ -604,9 +592,8 @@ export default function ClientHomeScreen({
               .map(plan => {
                 const days = plan.details?.days ?? [];
                 return (
-                  <Pressable
+                  <View
                     key={plan.id}
-                    onPress={() => setSelectedPlan(plan)}
                     style={s.planCard}
                   >
                     {/* Header del plan */}
@@ -645,6 +632,8 @@ export default function ClientHomeScreen({
                       return (
                         <View key={idx} style={s.planDay}>
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`${expanded ? "Ocultar" : "Mostrar"} ejercicios de ${day.name}`}
                             onPress={() => toggleDay(plan.id, String(idx))}
                             style={s.planDayHeader}
                           >
@@ -675,7 +664,10 @@ export default function ClientHomeScreen({
                         No hay días de rutina disponibles todavía.
                       </Text>
                     )}
-                  </Pressable>
+                    <Pressable accessibilityRole="button" onPress={() => setSelectedPlan(plan)} style={s.planOpen}>
+                      <Text style={s.planOpenText}>Ver plan completo</Text>
+                    </Pressable>
+                  </View>
                 );
               })}
 
@@ -918,6 +910,9 @@ export default function ClientHomeScreen({
                 </Text>
                 {selectedMeasurement.weight && (
                   <Text style={s.modalRow}>⚖️ Peso: {selectedMeasurement.weight} kg</Text>
+                )}
+                {selectedMeasurement.bodyFat && (
+                  <Text style={s.modalRow}>📊 Grasa corporal: {selectedMeasurement.bodyFat} %</Text>
                 )}
                 {selectedMeasurement.waist && (
                   <Text style={s.modalRow}>📏 Cintura: {selectedMeasurement.waist} cm</Text>
@@ -1437,6 +1432,8 @@ const s = StyleSheet.create({
     fontStyle: "italic",
     marginTop: 8,
   },
+  planOpen: { marginTop: 14, minHeight: 44, justifyContent: "center", alignItems: "center" },
+  planOpenText: { color: COLORS.primaryDark, fontSize: 14, fontWeight: "700" },
 
   /* ═══════════════════════════════════════════
      Perfil

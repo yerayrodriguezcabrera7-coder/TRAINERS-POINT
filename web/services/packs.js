@@ -326,10 +326,15 @@
     $('dialog-subtitle').textContent = 'Primero escoge el servicio (Individual o Dual). El pack heredará su modalidad y duración.';
     $('field-name').value = '';
     $('field-category').value = 'TRAINING';
+<<<<<<< HEAD
     const activeNonPacks = services.filter(s => s.type !== 'PACK' && s.isActive);
     $('field-service').value = activeNonPacks.length === 1 ? activeNonPacks[0].id : '';
     $('field-modality').value = '';
     if ($('field-type')) $('field-type').value = 'PACK';
+=======
+    $('field-service').value = services.find(s => s.type === 'SESION_INDIVIDUAL')?.id || '';
+    $('field-modality').value = 'INDIVIDUAL';
+>>>>>>> origin/main
     $('field-trainingCount').value = '10';
     $('field-durationMin').value = '60';
     $('field-price').value = '';
@@ -359,7 +364,10 @@
     $('field-category').value = pack.category || 'TRAINING';
     $('field-service').value = pack.serviceId || '';
     $('field-modality').value = pack.modality || 'INDIVIDUAL';
+<<<<<<< HEAD
     if ($('field-type')) $('field-type').value = 'PACK';
+=======
+>>>>>>> origin/main
     $('field-trainingCount').value = pack.trainingCount ?? 10;
     $('field-price').value = pack.price != null ? Number(pack.price).toFixed(2) : '';
     $('field-durationMin').value = pack.durationMin || 60;
