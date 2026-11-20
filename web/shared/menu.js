@@ -19,6 +19,7 @@
     globe:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/>',
     phone:'<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>',
     bell:'<path d="M5 17h14l-2-4V8a5 5 0 0 0-10 0v5Zm5 3h4"/>',
+    truck:'<path d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm12 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/>',
     chat:'<path d="M21 11a8 8 0 0 1-8 8H8l-5 3 1-6a8 8 0 0 1 9-13 8 8 0 0 1 8 8Z"/>'
   };
   const items = [
@@ -30,6 +31,7 @@
     ['Packs','bag','/packs.html'],
     ['Tienda TPV','bag','/tienda.html'],
     ['Productos','bag','/productos.html'],
+    ['Proveedores','truck','/proveedores.html'],
     ['Pedidos / Albaranes','list','/pedidos.html'],
     ['Historial de stock','history','/historial-stock.html'],
     ['Caja','cash','/caja.html'],
@@ -92,7 +94,7 @@
       setTimeout(updateActive, 30);
     }
   });
-const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Caja']],['Análisis',['Cuadro de mando','Informes','Historial de eventos']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
+const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignación']],['Clientes y servicios',['Clientes','Servicios','Packs']],['Ventas y caja',['Tienda TPV','Productos','Proveedores','Caja']],['Análisis',['Cuadro de mando','Informes','Historial de eventos']],['Equipo',['Profesionales','Fichajes','Ausencias del equipo']],['Administración',['Gimnasios','Usuarios','Permisos de página']]];
   host.innerHTML = '<div class="app-menu-top"><a class="app-menu-brand" href="/index.html"><span class="tp-wordmark" role="img" aria-label="Trainers Point"><b class="tp-initial">T.</b><span class="tp-name">trainers<span>point</span></span></span></a><button class="app-menu-toggle" type="button" aria-label="Contraer menú" aria-expanded="true" aria-controls="app-navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">'+icons.menu+'</svg></button></div><div class="app-menu-center"><span class="center-indicator"></span><div><small>ESPACIO DE TRABAJO</small><strong id="gym-workspace-label">Trainers Point · Bizkaia</strong></div></div><nav id="app-navigation" aria-label="Menú principal">'+groups.map(([label,names])=>'<section class="menu-group"><h2>'+label+'</h2>'+names.map(name=>items.find(x=>x[0]===name)).filter(Boolean).map(entry).join('')+'</section>').join('')+'</nav>';
   const firstGroup = host.querySelector('.menu-group');
   const brand = host.querySelector('.app-menu-brand');
@@ -149,7 +151,7 @@ const groups=[['Día a día',['Mis reservas','Calendario','Pendientes de asignac
       const normalize = href => (href || '').replace(/^\//, '');
       const allowedByRole = {
         ADMIN: null,
-        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'pedidos.html', 'historial-stock.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+        RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'proveedores.html', 'pedidos.html', 'historial-stock.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
         CLIENT: ['mis-reservas.html'],
       };

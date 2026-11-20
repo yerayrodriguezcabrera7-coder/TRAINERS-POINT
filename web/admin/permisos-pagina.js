@@ -16,6 +16,7 @@
     { key: 'permisos-pagina.html', label: 'Permisos de página' },
     { key: 'tienda.html', label: 'Tienda TPV' },
     { key: 'productos.html', label: 'Productos' },
+    { key: 'proveedores.html', label: 'Proveedores' },
     { key: 'caja.html', label: 'Caja y ventas' },
     { key: 'cuadro-mando.html', label: 'Cuadro de mando' },
     { key: 'informes.html', label: 'Informes y exportación' },
@@ -34,7 +35,7 @@
 
   const roleDefaults = {
     ADMIN: PAGES.map(p => p.key),
-    RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
+    RECEPTION: ['caja.html', 'servicios', 'packs.html', 'profesionales', 'pendientes.html', 'tienda.html', 'productos.html', 'proveedores.html', 'index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     TRAINER: ['index.html', 'clientes', 'fichajes.html', 'ausencias.html'],
     CLIENT: ['mis-reservas.html'],
   };

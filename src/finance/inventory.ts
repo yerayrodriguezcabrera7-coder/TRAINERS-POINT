@@ -22,6 +22,15 @@ const productInput = z.object({ name: z.string().trim().min(1).max(200), descrip
   barcode: z.string().trim().max(80).regex(/^[\p{L}\p{N} .,_/-]*$/u).transform(v => v || null).nullable().optional(),
   imageData: z.string().refine(validProductImage,'Selecciona una imagen PNG, JPEG o WebP válida de hasta 550 KB.').nullable().optional(),
   trackStock: z.boolean().optional(), stock: z.number().int().min(0).max(1000000), revision: z.number().int().positive().optional() });
+const providerInput = z.object({
+  name: z.string().trim().min(1, 'El nombre del proveedor es obligatorio.').max(200),
+  contactName: z.string().trim().max(200).default('').transform(v => v || null).nullable().optional(),
+  email: z.string().trim().max(200).refine(v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Email inválido.').default('').transform(v => v || null).nullable().optional(),
+  phone: z.string().trim().max(50).default('').transform(v => v || null).nullable().optional(),
+  address: z.string().trim().max(500).default('').transform(v => v || null).nullable().optional(),
+  notes: z.string().trim().max(2000).default('').transform(v => v || null).nullable().optional(),
+  isActive: z.boolean().optional()
+});
 const paymentMethod = z.enum(['EFECTIVO', 'TARJETA', 'BIZUM']);
 const money = z.number().positive().max(1000000000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6);
 const paymentInput = z.object({ requestKey: z.string().uuid(), amount: money, method: paymentMethod, paidAt: z.string().datetime().refine(v => new Date(v).getTime() <= Date.now(), 'La fecha del pago no puede ser futura.').optional(), note: z.string().trim().max(1000).default('') });
@@ -90,6 +99,91 @@ export class Inventory {
   }
   async providers(gym: string) {
     return this.db.provider.findMany({ where: { isActive: true, OR: [{ gymKey: gym }, { gymKey: null }] }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+  }
+  async providersList(gym: string, includeInactive: boolean = false) {
+    const list = await this.db.provider.findMany({
+      where: {
+        ...(includeInactive ? {} : { isActive: true }),
+        OR: [{ gymKey: gym }, { gymKey: null }]
+      },
+      include: {
+        _count: {
+          select: { products: { where: { isActive: true } } }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+    return list.map(p => ({
+      ...p,
+      productCount: p._count.products
+    }));
+  }
+  async getProvider(gym: string, id: string) {
+    const provider = await this.db.provider.findFirst({
+      where: { id, OR: [{ gymKey: gym }, { gymKey: null }] },
+      include: {
+        products: {
+          where: { isActive: true },
+          select: { id: true, name: true, unitPrice: true, stock: true, barcode: true, imageData: true },
+          orderBy: { name: 'asc' }
+        }
+      }
+    });
+    if (!provider) throw new ApiError(404, 'Proveedor desconocido.');
+    return provider;
+  }
+  async saveProvider(gym: string, raw: unknown, id?: string, actor: FinanceActor = 'system') {
+    const v = providerInput.parse(raw);
+    return this.transaction(gym, async (tx) => {
+      const old = id ? await tx.provider.findFirst({ where: { id, OR: [{ gymKey: gym }, { gymKey: null }] } }) : null;
+      if (id && !old) throw new ApiError(404, 'Proveedor desconocido.');
+      const duplicate = await tx.provider.findFirst({
+        where: {
+          name: { equals: v.name, mode: 'insensitive' },
+          isActive: true,
+          OR: [{ gymKey: gym }, { gymKey: null }],
+          ...(id ? { id: { not: id } } : {})
+        }
+      });
+      if (duplicate) throw new ApiError(409, `Ya existe un proveedor activo con el nombre "${v.name}".`);
+      const data = {
+        name: v.name,
+        contactName: v.contactName ?? null,
+        email: v.email ?? null,
+        phone: v.phone ?? null,
+        address: v.address ?? null,
+        notes: v.notes ?? null,
+        ...(v.isActive !== undefined ? { isActive: v.isActive } : {})
+      };
+      const provider = old
+        ? await tx.provider.update({ where: { id: old.id }, data })
+        : await tx.provider.create({ data: { gymKey: gym, ...data } });
+      await recordAudit(tx, {
+        gymKey: gym,
+        actor,
+        action: old ? 'PROVIDER_UPDATED' : 'PROVIDER_CREATED',
+        entityType: 'Provider',
+        entityId: provider.id,
+        detail: `${old ? 'Proveedor actualizado' : 'Proveedor creado'}: ${provider.name}.`
+      });
+      return provider;
+    });
+  }
+  async removeProvider(gym: string, id: string, actor: FinanceActor = 'system') {
+    return this.transaction(gym, async (tx) => {
+      const old = await tx.provider.findFirst({ where: { id, OR: [{ gymKey: gym }, { gymKey: null }] } });
+      if (!old) throw new ApiError(404, 'Proveedor desconocido.');
+      const provider = await tx.provider.update({ where: { id }, data: { isActive: false } });
+      await recordAudit(tx, {
+        gymKey: gym,
+        actor,
+        action: 'PROVIDER_DISABLED',
+        entityType: 'Provider',
+        entityId: id,
+        detail: `Proveedor desactivado: ${provider.name}.`
+      });
+      return provider;
+    });
   }
   async saveProduct(gym: string, raw: unknown, id?: string, actor: FinanceActor = 'system') {
     const v = productInput.parse(raw);
@@ -641,12 +735,12 @@ export function inventoryPermission(actor: Identity | undefined, action: string)
   if (Array.isArray(actor.pagePermissions)) {
     const perms = actor.pagePermissions;
     const allowed = action === 'admin'
-      ? (perms.includes('productos.html') || perms.includes('caja.html'))
-      : ['read', 'sell', 'return', 'restock', 'barcode'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html'].some(p => perms.includes(p));
+      ? (perms.includes('productos.html') || perms.includes('caja.html') || perms.includes('proveedores.html'))
+      : ['read', 'sell', 'return', 'restock', 'barcode'].includes(action) && ['productos.html', 'tienda.html', 'caja.html', 'ventas.html', 'proveedores.html'].some(p => perms.includes(p));
     if (!allowed)
       throw new ApiError(403, 'No tienes permiso para esta operación.');
     return;
   }
-  if (!(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock', 'barcode'].includes(action)))
+  if (!(actor.role === 'RECEPTION' && ['read', 'sell', 'return', 'restock', 'barcode', 'admin'].includes(action)))
     throw new ApiError(403, 'No tienes permiso para esta operación.');
 }

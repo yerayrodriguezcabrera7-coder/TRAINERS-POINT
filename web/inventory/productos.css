@@ -10,3 +10,80 @@
 .product-stock-alert{display:flex;margin:0 0 24px}.product-stock-alert article{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 28px;padding:18px 24px;border:1px solid #e0d5c9;border-radius:14px;background:#fffaf3;min-width:min(100%,290px)}.product-stock-alert strong{font-size:30px;line-height:1}.product-stock-alert small{grid-column:1/-1;color:#67746d}.product-search{display:grid;gap:8px;flex:1;min-width:180px}.product-identity{display:flex;gap:14px;align-items:center;min-width:210px}.product-photo,.product-placeholder{width:56px;height:56px;border-radius:10px;object-fit:contain;background:#f3f0e9;flex-shrink:0}.product-placeholder{display:grid;place-items:center;color:#8d9692}.product-placeholder svg{width:28px;height:28px}.product-photo.is-large,.product-placeholder.is-large{width:136px;height:136px}.product-image-editor{display:flex;align-items:center;gap:20px}.product-actions{display:flex;gap:8px;flex-wrap:wrap}.product-checkbox{display:flex!important;align-items:center;gap:10px}.product-checkbox input{width:18px;min-width:18px;flex:none}.field-help{margin:0;color:#66716b;font-size:13px}.form-grid .full{grid-column:1/-1}.product-pricing{padding:18px;background:#f4f6f3;border:1px solid #dfe5db;border-radius:12px;margin:20px 0}.product-pricing dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.product-pricing dt{color:#66716b;font-size:13px}.product-pricing dd{margin:6px 0 0;font-size:19px;font-weight:700}.product-pricing p{font-size:12px;line-height:1.5}.product-detail-data{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}.product-detail-data dd{margin:0;font-weight:600}.product-detail-data dt{color:#66716b}#product-error:empty{display:none}#product-error{padding:12px;background:#fff0eb}#product-detail-content>p{white-space:pre-wrap}.panel-toolbar a.primary{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;text-decoration:none;border-radius:10px;background:var(--red,#ff7f0a);color:#fff;font-weight:700}#product-dialog{max-height:90vh;overflow-y:auto}#sales-panel[hidden]{display:none}
 @media(max-width:650px){.product-pricing dl{grid-template-columns:1fr}.product-detail-data{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.product-stock-alert{width:100%}.product-stock-alert article{width:100%;box-sizing:border-box}.product-image-editor{flex-wrap:wrap}}
 .product-checkbox{flex-direction:row!important;justify-content:flex-start!important;align-items:center!important}.product-detail-data dd,.product-identity strong{overflow-wrap:anywhere}
+
+/* Filtro por proveedor */
+.supplier-filter-container {
+  margin-bottom: 14px;
+}
+.supplier-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.supplier-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #64748b;
+  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.supplier-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+.supplier-pill:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.supplier-pill.active {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #ffffff;
+  font-weight: 650;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+}
+.supplier-pill .count-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 700;
+}
+.supplier-pill.active .count-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.supplier-pill-manage {
+  font-size: 11px;
+  color: #64748b;
+  text-decoration: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.supplier-pill-manage:hover {
+  color: var(--red, #eb5a46);
+  background: #fff5f3;
+}

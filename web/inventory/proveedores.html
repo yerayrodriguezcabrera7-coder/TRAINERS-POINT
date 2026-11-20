@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Proveedores · Trainers Point</title>
+<script src="/runtime.js" defer></script><script src="/menu.js" defer></script><script src="/proveedores.js" defer></script>
+<link rel="stylesheet" href="/fichajes.css"><link rel="stylesheet" href="/gestion.css"><link rel="stylesheet" href="/menu.css"><link rel="stylesheet" href="/design.css"><link rel="stylesheet" href="/productos.css"><link rel="stylesheet" href="/orden.css"><link rel="stylesheet" href="/ayuda.css"><script src="/ayuda.js" defer></script></head>
+<body><div class="app-shell"><aside data-app-menu aria-label="Navegación"></aside><main class="attendance-shell main-content"><header class="topbar"><div class="breadcrumb"><span>Ventas y caja</span><span class="crumb-separator">/</span><strong>Proveedores</strong></div><div class="topbar-right"><div class="profile-avatar" aria-label="Trainers Point">TP</div></div></header><section class="page-content">
+<header class="attendance-header"><div><p class="eyebrow">CATÁLOGO E INVENTARIO</p><h1>Proveedores<span class="accent">.</span></h1><p>Gestiona los proveedores de productos y suministros del centro.</p></div><button id="new-provider" type="button" class="primary" hidden>＋ Nuevo proveedor</button></header><p id="notice" role="status"></p>
+<section id="stats" class="product-stock-alert" aria-label="Resumen de proveedores" aria-live="polite"></section>
+<section class="attendance-card management-card" aria-label="Catálogo de proveedores"><div class="panel-toolbar">
+<label class="product-search">Buscar proveedor<input id="search" type="search" placeholder="Nombre, contacto, email o teléfono" autocomplete="off"></label>
+<div class="filter-group"><label for="filter-status">Estado:</label><select id="filter-status"><option value="ACTIVE">Activos</option><option value="ALL">Todos</option><option value="INACTIVE">De baja</option></select></div>
+<button id="refresh" type="button" class="outline-button">Actualizar</button><a href="/productos.html" class="outline-button">📦 Ver productos</a>
+</div><div class="history-scroll"><table><thead><tr><th>Proveedor</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>Productos</th><th>Estado</th><th>Gestión</th></tr></thead><tbody id="providers"></tbody></table></div></section>
+</section></main></div>
+<dialog id="provider-dialog" aria-labelledby="provider-title"><form id="provider-form"><header class="dialog-heading"><h2 id="provider-title">Proveedor</h2><button type="button" data-close="provider-dialog" aria-label="Cerrar">×</button></header><div class="form-grid">
+<label class="full">Nombre de la empresa o proveedor *<input name="name" required maxlength="200" placeholder="Ej: Nutrisport, Prozis, Amix..."></label>
+<label>Persona de contacto<input name="contactName" maxlength="200" placeholder="Nombre del representante"></label>
+<label>Teléfono<input name="phone" type="tel" maxlength="50" placeholder="600 000 000"></label>
+<label class="full">Email<input name="email" type="email" maxlength="200" placeholder="pedidos@proveedor.com"></label>
+<label class="full">Dirección<input name="address" maxlength="500" placeholder="Calle, ciudad, código postal..."></label>
+<label class="full">Notas / Condiciones comerciales<textarea name="notes" maxlength="2000" placeholder="Plazos de entrega, descuentos, cuenta comercial..."></textarea></label>
+</div><p id="provider-error" role="alert"></p><footer class="dialog-actions"><button type="button" data-close="provider-dialog">Cancelar</button><button id="save-provider" class="primary">Guardar proveedor</button></footer></form></dialog>
+<dialog id="provider-detail" aria-labelledby="provider-detail-title"><header class="dialog-heading"><h2 id="provider-detail-title">Detalle del proveedor</h2><button type="button" data-close="provider-detail" aria-label="Cerrar">×</button></header><div id="provider-detail-content"></div><footer class="dialog-actions"><button type="button" data-close="provider-detail">Cerrar</button></footer></dialog></body></html>

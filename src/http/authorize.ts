@@ -75,12 +75,12 @@ export async function authorize(request: IncomingMessage, response: ServerRespon
         sendError(response, 403, "No tienes permiso para acceder a la gestión de caja.");
         return true;
       }
-      if (url.pathname.startsWith("/api/inventory/") && !["productos.html","tienda.html","caja.html","ventas.html"].some(page=>perms.includes(page))) {
+      if (url.pathname.startsWith("/api/inventory/") && !["productos.html","tienda.html","caja.html","ventas.html","proveedores.html"].some(page=>perms.includes(page))) {
         sendError(response, 403, "No tienes permiso para acceder al catálogo o inventario.");
         return true;
       }
-      if (/^\/api\/inventory\/products(?:\/|$)/.test(url.pathname) && request.method!=="GET" && !perms.includes("productos.html")) {
-        sendError(response,403,"No tienes permiso para modificar el catálogo de productos.");return true;
+      if (/^\/api\/inventory\/(?:products|providers)(?:\/|$)/.test(url.pathname) && request.method!=="GET" && !perms.includes("productos.html") && !perms.includes("proveedores.html")) {
+        sendError(response,403,"No tienes permiso para modificar este catálogo.");return true;
       }
       if (url.pathname==="/api/pending-packages" && !perms.includes("pendientes.html")) {
         sendError(response,403,"No tienes permiso para organizar sesiones pendientes.");return true;

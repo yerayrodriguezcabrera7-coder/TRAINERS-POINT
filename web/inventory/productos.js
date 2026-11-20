@@ -4,7 +4,7 @@
   const $=id=>document.getElementById(id), form=$('product-form');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const eur=v=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(Number(v));
-  let products=[], providers=[], me, editing=null, imageData=null, imageVersion=0, readingImage=false;
+  let products=[], providers=[], me, editing=null, imageData=null, imageVersion=0, readingImage=false, selectedProvider='all';
   async function api(path='',method='GET',body) {
     const response=await fetch('/api/inventory/products'+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
     const data=await response.json(); if(!response.ok)throw Error(data.error||'No se pudo guardar el producto.'); return data;
@@ -19,14 +19,65 @@
     const base=Math.round(gross*10000/(10000+taxRate));
     return {base:base/100,tax:(gross-base)/100,margin:(base-costCents)/100,percent:base>0?(base-costCents)/base*100:null};
   }
+  function renderSupplierFilters() {
+    const container = $('supplier-filters');
+    if (!container) return;
+    const counts = {};
+    let noneCount = 0;
+    for (const p of products) {
+      if (p.providerId) {
+        counts[p.providerId] = (counts[p.providerId] || 0) + 1;
+      } else {
+        noneCount++;
+      }
+    }
+    const pills = [];
+    pills.push(`<span class="supplier-filter-label"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm12 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg> Proveedor:</span>`);
+    pills.push(`<button type="button" class="supplier-pill${selectedProvider === 'all' ? ' active' : ''}" data-provider="all">Todos <span class="count-badge">${products.length}</span></button>`);
+    const seen = new Set();
+    for (const prov of providers) {
+      seen.add(prov.id);
+      const c = counts[prov.id] || 0;
+      pills.push(`<button type="button" class="supplier-pill${selectedProvider === prov.id ? ' active' : ''}" data-provider="${esc(prov.id)}">${esc(prov.name)} <span class="count-badge">${c}</span></button>`);
+    }
+    for (const p of products) {
+      if (p.providerId && p.provider?.name && !seen.has(p.providerId)) {
+        seen.add(p.providerId);
+        const c = counts[p.providerId] || 0;
+        pills.push(`<button type="button" class="supplier-pill${selectedProvider === p.providerId ? ' active' : ''}" data-provider="${esc(p.providerId)}">${esc(p.provider.name)} <span class="count-badge">${c}</span></button>`);
+      }
+    }
+    if (noneCount > 0) {
+      pills.push(`<button type="button" class="supplier-pill${selectedProvider === 'none' ? ' active' : ''}" data-provider="none">Sin proveedor <span class="count-badge">${noneCount}</span></button>`);
+    }
+    pills.push(`<a href="/proveedores.html" class="supplier-pill-manage" title="Gestionar proveedores">⚙ Proveedores →</a>`);
+    container.innerHTML = pills.join('');
+  }
   function render() {
     const q=$('search').value.trim().toLocaleLowerCase('es');
-    $('products').innerHTML=products.filter(p=>[p.name,p.description,p.barcode,p.sku].join(' ').toLocaleLowerCase('es').includes(q)).map(p=>
-      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}${p.provider?.name?`<small>Proveedor: ${esc(p.provider.name)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${(me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html')))&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con esta búsqueda.</td></tr>';
+    let filtered = products;
+    if (selectedProvider === 'none') {
+      filtered = filtered.filter(p => !p.providerId);
+    } else if (selectedProvider !== 'all') {
+      filtered = filtered.filter(p => p.providerId === selectedProvider);
+    }
+    $('products').innerHTML=filtered.filter(p=>[p.name,p.description,p.barcode,p.sku,p.provider?.name].join(' ').toLocaleLowerCase('es').includes(q)).map(p=>
+      `<tr><td><div class="product-identity">${photo(p.imageData,p.name)}<div><strong>${esc(p.name)}</strong><small>${esc(p.description)}</small>${p.barcode?`<small>Código: ${esc(p.barcode)}</small>`:''}${p.provider?.name?`<small>Proveedor: ${esc(p.provider.name)}</small>`:''}</div></div></td><td>${eur(p.unitPrice)}</td><td><strong>${p.stock}</strong> unidades${p.trackStock===false?'<small>Alerta desactivada</small>':''}</td><td>${p.isActive?'Activo':'Retirado'}</td><td><div class="product-actions"><button type="button" data-detail="${esc(p.id)}">Ver detalle</button>${(me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html')))&&p.isActive?`<button type="button" data-edit="${esc(p.id)}">Editar</button><button type="button" data-delete="${esc(p.id)}">Retirar</button>`:''}</div></td></tr>`).join('')||'<tr><td colspan="5">No hay productos con este filtro.</td></tr>';
     const count=products.filter(p=>p.isActive&&p.trackStock!==false&&p.stock===0).length;
     $('stats').innerHTML=`<article><span>Sin stock</span><strong>${count}</strong><small>Productos activos con seguimiento de stock</small></article>`;
   }
-  async function load(){products=(await api()).products;render();}
+  async function load(){
+    products=(await api()).products||[];
+    try {
+      const pRes = await fetch('/api/inventory/providers');
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        providers = Array.isArray(pData.providers) ? pData.providers : [];
+      }
+    } catch (_) {}
+    renderSupplierFilters();
+    render();
+  }
   function pricing(){
     const p=priceBreakdown(form.elements.price.value,form.elements.costPrice.value,form.elements.taxRate.value);
     $('pricing-base').textContent=p?eur(p.base):'—';$('pricing-tax').textContent=p?eur(p.tax):'—';
@@ -76,14 +127,27 @@
     if(button.dataset.delete&&confirm('¿Retirar este producto? Se conservará su historial.')){button.disabled=true;try{await api('/'+p.id,'DELETE');await load();}catch(error){$('notice').textContent=error.message;button.disabled=false;}}
   };
   document.querySelectorAll('[data-close]').forEach(button=>button.onclick=()=>$(button.dataset.close).close());
+  if ($('supplier-filters')) {
+    $('supplier-filters').onclick = event => {
+      const btn = event.target.closest('.supplier-pill');
+      if (!btn) return;
+      selectedProvider = btn.dataset.provider;
+      renderSupplierFilters();
+      render();
+    };
+  }
   $('search').oninput=render;$('refresh').onclick=()=>load().catch(error=>$('notice').textContent=error.message);
   try{
     const response=await fetch('/api/me');if(!response.ok)throw Error('Inicia sesión para consultar los productos.');me=await response.json();
     const canProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)?me.pagePermissions.includes('productos.html'):['ADMIN','RECEPTION'].includes(me.role));
     if(!canProducts)throw Error('Tu perfil no permite acceder a productos.');
     const canEditProducts=me.role==='ADMIN'||(Array.isArray(me.pagePermissions)&&me.pagePermissions.includes('productos.html'));
-    $('new-product').hidden=!canEditProducts;await load();
+    $('new-product').hidden=!canEditProducts;
     const urlParams = new URLSearchParams(location.search);
+    if (urlParams.get('proveedor')) {
+      selectedProvider = urlParams.get('proveedor');
+    }
+    await load();
     if (urlParams.get('nuevo') === '1' && canEditProducts) {
       edit();
       if (urlParams.get('barcode')) form.elements.barcode.value = urlParams.get('barcode');

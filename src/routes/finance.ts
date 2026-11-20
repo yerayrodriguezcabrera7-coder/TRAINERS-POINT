@@ -46,6 +46,7 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
       const inventory = new Inventory(prisma);
       const product = url.pathname.match(/^\/api\/inventory\/products(?:\/([0-9a-f-]+))?$/i);
       const barcodeUpdate = url.pathname.match(/^\/api\/inventory\/products\/([0-9a-f-]+)\/barcode$/i);
+      const providerRoute = url.pathname.match(/^\/api\/inventory\/providers(?:\/([0-9a-f-]+))?$/i);
       const restock = url.pathname.match(/^\/api\/inventory\/restock(?:\/([0-9a-f-]+))?$/i);
       const payment = url.pathname.match(/^\/api\/inventory\/sales\/([0-9a-f-]+)\/payments$/i);
       const clientDebtPay = url.pathname.match(/^\/api\/inventory\/clients\/([0-9a-f-]+)\/pay-debt$/i);
@@ -60,6 +61,16 @@ export async function financeRoutes(request: IncomingMessage, response: ServerRe
         sendJson(response, 200, await inventory.payClientDebt(gym, actor!, clientDebtPay[1], await readJsonBody(request)));
       else if (barcodeUpdate && (request.method === 'PATCH' || request.method === 'PUT'))
         sendJson(response, 200, { product: await inventory.updateProductBarcode(gym, barcodeUpdate[1], (await readJsonBody(request) as any)?.barcode ?? null, actor!) });
+      else if (providerRoute && request.method === 'GET' && !providerRoute[1])
+        sendJson(response, 200, { providers: await inventory.providersList(gym, url.searchParams.get('all') === '1') });
+      else if (providerRoute && request.method === 'GET' && providerRoute[1])
+        sendJson(response, 200, { provider: await inventory.getProvider(gym, providerRoute[1]) });
+      else if (providerRoute && request.method === 'POST' && !providerRoute[1])
+        sendJson(response, 201, await inventory.saveProvider(gym, await readJsonBody(request), undefined, actor!));
+      else if (providerRoute && request.method === 'PUT' && providerRoute[1])
+        sendJson(response, 200, await inventory.saveProvider(gym, await readJsonBody(request), providerRoute[1], actor!));
+      else if (providerRoute && request.method === 'DELETE' && providerRoute[1])
+        sendJson(response, 200, await inventory.removeProvider(gym, providerRoute[1], actor!));
       else if (restock && request.method === 'GET' && !restock[1])
         sendJson(response, 200, { requests: await inventory.restockRequests(gym, url.searchParams.get('status') || undefined) });
       else if (restock && request.method === 'POST' && !restock[1])
