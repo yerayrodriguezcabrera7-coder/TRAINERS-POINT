@@ -11,7 +11,7 @@ export async function pendingPackages(db: PrismaClient, gym: string) {
   }>>(Prisma.sql`
     WITH candidates AS (
       SELECT p.id AS "packageId",c.id AS "clientId",concat_ws(' ',c."firstName",c."lastName") AS "clientName",
-        s.id AS "serviceId",s.name AS "serviceName",p."sessionsBought",
+        COALESCE(s."serviceId", s.id) AS "serviceId",s.name AS "serviceName",p."sessionsBought",
         p."purchasedAt"+(COALESCE(s."validityWeeks",4)*168)*interval '1 hour' AS "expiresAt",
         p."paymentStatus"='PENDIENTE' AS "paymentPending"
       FROM "ClientServicePackage" p JOIN "Client" c ON c.id=p."clientId" JOIN "Service" s ON s.id=p."serviceId"

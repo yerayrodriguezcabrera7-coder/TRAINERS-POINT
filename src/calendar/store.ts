@@ -169,7 +169,15 @@ export class Store {
         serviceId: service.serviceId || null,
       }));
       const prismaIds = new Set(prismaServices.map(s => s.id));
-      const preservedSaved = saved.filter(s => !prismaIds.has(s.id));
+      const preservedSaved = saved
+        .filter(s => !prismaIds.has(s.id))
+        .map(s => {
+          const isCobosu = (s as any).brand === "COBOSU" || (s.name && s.name.toLowerCase().includes("cobosu"));
+          return {
+            ...s,
+            active: isCobosu ? s.active !== false : false,
+          };
+        });
       config.services = [...prismaServices, ...preservedSaved];
     }
     const allCenters = await this.centers();
@@ -418,7 +426,23 @@ export class Store {
     let paid=false;
     if(effectivePackageId){
       const pkg=(await db.query('SELECT * FROM "ClientServicePackage" WHERE id=$1::uuid FOR UPDATE',[effectivePackageId])).rows[0];
-      if(!pkg||pkg.clientId!==b.clientId||pkg.serviceId!==b.serviceId||!['PAGADO','PENDIENTE'].includes(pkg.paymentStatus))throw new ApiError(409,"El bono no es compatible con este cliente o servicio.");
+      let matchesService = false;
+      if (pkg) {
+        if (pkg.serviceId === b.serviceId) {
+          matchesService = true;
+        } else {
+          const srv = (await db.query('SELECT id, "serviceId" FROM "Service" WHERE id=$1::uuid', [pkg.serviceId])).rows[0];
+          if (srv && srv.serviceId === b.serviceId) {
+            matchesService = true;
+          } else {
+            const bSrv = (await db.query('SELECT id, "serviceId" FROM "Service" WHERE id=$1::uuid', [b.serviceId])).rows[0];
+            if (bSrv && bSrv.serviceId === pkg.serviceId) {
+              matchesService = true;
+            }
+          }
+        }
+      }
+      if(!pkg||pkg.clientId!==b.clientId||!matchesService||!['PAGADO','PENDIENTE'].includes(pkg.paymentStatus))throw new ApiError(409,"El bono no es compatible con este cliente o servicio.");
       const count=Number((await db.query(`SELECT count(*) FROM "Booking" WHERE "packageId"=$1::uuid AND id<>$2::uuid AND attendance IN ('PENDIENTE','ASISTIO') AND status<>'CANCELADA'`,[pkg.id,b.id])).rows[0].count);
       const held=Number((await db.query(`SELECT count(*) FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE original."packageId"=$1::uuid AND ($2::text IS NOT NULL) AND r.id<>COALESCE($3,'') AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING')`,[pkg.id,gym,b.recoveryId||null])).rows[0].count);
       if(!['CANCELLED','NO_SHOW'].includes(b.status)&&count+held>=pkg.sessionsBought)throw new ApiError(409,"Este bono ya no tiene sesiones disponibles. Actualiza los bonos del cliente.");

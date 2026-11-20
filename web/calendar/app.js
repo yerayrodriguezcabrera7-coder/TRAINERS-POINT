@@ -240,7 +240,7 @@ function setupSelects() {
   const empWrap = $('employee-filter-wrap');
   if (empWrap) empWrap.hidden = isCobosuView;
 
-  const activeServices = sortedServices(data.services.filter(s => s.active !== false));
+  const activeServices = sortedServices(data.services.filter(s => isSchedulableService(s)));
   fillSelect('service-filter', activeServices, '<option value="all">Todos los servicios</option>');
 
   const bookingEmpOptions = (isCobosuView ? '<option value="__cobosu">Cobosu</option>' : '') +
@@ -263,6 +263,48 @@ function setupSelects() {
     }
   }
 }
+function isPackService(s) {
+  if (!s) return false;
+  if (s.type === 'PACK') return true;
+  if (s.trainingCount && Number(s.trainingCount) > 1 && s.serviceId) return true;
+  return false;
+}
+
+function isSchedulableService(s, currentServiceId) {
+  if (!s) return false;
+  if (currentServiceId && s.id === currentServiceId) return true;
+  if (isPackService(s)) return false;
+  if (s.active === false) return false;
+  const isCobosu = activeBrandView() === 'COBOSU';
+  const isCobosuService = s.brand === 'COBOSU' || (s.name && s.name.toLowerCase().includes('cobosu'));
+  const isTPService = s.brand === 'TRAINERS_POINT' || (s.name && s.name.toLowerCase().includes('trainers point'));
+  if (!isCobosu && isCobosuService) return false;
+  if (isCobosu && isTPService) return false;
+  return true;
+}
+
+function packageMatchesService(p, serviceId) {
+  if (!p || !serviceId) return false;
+  const bookingSrv = p.bookingService || p.service;
+  if (bookingSrv?.id === serviceId) return true;
+  if (p.service?.serviceId === serviceId) return true;
+  if (p.serviceId === serviceId) return true;
+  const targetService = lookup('services', serviceId);
+  if (targetService) {
+    const srvName = (bookingSrv?.name || p.service?.name || '').toLowerCase().trim();
+    const targetName = (targetService.name || '').toLowerCase().trim();
+    if (srvName && targetName) {
+      if (srvName === targetName) return true;
+      if (srvName.includes(targetName) || targetName.includes(srvName)) return true;
+      if (/dual/i.test(targetName) && /dual/i.test(srvName)) return true;
+      if (/individual/i.test(targetName) && /individual/i.test(srvName)) return true;
+      if (/cabina/i.test(targetName) && /cabina/i.test(srvName)) return true;
+      if (/corporal/i.test(targetName) && /corporal/i.test(srvName)) return true;
+    }
+  }
+  return false;
+}
+
 function sortedServices(services) {
   return [...services].sort((a, b) => Number(isDualService(b.id)) - Number(isDualService(a.id)) || a.name.localeCompare(b.name, 'es'));
 }
@@ -886,7 +928,7 @@ function syncDualClientPicker(selectedPkgId = null) {
 
 function showBooking(id, date = state.date, minute, employeeId) {
   if (currentUser?.role === 'TRAINER' && !id) return;
-  if(!id && (!data.services.some(s=>s.active!==false)||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
+  if(!id && (!data.services.some(s => isSchedulableService(s))||!data.employees.some(e=>e.active!==false))){toast('Añade un servicio y un empleado activos desde el menú.');return;}
   $('booking-form').reset();
   $('booking-error').hidden = true;
   $('reschedule-panel').hidden = true;
@@ -903,7 +945,7 @@ function showBooking(id, date = state.date, minute, employeeId) {
   if ($('dual-booking-client')) {
     fillSelect('dual-booking-client', bookingClients.filter(c=>(c.status||'ACTIVE')==='ACTIVE'||c.id===partner?.clientId), '');
   }
-  const activeServicesForModal = sortedServices(data.services.filter(s=>s.active!==false||s.id===b?.serviceId));
+  const activeServicesForModal = sortedServices(data.services.filter(s => isSchedulableService(s, b?.serviceId)));
   fillSelect('booking-service', activeServicesForModal);
   if ($('no-package-service')) fillSelect('no-package-service', activeServicesForModal);
   const isCobosuView = activeBrandView() === 'COBOSU';
@@ -916,8 +958,8 @@ function showBooking(id, date = state.date, minute, employeeId) {
   const hours = C.hoursFor(date, data.schedule);
   const sunday = isSunday(date);
   const start = minute ?? (sunday ? 540 : C.minutes(hours.open));
-  const selectedService = data.services.find(s => s.id === state.service && s.active !== false);
-  const service = selectedService || sortedServices(data.services.filter(s => s.active !== false))[0] || data.services[0];
+  const selectedService = data.services.find(s => s.id === state.service && isSchedulableService(s));
+  const service = selectedService || activeServicesForModal[0] || data.services[0];
   const duration = service.duration || 60;
   const defaultEmp = isCobosuView
     ? COBOSU_ID
@@ -1074,25 +1116,25 @@ function renderDualPackages(selected = undefined) {
   const partnerPkgId = state.editingPartnerSnapshot?.clientId === dualClientId ? state.editingPartnerSnapshot?.packageId : null;
   const list = dualClientPackages.filter(p => (p.paymentStatus === 'PAGADO' && p.sessionsRemaining > 0) || p.id === old || p.id === partnerPkgId);
   list.sort((a, b) => {
-    const aSrvId = (a.bookingService || a.service)?.id;
-    const bSrvId = (b.bookingService || b.service)?.id;
-    const aMatch = aSrvId === currentServiceId ? 1 : 0;
-    const bMatch = bSrvId === currentServiceId ? 1 : 0;
+    const aMatch = packageMatchesService(a, currentServiceId) ? 1 : 0;
+    const bMatch = packageMatchesService(b, currentServiceId) ? 1 : 0;
     return bMatch - aMatch;
   });
 
   select.innerHTML = '<option value="">Sin bono · pago pendiente</option>' + list.map(p => {
-    const bookingService = p.bookingService || p.service;
-    const isMatching = bookingService?.id === currentServiceId;
-    const packName = p.service?.name || bookingService?.name || 'Bono';
+    const isMatching = packageMatchesService(p, currentServiceId);
+    const packName = p.service?.name || p.bookingService?.name || 'Bono';
     return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(packName)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus === 'PAGADO' ? 'Pagado' : 'Pago pendiente'}</option>`;
   }).join('');
 
-  if (selected === undefined && !old && availablePaid.length > 0) {
-    const matching = availablePaid.find(p => (p.bookingService || p.service).id === currentServiceId);
-    if (matching) select.value = matching.id;
+  const oldPkg = dualClientPackages.find(p => p.id === old);
+  const oldMatches = oldPkg && packageMatchesService(oldPkg, currentServiceId);
+
+  if (selected !== undefined && oldMatches) {
+    select.value = old;
   } else {
-    select.value = list.some(p => p.id === old) ? old : '';
+    const matching = availablePaid.find(p => packageMatchesService(p, currentServiceId));
+    select.value = matching ? matching.id : '';
   }
   select.disabled = currentUser?.role === 'TRAINER';
 
@@ -1102,13 +1144,14 @@ function renderDualPackages(selected = undefined) {
 
   const msgEl = $('dual-package-message');
   if (chosen) {
+    const packName = chosen.service?.name || chosen.bookingService?.name || 'Bono';
     msgEl.innerHTML = chosen.paymentStatus === 'PAGADO'
-      ? `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Se descontará del bono "${escapeHTML(chosen.service.name)}" (${chosen.sessionsRemaining} disp.).</span>`
+      ? `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Se descontará del bono "${escapeHTML(packName)}" (${chosen.sessionsRemaining} disp.) de la 2ª persona.</span>`
       : `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#fef3c7; color:#b45309; font-weight:600; font-size:12px;">⚠️ Bono de 2ª persona pendiente de cobro.</span>`;
   } else if (list.length > 0) {
-    msgEl.innerHTML = `<span style="color:var(--tp-muted); font-size:12px;">Elige un bono de la 2ª persona o adquiere uno para ella:</span>`;
+    msgEl.innerHTML = `<span style="color:var(--tp-muted); font-size:12px;">Elige un bono de la 2ª persona o continúa con pago pendiente:</span>`;
   } else {
-    msgEl.innerHTML = `<span style="color:#475569; font-size:12px;">Esta 2ª persona no tiene bonos disponibles. Puedes dejarla sin bono o comprarle uno:</span>`;
+    msgEl.innerHTML = `<span style="color:#475569; font-size:12px;">Esta 2ª persona no tiene bonos disponibles para este servicio. Se reservará con pago pendiente:</span>`;
   }
 }
 
@@ -1203,7 +1246,7 @@ async function updateBuyPackageServices() {
       return `<option value="${escapeHTML(p.id)}" ${isSelected ? 'selected' : ''}>${escapeHTML(p.name)} (${escapeHTML(linkedName)}) · ${count} ses. (${priceText})</option>`;
     }).join('');
   } else {
-    const activeServices = sortedServices((data.services || []).filter(s => s.active !== false));
+    const activeServices = sortedServices((data.services || []).filter(s => isSchedulableService(s)));
     select.innerHTML = activeServices.map(s => {
       const isSelected = s.id === currentServiceId;
       const priceText = s.price ? `${s.price} €` : '0 €';
@@ -1215,7 +1258,7 @@ async function updateBuyPackageServices() {
 
 function renderPackages(selected){
   if(!serverMode||!data.packagesEnabled){syncNoPackageServiceWrap();return;}
-  const select=$('booking-package'),old=selected??select.value;
+  const select=$('booking-package');
   const currentServiceId = $('booking-service')?.value;
   const clientId = $('booking-client').value;
   const isRealClient = clientId && clientId !== 'new';
@@ -1235,31 +1278,35 @@ function renderPackages(selected){
   }
 
   const availablePaid = clientPackages.filter(p=>p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0);
-  const list=clientPackages.filter(p=>(p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0)||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
+  const old = selected ?? select.value;
+  const list = clientPackages.filter(p=>(p.paymentStatus==='PAGADO'&&p.sessionsRemaining>0)||p.id===old||p.id===state.editingSnapshot?.packageId||p.id===newPendingPackageId);
+
   // Priorizar bonos que coinciden con el tipo de sesión de agenda seleccionado
   list.sort((a, b) => {
-    const aSrvId = (a.bookingService || a.service)?.id;
-    const bSrvId = (b.bookingService || b.service)?.id;
-    const aMatch = aSrvId === currentServiceId ? 1 : 0;
-    const bMatch = bSrvId === currentServiceId ? 1 : 0;
+    const aMatch = packageMatchesService(a, currentServiceId) ? 1 : 0;
+    const bMatch = packageMatchesService(b, currentServiceId) ? 1 : 0;
     return bMatch - aMatch;
   });
 
   select.innerHTML='<option value="">Reservar sin bono · pago pendiente</option>'+list.map(p=>{
-    const bookingService = p.bookingService || p.service;
-    const isMatching = bookingService?.id === currentServiceId;
-    const packName = p.service?.name || bookingService?.name || 'Bono';
+    const isMatching = packageMatchesService(p, currentServiceId);
+    const packName = p.service?.name || p.bookingService?.name || 'Bono';
     return `<option value="${escapeHTML(p.id)}">${isMatching ? '⭐ ' : ''}${escapeHTML(packName)} · ${p.sessionsRemaining} sesiones disponibles · ${p.paymentStatus==='PAGADO'?'Pagado':'Pago pendiente'}</option>`;
   }).join('');
 
-  if (!old && availablePaid.length > 0) {
-    const matching = availablePaid.find(p => (p.bookingService || p.service)?.id === currentServiceId) || availablePaid[0];
-    select.value = matching.id;
-    if ((matching.bookingService || matching.service)?.id && (matching.bookingService || matching.service).id !== currentServiceId) {
-      syncSelectedService((matching.bookingService || matching.service).id, { updateBuySelect: true, refreshPackages: false });
-    }
+  // Seleccionar automáticamente el bono que corresponde al tipo de servicio elegido
+  const oldPkg = clientPackages.find(p => p.id === old);
+  const oldMatches = oldPkg && packageMatchesService(oldPkg, currentServiceId);
+
+  if (selected !== undefined && oldMatches) {
+    select.value = old;
   } else {
-    select.value=list.some(p=>p.id===old)?old:'';
+    const matching = availablePaid.find(p => packageMatchesService(p, currentServiceId));
+    if (matching) {
+      select.value = matching.id;
+    } else {
+      select.value = '';
+    }
   }
   select.disabled=currentUser?.role==='TRAINER';
 
@@ -1269,36 +1316,44 @@ function renderPackages(selected){
     if (existingWrap) existingWrap.hidden = false;
     if (buyCard) buyCard.hidden = true;
     if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
-    const bookingSrv = chosen.bookingService || chosen.service;
-    const isMatching = bookingSrv?.id === currentServiceId;
+    const packName = chosen.service?.name || chosen.bookingService?.name || 'Bono';
     if (chosen.paymentStatus === 'PAGADO') {
-      msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Se descontará del bono "${escapeHTML(chosen.service?.name || bookingSrv?.name)}" (${chosen.sessionsRemaining} disponibles).${!isMatching && bookingSrv?.name ? ' (Bono vinculado a: ' + escapeHTML(bookingSrv.name) + ')' : ''}</span>`;
+      msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#dcfce7; color:#15803d; font-weight:600; font-size:12px;">✓ Se descontará del bono "${escapeHTML(packName)}" (${chosen.sessionsRemaining} sesiones disponibles).</span>`;
     } else {
       msgEl.innerHTML = `<span style="display:inline-block; padding:4px 8px; border-radius:4px; background:#fef3c7; color:#b45309; font-weight:600; font-size:12px;">⚠️ Este bono está pendiente de cobro. La cita mostrará aviso de cobro.</span>`;
     }
-  } else if (availablePaid.length === 0) {
-    if (existingWrap) existingWrap.hidden = true;
-    if (buyCard) {
-      buyCard.hidden = !manualAllowed;
-      updateBuyPackageServices();
-      if (cancelBuyBtn) cancelBuyBtn.hidden = true;
-      const sub = $('buy-package-sub-text');
-      if (sub) sub.textContent = 'El cliente no tiene ningún bono disponible. Elige el bono y si se cobra ahora o queda pendiente:';
-    }
-    msgEl.textContent=manualAllowed ? 'Este cliente no tiene bonos disponibles. Puedes registrar uno ahora o reservar sin bono, con pago pendiente.' : 'No hay bonos disponibles. Los clientes Cobosu no admiten bonos manuales; puedes organizar su cita sin crear otro bono.';
   } else {
-    if (existingWrap) existingWrap.hidden = false;
-    if (buyCard) buyCard.hidden = true;
-    if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
-    msgEl.innerHTML = `<span style="color:var(--tp-muted); font-size:12px;">Selecciona de qué bono descontar la sesión o continúa sin bono (pago pendiente).</span>`;
+    const targetService = lookup('services', currentServiceId);
+    const targetName = targetService?.name || 'este servicio';
+    if (availablePaid.length === 0) {
+      if (existingWrap) existingWrap.hidden = true;
+      if (buyCard) {
+        buyCard.hidden = !manualAllowed;
+        updateBuyPackageServices();
+        if (cancelBuyBtn) cancelBuyBtn.hidden = true;
+        const sub = $('buy-package-sub-text');
+        if (sub) sub.textContent = 'El cliente no tiene ningún bono disponible. Elige el bono y si se cobra ahora o queda pendiente:';
+      }
+      msgEl.textContent=manualAllowed ? `Este cliente no tiene bonos disponibles para ${targetName}. Puedes registrar uno ahora o reservar sin bono, con pago pendiente.` : `No hay bonos disponibles para ${targetName}.`;
+    } else {
+      if (existingWrap) existingWrap.hidden = false;
+      if (buyCard) buyCard.hidden = true;
+      if (toggleBuyBtn) toggleBuyBtn.hidden = !manualAllowed;
+      msgEl.innerHTML = `<span style="color:#b45309; font-weight:600; font-size:12px;">⚠️ El cliente no tiene bonos de "${escapeHTML(targetName)}" (tiene bonos de otros servicios). Se reservará con pago pendiente o puedes seleccionar uno manualmente.</span>`;
+    }
   }
   syncNoPackageServiceWrap();
 }
 
 $('booking-package').onchange=()=>{
   const p=clientPackages.find(p=>p.id===$('booking-package').value);
-  if((p?.bookingService || p?.service)?.id) syncSelectedService((p.bookingService || p.service).id, { refreshPackages: false });
-  renderPackages();
+  if (p) {
+    const srvId = (p.bookingService || p.service)?.id || p.service?.serviceId;
+    if (srvId && lookup('services', srvId) && srvId !== $('booking-service')?.value) {
+      syncSelectedService(srvId, { refreshPackages: false });
+    }
+  }
+  renderPackages($('booking-package').value);
 };
 
 if ($('toggle-buy-package-btn')) {
