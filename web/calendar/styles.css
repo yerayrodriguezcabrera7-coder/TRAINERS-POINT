@@ -862,6 +862,79 @@ body > main.main-content {
   background: #f8fafc;
 }
 
+.day-heading.is-sunday-parking {
+  background: #fffbeb !important;
+  border-top: 3px solid #f59e0b !important;
+}
+
+.day-heading.is-sunday-parking strong {
+  color: #b45309;
+}
+
+.sunday-parking-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fde68a;
+  color: #92400e;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 2px;
+}
+
+.employee-heading.is-unassigned-heading {
+  background: #fffdf5;
+  border-bottom: 2px solid #fde68a;
+}
+
+.employee-heading.is-unassigned-heading .employee-dot {
+  background: #f59e0b !important;
+}
+
+.employee-heading.is-unassigned-heading .employee-shift-tag,
+.employee-shift-tag.is-unassigned-tag {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.time-column.is-unassigned-parking-column {
+  background: #fafaf9;
+  border-left: 1px dashed #f59e0b;
+}
+
+.time-column.is-unassigned-parking-column .time-slot:hover {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.event.unassigned {
+  outline: 2px dashed #d97706 !important;
+  outline-offset: -2px;
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.95), rgba(253, 230, 138, 0.95)) !important;
+  color: #78350f !important;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.2);
+  cursor: grab;
+}
+
+.event.unassigned:active {
+  cursor: grabbing;
+}
+
+.event.unassigned .event-title {
+  color: #78350f !important;
+  font-weight: 700;
+}
+
+.event.unassigned .event-training-type {
+  color: #92400e !important;
+}
+
+.event.unassigned .event-meta {
+  color: #b45309 !important;
+  font-weight: 600;
+}
+
 .day-heading.today {
   border-top: 3px solid var(--red);
   background: #fff9f8;
@@ -2629,11 +2702,307 @@ body > main.main-content {
   max-height: none !important;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FULL-BLEED CALENDAR: Que la propia página sea el calendario (sin flotar en banner)
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   DISEÑO ESTÉTICO Y PROPORCIONADO: Margen elegante, panel de tarjeta SaaS
+   y cuadrante que aprovecha el ancho completo con toda la semana visible.
+   ═══════════════════════════════════════════════════════════════════════════ */
+body[data-calendar-brand] {
+  background: #f8fafc !important;
+}
+
+body[data-calendar-brand] .topbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 52px !important;
+  padding: 0 24px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+}
+
+body[data-calendar-brand] .breadcrumb {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  font-size: 13px !important;
+  color: var(--muted) !important;
+}
+
+body[data-calendar-brand] .breadcrumb strong {
+  color: #0f172a !important;
+  font-weight: 650 !important;
+}
+
+body[data-calendar-brand] .crumb-separator {
+  color: #cbd5e1 !important;
+}
+
+body[data-calendar-brand] .topbar-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+body[data-calendar-brand] .profile-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+body[data-calendar-brand] main,
+body[data-calendar-brand] .main-content {
+  margin-left: var(--rail) !important;
+  padding: 0 !important;
+  max-width: none !important;
+  width: calc(100vw - var(--rail)) !important;
+  min-height: 100vh !important;
+  background: #f8fafc !important;
+  box-sizing: border-box !important;
+}
+
+body[data-calendar-brand] .page-content {
+  padding: 16px 20px 24px 20px !important;
+  margin: 0 !important;
+  gap: 0 !important;
+  background: #f8fafc !important;
+  box-sizing: border-box !important;
+}
+
+body[data-calendar-brand] .page-heading {
+  padding: 0 0 14px 0 !important;
+  margin: 0 !important;
+  border-bottom: none !important;
+  background: transparent !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  gap: 16px !important;
+}
+
+body[data-calendar-brand] .page-heading h1 {
+  font-size: 26px !important;
+  margin: 4px 0 2px !important;
+  letter-spacing: -0.8px !important;
+  font-weight: 750 !important;
+  color: #0f172a !important;
+}
+
+body[data-calendar-brand] .page-heading p {
+  margin: 0 !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+}
+
+body[data-calendar-brand] .eyebrow {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 10px !important;
+  letter-spacing: 1.5px !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  margin-top: 4px !important;
+  margin-bottom: 2px !important;
+}
+
+body[data-calendar-brand] .heading-actions .button.primary {
+  background: #eb5a46 !important;
+  color: #ffffff !important;
+  border-radius: 8px !important;
+  font-weight: 650 !important;
+  box-shadow: 0 2px 8px rgba(235, 90, 70, 0.25) !important;
+  transition: all 0.15s ease !important;
+}
+body[data-calendar-brand] .heading-actions .button.primary:hover {
+  background: #d94b38 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(235, 90, 70, 0.32) !important;
+}
+
+body[data-calendar-brand] .heading-actions .button.secondary {
+  background: #ffffff !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.15s ease !important;
+}
+body[data-calendar-brand] .heading-actions .button.secondary:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+body[data-calendar-brand] .pending-dropdown-trigger {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  background: #fffbeb !important;
+  border: 1px solid #fde68a !important;
+  color: #b45309 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+body[data-calendar-brand] .pending-dropdown-trigger:hover {
+  background: #fef3c7 !important;
+  border-color: #fcd34d !important;
+}
+
+body[data-calendar-brand] .calendar-panel {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  background: #ffffff !important;
+  overflow: hidden !important;
+}
+
+body[data-calendar-brand="trainers-point"] .calendar-panel {
+  border-top: 3px solid #eb5a46 !important;
+}
+
+body[data-calendar-brand="cobosu"] .calendar-panel {
+  border-top: 3px solid #dc2626 !important;
+}
+
+body[data-calendar-brand] .calendar-toolbar {
+  padding: 12px 20px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  background: #ffffff !important;
+}
+
+body[data-calendar-brand] #period-label {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+body[data-calendar-brand] .today-button {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  padding: 7px 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  transition: all 0.15s ease !important;
+}
+body[data-calendar-brand] .today-button:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+
+body[data-calendar-brand] .arrows {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+  overflow: hidden !important;
+}
+body[data-calendar-brand] .arrows button {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  transition: background 0.15s !important;
+}
+body[data-calendar-brand] .arrows button:hover {
+  background: #f1f5f9 !important;
+}
+
+body[data-calendar-brand] .view-switch {
+  background: #f1f5f9 !important;
+  padding: 3px !important;
+  border-radius: 8px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+body[data-calendar-brand] .view-switch button {
+  border: 0 !important;
+  background: transparent !important;
+  font-size: 12px !important;
+  min-width: 64px !important;
+  border-radius: 6px !important;
+  padding: 7px 14px !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+  transition: all 0.15s !important;
+}
+body[data-calendar-brand] .view-switch .selected {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1) !important;
+  font-weight: 700 !important;
+}
+
+body[data-calendar-brand] .filter-row {
+  padding: 10px 20px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  background: #fafbfc !important;
+}
+
+body[data-calendar-brand] .filters select,
+body[data-calendar-brand] .calendar-client-input-wrap input {
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 7px !important;
+  background: #ffffff !important;
+  font-size: 11.5px !important;
+  color: #1e293b !important;
+  padding: 7px 11px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+body[data-calendar-brand] .filters select:focus,
+body[data-calendar-brand] .calendar-client-input-wrap input:focus {
+  border-color: #eb5a46 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(235, 90, 70, 0.12) !important;
+}
+body[data-calendar-brand] .repeat-week-btn {
+  border-radius: 7px !important;
+  font-size: 11px !important;
+  padding: 6px 12px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  font-weight: 550 !important;
+}
+body[data-calendar-brand] .repeat-week-btn:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+body[data-calendar-brand] .calendar-scroll {
+  height: calc(100vh - 295px) !important;
+  min-height: 480px !important;
+  max-height: none !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  background: #ffffff !important;
+}
+
 .calendar-scroll.is-week-view {
   overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .time-grid.is-week-view {
+  display: grid !important;
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
@@ -2642,84 +3011,159 @@ body > main.main-content {
 
 .time-grid.is-week-view .time-column {
   min-width: 0 !important;
+  max-width: 100% !important;
   box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
 .time-grid.is-week-view .day-heading {
   min-width: 0 !important;
-  padding: 4px 2px !important;
-  gap: 3px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 3px 1px !important;
+  gap: 2px !important;
+  overflow: hidden !important;
+}
+
+.time-grid.is-week-view .day-heading .day-heading-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.time-grid.is-week-view .day-heading .day-name {
+  font-size: 10px !important;
 }
 
 .time-grid.is-week-view .day-heading strong {
-  font-size: 13.5px !important;
+  font-size: 12.5px !important;
+}
+
+.time-grid.is-week-view .day-heading span {
+  font-size: 9.5px !important;
+}
+
+.time-grid.is-week-view .day-heading.is-sunday-parking {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 1px !important;
+  padding: 2px 1px !important;
+  line-height: 1.1 !important;
+}
+
+.time-grid.is-week-view .sunday-parking-tag {
+  font-size: 7.5px !important;
+  padding: 1px 4px !important;
+  line-height: 1.1 !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.2px !important;
+}
+
+.time-grid.is-week-view .add-trainer-day-btn {
+  width: 17px !important;
+  height: 17px !important;
+  font-size: 11px !important;
+  margin-left: 2px !important;
+  padding: 0 !important;
 }
 
 .time-grid.is-week-view .employee-heading {
   min-width: 0 !important;
-  padding: 2px 3px !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 2px 1px !important;
   overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .time-grid.is-week-view .employee-heading-name {
-  font-size: 10.5px !important;
+  font-size: 9.5px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   max-width: 100% !important;
+  display: block !important;
+  text-align: center !important;
 }
 
 .time-grid.is-week-view .employee-shift-tag {
-  font-size: 8.5px !important;
-  padding: 0 4px !important;
+  font-size: 8px !important;
+  padding: 0 2px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   max-width: 100% !important;
+  display: block !important;
+  text-align: center !important;
 }
 
 .time-grid.is-week-view .empty-day-heading,
 .time-grid.is-week-view .empty-day-column {
   min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   overflow: hidden !important;
 }
 
 .time-grid.is-week-view .empty-day-placeholder {
-  padding: 16px 4px !important;
-  font-size: 10px !important;
+  padding: 12px 2px !important;
+  font-size: 9.5px !important;
 }
 
 .time-grid.is-week-view .add-trainer-pill-btn {
-  font-size: 9.5px !important;
-  padding: 2px 4px !important;
+  font-size: 9px !important;
+  padding: 2px 3px !important;
   max-width: 95% !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
 
 .time-grid.is-week-view .corner {
-  font-size: 9px !important;
-  width: 46px !important;
-  padding: 0 2px !important;
+  font-size: 8.5px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  padding: 0 1px !important;
+  box-sizing: border-box !important;
 }
 
 .time-grid.is-week-view .time-axis {
-  width: 46px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  box-sizing: border-box !important;
 }
 
 .time-grid.is-week-view .hour-label {
-  font-size: 9.5px !important;
+  font-size: 9px !important;
+  padding-right: 2px !important;
 }
 
 .time-grid.is-week-view .event {
-  padding: 2px 4px !important;
-  font-size: 10px !important;
-  line-height: 1.2 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 2px 3px !important;
+  font-size: 9.5px !important;
+  line-height: 1.15 !important;
   overflow: hidden !important;
 }
 
+.time-grid.is-week-view .event.unassigned {
+  min-width: 0 !important;
+  max-width: calc(100% - 2px) !important;
+  left: 1px !important;
+  width: calc(100% - 2px) !important;
+}
+
 .time-grid.is-week-view .event .event-time {
-  font-size: 9px !important;
+  font-size: 8.5px !important;
   margin-bottom: 1px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
@@ -2727,7 +3171,7 @@ body > main.main-content {
 }
 
 .time-grid.is-week-view .event .event-title {
-  font-size: 10.5px !important;
+  font-size: 10px !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
   overflow: hidden !important;
@@ -2736,14 +3180,14 @@ body > main.main-content {
 }
 
 .time-grid.is-week-view .event .event-training-type {
-  font-size: 9px !important;
+  font-size: 8.5px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
 
 .time-grid.is-week-view .event .event-meta {
-  font-size: 8.5px !important;
+  font-size: 8px !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;

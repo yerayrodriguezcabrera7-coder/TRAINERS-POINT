@@ -24,7 +24,7 @@
   const items = [
     ['Mis reservas','calendar','/mis-reservas.html'],
     ['Calendario','calendar','/index.html'],
-    ['Pendientes de asignación','calendar','/index.html#pendientes'],
+    ['Pendientes de asignación','calendar','/pendientes.html'],
     ['Clientes','people','/clientes'],
     ['Servicios','list','/servicios'],
     ['Packs','bag','/packs.html'],
@@ -47,8 +47,8 @@
     const url = new URL(href, location.origin + "/");
     const path = url.pathname;
     const hash = url.hash;
-    if (path === '/pendientes.html' || ((path === '/' || path === '/index.html') && hash.startsWith('#pend'))) {
-      return '/index.html#pendientes';
+    if (path === '/pendientes.html' || path === '/pendientes' || ((path === '/' || path === '/index.html') && hash.startsWith('#pend'))) {
+      return '/pendientes.html';
     }
     if (path === '/' || path === '/index.html') return '/index.html';
     if (path === '/clientes' || path.startsWith('/clientes/') || path === '/client-profile.html') return '/clientes';

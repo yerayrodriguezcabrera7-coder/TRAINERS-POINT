@@ -133,7 +133,12 @@ let polling=false,clientPackages=[],packageRequest=0,packageBusy=false,dualClien
 const debounceClientSearch=(fn)=>{clearTimeout(clientSearchTimer);clientSearchTimer=setTimeout(fn,250);};
 const debounceDualClientSearch=(fn)=>{clearTimeout(dualClientSearchTimer);dualClientSearchTimer=setTimeout(fn,250);};
 function canDragBooking(b) {
-  return Boolean(b && currentUser?.role !== 'TRAINER' && ['pending', 'confirmed'].includes(b.status));
+  if (!b) return false;
+  if (!['pending', 'confirmed'].includes(b.status)) return false;
+  if (currentUser?.role === 'TRAINER') {
+    return !b.employeeId || b.employeeId === currentUser.employeeId;
+  }
+  return true;
 }
 async function refreshServer(force=false) {
   if(polling || (dragState && !force))return;
@@ -222,7 +227,12 @@ function visibleBookings() {
       }
     }
 
-    if (state.employee !== 'all' && (b.employeeId || '__unassigned') !== state.employee) return false;
+    if (state.employee !== 'all') {
+      const isUnassigned = !b.employeeId || b.employeeId === '__unassigned';
+      if (!(state.view === 'week' && isUnassigned && !isCobosuView)) {
+        if ((b.employeeId || '__unassigned') !== state.employee) return false;
+      }
+    }
     if (state.service !== 'all' && b.serviceId !== state.service) return false;
     return true;
   });
@@ -296,7 +306,7 @@ function packageMatchesService(p, serviceId) {
     if (srvName && targetName) {
       if (srvName === targetName) return true;
       if (srvName.includes(targetName) || targetName.includes(srvName)) return true;
-      if (/dual/i.test(targetName) && /dual/i.test(srvName)) return true;
+      if (/\bdual\b/i.test(targetName) && /\bdual\b/i.test(srvName)) return true;
       if (/individual/i.test(targetName) && /individual/i.test(srvName)) return true;
       if (/cabina/i.test(targetName) && /cabina/i.test(srvName)) return true;
       if (/corporal/i.test(targetName) && /corporal/i.test(srvName)) return true;
@@ -502,6 +512,11 @@ function employeesForDate(date, dayBookings, allEmployees) {
     return [cobosuColumn()];
   }
 
+  const isSun = isSunday(date);
+  if (isSun && !isCobosuView) {
+    return [{ id: '__unassigned', name: 'Sin asignar', color: '#d97706', schedule: data.schedule }];
+  }
+
   if (state.employee !== 'all') {
     if (state.employee === COBOSU_ID) return [];
     if (state.employee === '__unassigned') {
@@ -550,9 +565,15 @@ function employeesForDate(date, dayBookings, allEmployees) {
     }
   }
 
-  // 4. Si hay reservas sin asignar este día, mostrar columna "Sin asignar"
-  if (currentUser?.role !== 'TRAINER' && dayBookings.some(b => !b.employeeId)) {
-    scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule });
+  // 4. Domingo en Trainers Point es el espacio dedicado a los pendientes por asignar
+  if (currentUser?.role !== 'TRAINER') {
+    if (dayIdx === 6) {
+      if (!scheduled.some(s => s.id === '__unassigned')) {
+        scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#d97706', schedule: data.schedule });
+      }
+    } else if (state.view !== 'week' && dayBookings.some(b => !b.employeeId)) {
+      scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#d97706', schedule: data.schedule });
+    }
   }
 
   return scheduled;
@@ -591,22 +612,34 @@ function renderTimeGrid(dates, bookings, employees) {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const showNowLine = nowMin >= offsetMin && nowMin <= endHour * 60;
+  const isWeekView = state.view === 'week';
+  const sundayDate = dates.find(d => isSunday(d)) || dates.at(-1);
+
   const byColumn = new Map();
-  for(const booking of bookings){const key=booking.date+'\0'+(booking.employeeId||'__unassigned');if(!byColumn.has(key))byColumn.set(key,[]);byColumn.get(key).push(booking);}
+  for (const booking of bookings) {
+    const isUnassigned = !booking.employeeId || booking.employeeId === '__unassigned';
+    const colDate = (isWeekView && isUnassigned && !isCobosuView) ? sundayDate : booking.date;
+    const colEmp = isUnassigned ? '__unassigned' : booking.employeeId;
+    const key = colDate + '\0' + colEmp;
+    if (!byColumn.has(key)) byColumn.set(key, []);
+    byColumn.get(key).push(booking);
+  }
 
   let currentCol = 2;
   const dateLayouts = dates.map(date => {
-    const dayBookings = bookings.filter(b => b.date === date);
+    const isSun = isSunday(date);
+    const dayBookings = isSun && isWeekView && !isCobosuView
+      ? bookings.filter(b => b.date === date || !b.employeeId || b.employeeId === '__unassigned')
+      : (isWeekView && !isCobosuView ? bookings.filter(b => b.date === date && b.employeeId && b.employeeId !== '__unassigned') : bookings.filter(b => b.date === date));
     const dayEmps = employeesForDate(date, dayBookings, employees);
     const span = Math.max(1, dayEmps.length);
     const startCol = currentCol;
     currentCol += span;
-    return { date, dayBookings, dayEmps, startCol, span };
+    return { date, dayBookings, dayEmps, startCol, span, isSun };
   });
 
   const totalGridCols = currentCol - 2;
-  const isWeekView = state.view === 'week';
-  const timeAxisWidth = isWeekView ? '46px' : '58px';
+  const timeAxisWidth = isWeekView ? '36px' : '58px';
   const colDefinition = isWeekView
     ? `repeat(${Math.max(totalGridCols, 1)}, minmax(0, 1fr))`
     : `repeat(${Math.max(totalGridCols, 1)}, minmax(${state.view === 'day' ? 180 : 130}px, 1fr))`;
@@ -617,10 +650,14 @@ function renderTimeGrid(dates, bookings, employees) {
     const today = d.date === todayKey();
     const isAlt = dayIdx % 2 === 1;
     const hasNextDay = dayIdx < dateLayouts.length - 1;
-    html += `<div class="day-heading ${today ? 'today' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
-      <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
-      <strong>${C.parseDate(d.date).getDate()}</strong>
-      <span>${prettyDate(d.date, { month: 'short' })}</span>
+    const isSundayCol = d.isSun && !isCobosuView;
+    html += `<div class="day-heading ${today ? 'today' : ''} ${isAlt ? 'is-day-alt' : ''} ${hasNextDay ? 'is-day-end' : ''} ${isSundayCol ? 'is-sunday-parking' : ''}" data-drop-day="${d.date}" style="grid-column:${d.startCol} / span ${d.span};grid-row:1">
+      <div class="day-heading-label">
+        <span class="day-name">${prettyDate(d.date, { weekday: 'short' })}</span>
+        <strong>${C.parseDate(d.date).getDate()}</strong>
+        <span>${prettyDate(d.date, { month: 'short' })}</span>
+      </div>
+      ${isSundayCol ? '<span class="sunday-parking-tag" title="Los clientes pendientes por asignar se colocan aquí para arrastrar">Pendientes</span>' : ''}
       ${!isCobosuView && serverMode && currentUser?.role !== 'TRAINER' ? `<button type="button" class="add-trainer-day-btn" data-add-trainer-date="${d.date}" title="Planificar o añadir entrenador para el ${prettyDate(d.date, { day: 'numeric', month: 'long' })}" aria-label="Añadir entrenador">+</button>` : ''}
     </div>`;
   });
@@ -635,14 +672,18 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
+        const isUnassigned = employee.id === '__unassigned';
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
         const periods = isCobosu ? (() => { const h = C.hoursFor(d.date, data.schedule); return h.closed ? [] : [h]; })() : C.employeePeriods(employee, d.date, data.schedule);
-        const shiftText = isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : (employee.id === '__unassigned' ? 'Sin asignar' : 'Sin turno'));
-        const isOff = !periods.length && employee.id !== '__unassigned';
-        const isEditable = !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' && employee.id !== '__unassigned' && !isCobosu;
-        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : ''}>
+        const unassignedBookings = isUnassigned ? (byColumn.get(d.date + '\0__unassigned') || []) : [];
+        const shiftText = isUnassigned
+          ? (unassignedBookings.length ? `${unassignedBookings.length} por asignar` : 'Arrastrar aquí')
+          : (isCobosu ? (periods.length ? `App · ${periods[0].open}–${periods[0].close}` : 'Cerrado') : (periods.length ? periods.map(p => p.open + '–' + p.close).join(' · ') : 'Sin turno'));
+        const isOff = !periods.length && !isUnassigned;
+        const isEditable = !isCobosuView && serverMode && currentUser?.role !== 'TRAINER' && !isUnassigned && !isCobosu;
+        html += `<div class="employee-heading ${isCobosu ? 'is-cobosu' : ''} ${isUnassigned ? 'is-unassigned-heading' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" style="grid-column:${d.startCol + j};grid-row:2;--employee-color:${employee.color}" ${isEditable ? `data-shift-employee="${employee.id}" data-shift-date="${d.date}" title="Clic para ajustar el turno o quitar de este día"` : (isUnassigned ? 'title="Columna de reservas pendientes de asignación. Arrástralas a cualquier día y hora."' : '')}>
           <div class="employee-heading-name"><span class="employee-dot"></span>${escapeHTML(employee.name)}</div>
-          <span class="employee-shift-tag ${isOff ? 'is-off' : ''}">${escapeHTML(shiftText)}</span>
+          <span class="employee-shift-tag ${isOff ? 'is-off' : ''} ${isUnassigned ? 'is-unassigned-tag' : ''}">${escapeHTML(shiftText)}</span>
         </div>`;
       });
     }
@@ -663,18 +704,19 @@ function renderTimeGrid(dates, bookings, employees) {
     } else {
       d.dayEmps.forEach((employee, j) => {
         const isCobosu = employee.id === COBOSU_ID;
+        const isUnassigned = employee.id === '__unassigned';
         const isDayEnd = hasNextDay && j === d.dayEmps.length - 1;
-        const isOff = employee.id !== '__unassigned' && (isCobosu ? C.hoursFor(d.date, data.schedule).closed : C.employeePeriods(employee, d.date, data.schedule).length === 0);
-        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
+        const isOff = !isUnassigned && (isCobosu ? C.hoursFor(d.date, data.schedule).closed : C.employeePeriods(employee, d.date, data.schedule).length === 0);
+        html += `<div class="time-column ${d.date === todayKey() ? 'is-today' : ''} ${isCobosu ? 'is-cobosu-column' : ''} ${isUnassigned ? 'is-unassigned-parking-column' : ''} ${isOff ? 'is-off' : ''} ${isAlt ? 'is-day-alt' : ''} ${isDayEnd ? 'is-day-end' : ''}" data-drop-date="${d.date}" data-drop-employee="${employee.id}" data-start-hour="${startHour}" data-end-hour="${endHour}" style="grid-column:${d.startCol + j};grid-row:3;height:${gridHeight}px">`;
         const absent = !isCobosu && (data.leaveRequests || []).some(leave => leave.employeeId === employee.id && leave.status === 'APPROVED' && d.date >= leave.startDate && d.date <= leave.endDate);
-        const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || employee.id === '__unassigned';
+        const serviceWorker = isCobosu || !selected?.employeeIds?.length || selected.employeeIds.includes(employee.id) || isUnassigned;
         const dayLabel = prettyDate(d.date, { day: 'numeric', month: 'long' });
         for (let slot = startHour * 2; slot < endHour * 2; slot++) {
           const start = slot * 30;
           const serviceOpen = !selected?.schedule || C.isOpen(d.date, start, start + duration, selected.schedule);
-          const open = !absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule);
+          const open = isUnassigned ? true : (!absent && serviceOpen && serviceWorker && C.employeeAvailable(employee, d.date, start, start + duration, data.schedule));
           const label = `${dayLabel}, ${C.timeLabel(start)}, ${employee.name}`;
-          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? 'Crear reserva' : 'Fuera del horario disponible del empleado'}"></button>`;
+          html += `<button class="time-slot ${open ? '' : 'closed'}" ${open ? '' : 'disabled'} data-slot="${d.date}" data-minute="${start}" data-employee="${employee.id}" aria-label="${open ? 'Nueva reserva: ' : 'Fuera de turno o sin tiempo para el servicio: '}${escapeHTML(label)}" title="${open ? (isUnassigned ? 'Añadir reserva sin asignar' : 'Crear reserva') : 'Fuera del horario disponible del empleado'}"></button>`;
         }
         const dayColBookings = byColumn.get(d.date + '\0' + employee.id) || [];
         const placed = C.layoutEvents(dayColBookings);
@@ -689,7 +731,12 @@ function renderTimeGrid(dates, bookings, employees) {
           const clientName = lookup('clients', b.clientId).name;
           const serviceName = lookup('services', b.serviceId).name;
           const isDraggable = canDragBooking(b);
-          html += `<button class="event ${b.status} ${!b.employeeId ? 'unassigned' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceName)}</div><div class="event-meta">${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}</div></button>`;
+          const isUnassignedBooking = !b.employeeId || b.employeeId === '__unassigned';
+          const prevDateLabel = isUnassignedBooking && b.date !== d.date ? `Previsto: ${prettyDate(b.date, { weekday: 'short' })}` : '';
+          const metaText = isUnassignedBooking
+            ? `${prevDateLabel ? prevDateLabel + ' · ' : ''}Sin asignar · Arrastrar a día`
+            : `${escapeHTML(b.centerName || 'Centro actual')} · ${escapeHTML(lookup('employees', b.employeeId).name)}${b.needsReschedule ? ' · REPROGRAMAR' : ''}`;
+          html += `<button class="event ${b.status} ${isUnassignedBooking ? 'unassigned' : ''} ${clientMatchClass(b)}" data-booking="${b.id}" data-client-id="${escapeHTML(b.clientId)}" ${isDraggable ? 'draggable="true"' : ''} style="top:${top}px;height:${height}px;left:calc(${left}% + 2px);width:calc(${width}% - 4px);--event-color:${color};--event-bg:${color};--event-border:${color};--event-ink:${colorInk(color)}" aria-label="${escapeHTML(eventLabel(b))}" title="${isUnassignedBooking ? 'Cita sin asignar. Arrástrala a un entrenador y hora en cualquier día.' : ''}">${dualBadge(b)}${sessionBadge(b)}${debtBadge(b)}${renewalBadge(b)}<div class="event-time">${b.start} – ${b.end}</div><div class="event-title">${escapeHTML(clientName)}</div><div class="event-training-type">${escapeHTML(serviceName)}</div><div class="event-meta">${metaText}</div></button>`;
         });
         if (d.date === todayKey() && showNowLine) html += `<div class="now-line" data-start-hour="${startHour}" data-end-hour="${endHour}" style="top:${(nowMin - offsetMin) * 1.4}px" aria-hidden="true"></div>`;
         html += '</div>';
@@ -766,7 +813,9 @@ function availableClients() {
 function isDualService(serviceId = $('booking-service')?.value) {
   if (!serviceId) return false;
   const srv = lookup('services', serviceId);
-  return Boolean(srv && (srv.modality === 'DUAL' || Number(srv?.capacity || 1) >= 2 || (srv?.name && /dual/i.test(srv.name))));
+  if (!srv) return false;
+  if (srv.modality === 'INDIVIDUAL' && Number(srv.capacity || 1) <= 1) return false;
+  return Boolean(srv.modality === 'DUAL' || Number(srv.capacity || 1) >= 2 || (srv.name && /\bdual\b/i.test(srv.name)));
 }
 function renderClientResultsList(searchEl, resultsEl, attrName, excludeClientId = '') {
   const query = searchEl.value.trim().toLocaleLowerCase('es');
@@ -820,7 +869,7 @@ function renderBookingServicePills(servicesList, currentSelectedId) {
   const selectedId = currentSelectedId || $('booking-service')?.value || servicesList[0]?.id;
   container.innerHTML = servicesList.map(s => {
     const isSelected = s.id === selectedId;
-    const isDual = s.modality === 'DUAL' || Number(s.capacity || 1) >= 2 || (s.name && /dual/i.test(s.name));
+    const isDual = s.modality === 'DUAL' || (s.modality !== 'INDIVIDUAL' && (Number(s.capacity || 1) >= 2 || (s.name && /\bdual\b/i.test(s.name))));
     const color = s.color || '#317b9b';
     const dur = s.duration || s.durationMin || 60;
     return `
@@ -852,7 +901,7 @@ function updateServiceDurationBadge(serviceId) {
   const badge = $('booking-service-duration-badge');
   if (badge) {
     const dur = srv?.duration || srv?.durationMin || 60;
-    const isDual = srv?.modality === 'DUAL' || Number(srv?.capacity || 1) >= 2 || (srv?.name && /dual/i.test(srv?.name));
+    const isDual = srv?.modality === 'DUAL' || (srv?.modality !== 'INDIVIDUAL' && (Number(srv?.capacity || 1) >= 2 || (srv?.name && /\bdual\b/i.test(srv?.name))));
     badge.textContent = `${dur} min · ${isDual ? 'Dual (2 pers.)' : 'Individual'}`;
   }
 }
@@ -1685,16 +1734,18 @@ $('booking-service').addEventListener('change', () => {
 if ($('unassign-booking')) {
   $('unassign-booking').addEventListener('click', async () => {
     if (!state.editingSnapshot) return;
-    if (!confirm('¿Mover esta reserva a "Sin asignar"? Se quitará de la columna del entrenador para reubicarla después.')) return;
+    if (!confirm('¿Mover esta reserva a "Sin asignar"? Se colocará en el domingo para reubicarla cuando desees.')) return;
+    const curDate = state.editingSnapshot.date;
+    const sundayOfCurDate = isSunday(curDate) ? curDate : C.addDays(C.monday(curDate), 6);
     if (serverMode) {
       try {
         $('unassign-booking').disabled = true;
         await api('bookings/' + encodeURIComponent(state.editing), 'PUT', {
-          booking: toServer({ ...state.editingSnapshot, employeeId: null, status: 'pending', version: state.editingVersion })
+          booking: toServer({ ...state.editingSnapshot, date: sundayOfCurDate, employeeId: null, status: 'pending', version: state.editingVersion })
         });
         $('booking-dialog').close();
         await refreshServer(true);
-        toast('Cita movida a Sin asignar.');
+        toast('Cita movida a Sin asignar (en domingo). Arrástrala al día y hora deseados.');
       } catch (err) {
         formError('booking-error', err.message);
       } finally {
@@ -1703,13 +1754,14 @@ if ($('unassign-booking')) {
     } else {
       const b = data.bookings.find(item => item.id === state.editing);
       if (b) {
+        b.date = sundayOfCurDate;
         b.employeeId = null;
         b.status = 'pending';
         saveData();
         render();
       }
       $('booking-dialog').close();
-      toast('Cita movida a Sin asignar.');
+      toast('Cita movida a Sin asignar (en domingo). Arrástrala al día y hora deseados.');
     }
   });
 }
@@ -2356,15 +2408,15 @@ async function commitMovedBooking(orig, moved) {
     return;
   }
   const whenLabel = !moved.employeeId
-    ? `Sin asignar (${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })})`
-    : `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end}`;
+    ? 'Sin asignar (Domingo)'
+    : `${prettyDate(moved.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${moved.start}–${moved.end} · ${lookup('employees', moved.employeeId).name}`;
   if (serverMode) {
     if (state.saving) return;
     state.saving = true;
     try {
       await api('bookings/' + encodeURIComponent(orig.id), 'PUT', { booking: toServer(moved), syncSession: Boolean(orig.sessionId) });
       await refreshServer(true);
-      toast(`Reserva movida a ${whenLabel}.`);
+      toast(!moved.employeeId ? 'Reserva movida a Sin asignar (Domingo).' : `Reserva asignada: ${whenLabel}.`);
     } catch (e) {
       toast(e.message || 'No se pudo mover la reserva.', true);
       await refreshServer(true).catch(() => {});

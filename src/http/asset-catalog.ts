@@ -45,6 +45,7 @@ export const staticFiles: Record<string, {
   "/tienda": { file: "web/inventory/tienda.html", contentType: "text/html; charset=utf-8" },
   "/tienda.js": { file: "web/inventory/tienda.js", contentType: "text/javascript; charset=utf-8" },
   "/tienda.css": { file: "web/inventory/tienda.css", contentType: "text/css; charset=utf-8" },
+  "/pendientes": { file: "web/planning/pendientes.html", contentType: "text/html; charset=utf-8" },
   "/pendientes.html": { file: "web/planning/pendientes.html", contentType: "text/html; charset=utf-8" },
   "/pendientes.js": { file: "web/planning/pendientes.js", contentType: "text/javascript; charset=utf-8" },
   "/pendientes.css": { file: "web/planning/pendientes.css", contentType: "text/css; charset=utf-8" },
