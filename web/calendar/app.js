@@ -469,29 +469,46 @@ function employeesForDate(date, dayBookings, allEmployees) {
     return emp ? [emp] : [];
   }
 
-  // Trainers Point: cuadrante de turnos del equipo (Lunes a Domingo completo)
-  const scheduled = [];
+  // Trainers Point: cuadrante de turnos del equipo (Lunes a Domingo)
+  // Filtrar para excluir empleados de Cobosu que no pertenecen a esta marca
+  const brandEmployees = allEmployees.filter(emp => {
+    if (emp.id === '__unassigned' || emp.id === COBOSU_ID || emp.active === false) return false;
+    const name = (emp.name || '').toLowerCase();
+    if (name.includes('cobosu') || emp.brand === 'COBOSU') return false;
+    return true;
+  });
 
-  for (const emp of allEmployees) {
-    if (emp.id === '__unassigned' || emp.id === COBOSU_ID) continue;
+  const scheduled = [];
+  const dayIdx = (C.parseDate(date).getDay() + 6) % 7; // 0=Lunes, 6=Domingo
+
+  for (const emp of brandEmployees) {
+    // 1. Turno explícito programado para este día
     const shift = emp.shifts?.find(s => s.date === date);
     if (shift && shift.periods && shift.periods.length > 0) {
       scheduled.push(emp);
+      continue;
+    }
+    // 2. Turno semanal recurrente configurado para este día de la semana
+    if (emp.weeklyPeriods && Array.isArray(emp.weeklyPeriods[dayIdx]) && emp.weeklyPeriods[dayIdx].length > 0) {
+      scheduled.push(emp);
+      continue;
+    }
+    // 3. Horario individual configurado expresamente en la ficha del empleado
+    if (emp.schedule && Array.isArray(emp.schedule) && !C.hoursFor(date, emp.schedule).closed) {
+      scheduled.push(emp);
+      continue;
     }
   }
 
-  for (const emp of allEmployees) {
-    if (emp.id === '__unassigned' || emp.id === COBOSU_ID || emp.active === false || scheduled.some(item => item.id === emp.id)) continue;
-    if (C.employeePeriods(emp, date, data.schedule).length) scheduled.push(emp);
-  }
-
+  // 3. Entrenador con citas reservadas este día (aunque no tuviera turno explícito)
   const bookingEmpIds = new Set(dayBookings.map(b => b.employeeId).filter(Boolean));
-  for (const emp of allEmployees) {
-    if (emp.id !== COBOSU_ID && bookingEmpIds.has(emp.id) && !scheduled.some(s => s.id === emp.id)) {
+  for (const emp of brandEmployees) {
+    if (bookingEmpIds.has(emp.id) && !scheduled.some(s => s.id === emp.id)) {
       scheduled.push(emp);
     }
   }
 
+  // 4. Si hay reservas sin asignar este día, mostrar columna "Sin asignar"
   if (currentUser?.role !== 'TRAINER' && dayBookings.some(b => !b.employeeId)) {
     scheduled.push({ id: '__unassigned', name: 'Sin asignar', color: '#b86b00', schedule: data.schedule });
   }
@@ -546,9 +563,13 @@ function renderTimeGrid(dates, bookings, employees) {
   });
 
   const totalGridCols = currentCol - 2;
-  const minWidth = state.view === 'day' ? 190 : 130;
+  const isWeekView = state.view === 'week';
+  const timeAxisWidth = isWeekView ? '46px' : '58px';
+  const colDefinition = isWeekView
+    ? `repeat(${Math.max(totalGridCols, 1)}, minmax(0, 1fr))`
+    : `repeat(${Math.max(totalGridCols, 1)}, minmax(${state.view === 'day' ? 180 : 130}px, 1fr))`;
 
-  let html = `<div class="time-grid" style="grid-template-columns:58px repeat(${Math.max(totalGridCols, 1)},minmax(${minWidth}px,1fr))"><div class="corner" style="grid-column:1;grid-row:1 / 3;top:0">HORA</div>`;
+  let html = `<div class="time-grid ${isWeekView ? 'is-week-view' : ''}" style="grid-template-columns:${timeAxisWidth} ${colDefinition}"><div class="corner" style="grid-column:1;grid-row:1 / 3;top:0">HORA</div>`;
 
   dateLayouts.forEach((d, dayIdx) => {
     const today = d.date === todayKey();
@@ -677,6 +698,7 @@ function render(updatePeriodTitle = false) {
   $('clear-filters').hidden=['employee','service'].every(k=>state[k]==='all'||k==='employee'&&currentUser?.role==='TRAINER');
   $('jump-date').value = state.date;
   $('calendar').innerHTML = state.view === 'month' ? renderMonth(bookings) : renderTimeGrid(dates, bookings, employees.length ? employees : data.employees);
+  $('calendar').classList.toggle('is-week-view', state.view === 'week');
   renderCalendarClientSearch();
   checkRepeatWeekButton();
   document.querySelectorAll('[data-view]').forEach(button => {
@@ -1955,7 +1977,14 @@ function openShiftEditor(employeeId, date) {
   $('shift-error').hidden = true;
   $('shift-date').value = date;
 
-  const activeEmployees = data.employees.filter(e => e.active !== false && e.id !== '__unassigned');
+  const isCobosu = activeBrandView() === 'COBOSU';
+  const activeEmployees = data.employees.filter(e => {
+    if (e.active === false || e.id === '__unassigned' || e.id === COBOSU_ID) return false;
+    const name = (e.name || '').toLowerCase();
+    if (!isCobosu && (name.includes('cobosu') || e.brand === 'COBOSU')) return false;
+    if (isCobosu && e.brand !== 'COBOSU' && !name.includes('cobosu')) return false;
+    return true;
+  });
   const alreadyWorking = activeEmployees.filter(e => {
     const s = e.shifts?.find(shift => shift.date === date);
     return Boolean(s && s.periods && s.periods.length > 0);

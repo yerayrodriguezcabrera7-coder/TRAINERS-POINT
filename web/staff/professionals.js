@@ -38,7 +38,7 @@
   }
 
   let manageData = null;
-  let activeFilter = 'all';
+  let activeFilter = 'active';
   let searchQuery = '';
   let editingEmployee = null;
   let toastTimer = null;
@@ -131,6 +131,8 @@
       const matchesSearch = !q || name.includes(q) || job.includes(q) || email.includes(q) || normalizedRole.toLowerCase().includes(q);
       if (!matchesSearch) return false;
 
+      if (activeFilter !== 'all' && activeFilter !== 'inactive' && !isActive(emp)) return false;
+      if (activeFilter === 'active') return true;
       if (activeFilter === 'all') return true;
       if (activeFilter === 'Entrenador') return normalizedRole === 'Entrenador';
       if (activeFilter === 'Recepción') return normalizedRole === 'Recepción';
@@ -303,6 +305,9 @@
       $('prof-active').value = 'true';
     }
 
+    const deactivateButton = $('deactivate-professional');
+    deactivateButton.hidden = !emp || !isActive(emp);
+
     // Comprobar si el profesional tiene cuenta de usuario vinculada
     const accountBox = $('prof-user-account-box');
     const usernameEl = $('prof-user-username');
@@ -407,6 +412,34 @@
     // Modal dialog
     $('close-dialog').addEventListener('click', () => $('professional-dialog').close());
     $('cancel-dialog').addEventListener('click', () => $('professional-dialog').close());
+
+    $('deactivate-professional').addEventListener('click', async () => {
+      if (!editingEmployee || !canProfessionals()) return;
+      const employee = editingEmployee;
+      if (!confirm(`¿Dar de baja a ${employee.name || 'este profesional'}? Se conservarán su historial y sus reservas.`)) return;
+
+      const button = $('deactivate-professional');
+      button.disabled = true;
+      try {
+        await api(`manage/employees/${encodeURIComponent(employee.id)}`, 'PUT', {
+          record: { ...employee, active: false },
+          revision: manageData.revision,
+        });
+        activeFilter = 'active';
+        document.querySelectorAll('.filter-chip').forEach(filterChip => {
+          const isActiveFilter = filterChip.dataset.filter === 'active';
+          filterChip.setAttribute('aria-pressed', String(isActiveFilter));
+          filterChip.classList.toggle('is-active', isActiveFilter);
+        });
+        $('professional-dialog').close();
+        showToast('Profesional dado de baja. Se conserva su historial.');
+        await loadData();
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
 
     // Restablecer contraseña del entrenador desde la ficha de profesional
     $('prof-btn-reset-pwd')?.addEventListener('click', async () => {

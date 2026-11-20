@@ -115,6 +115,19 @@ test('Pendientes: tiene en cuenta preferencias del cliente (entrenador habitual,
    assert.match(prefBadge.textContent, /Pérdida de grasa/);
    assert.match(prefBadge.textContent, /Condromalacia rotuliana/);
 
+   // Mini-calendario presente y con días de preferencia (L, X, V) en verde
+   const miniCal = d.getElementById('mini-calendar-wrap');
+   assert.ok(miniCal, 'Debe existir el contenedor del mini-calendario');
+   const prefDaysElements = miniCal.querySelectorAll('.mini-cal-day.is-preferred-day');
+   assert.ok(prefDaysElements.length > 0, 'Debe haber días resaltados como preferencia en el mini-calendario');
+   assert.match(prefDaysElements[0].textContent, /⭐/);
+
+   // Al hacer clic en un día preferente habilitado del mini-calendario se actualiza la fecha
+   const enabledPref = miniCal.querySelector('.mini-cal-day.is-preferred-day:not(:disabled)');
+   assert.ok(enabledPref, 'Debe haber al menos un día preferente disponible para reservar');
+   enabledPref.click();
+   assert.equal(d.getElementById('date').value, enabledPref.dataset.miniDate);
+
    // Consultar huecos y verificar que la franja de mañana se marca como preferente con estrella
    const tomorrow = new Date(now + 86400000).toISOString().slice(0, 10);
    d.getElementById('date').value = tomorrow;
@@ -135,4 +148,180 @@ test('Pendientes: tiene en cuenta preferencias del cliente (entrenador habitual,
 test('Ficha: no aparece información ni formulario residual de centro en el resumen del cliente',()=>{
  const dom=new JSDOM(fs.readFileSync('web/clients/client-profile.html','utf8'));
  try{assert.equal(dom.window.document.getElementById('profile-gym'),null);assert.equal(dom.window.document.getElementById('profile-location'),null);assert.equal(dom.window.document.getElementById('profile-gym-form'),null);assert.equal(dom.window.document.getElementById('profile-gym-select'),null);}finally{dom.window.close();}
+});
+
+test('Calendario de lunes a domingo completo y mini-calendario con días de preferencia en verde en el diálogo de agendar', async () => {
+  const errors = [];
+  const vc = new VirtualConsole();
+  vc.on('jsdomerror', err => errors.push(err.message));
+  const gymId = 'tp-test-gym';
+  const serviceId = randomUUID();
+  const empId = randomUUID();
+  const clientId = randomUUID();
+  const pkgId = randomUUID();
+
+  const state = {
+    gymId,
+    timezone: 'Europe/Madrid',
+    packagesEnabled: true,
+    schedule: [
+      { open: '08:00', close: '21:00', closed: false },
+      { open: '08:00', close: '21:00', closed: false },
+      { open: '08:00', close: '21:00', closed: false },
+      { open: '08:00', close: '21:00', closed: false },
+      { open: '08:00', close: '21:00', closed: false },
+      { open: '08:00', close: '14:00', closed: false },
+      { open: '08:00', close: '21:00', closed: true } // Domingo cerrado
+    ],
+    centers: [{ id: gymId, name: 'Trainers Point Bilbao', brand: 'TRAINERS_POINT' }],
+    rooms: [{ id: 'r1', name: 'Sala 1' }],
+    services: [{ id: serviceId, name: 'Entrenamiento Personal', duration: 60, price: 50, active: true, color: '#10b981', modality: 'INDIVIDUAL' }],
+    employees: [{
+      id: empId,
+      name: 'Yeray Entrenador',
+      active: true,
+      color: '#10b981',
+      shifts: [
+        { date: '2026-11-16', periods: [{ open: '09:00', close: '14:00' }] }
+      ]
+    }],
+    clients: [{
+      id: clientId,
+      name: 'Alejandro Ortiz',
+      brand: 'TRAINERS_POINT',
+      status: 'ACTIVE',
+      assignedWorkerId: empId,
+      availability: { days: ['L', 'X', 'V'], slots: ['MANANA'] },
+      contactSlot: 'MANANA'
+    }],
+    bookings: [],
+    revision: 1
+  };
+
+  const pendingPackages = {
+    packages: [{
+      packageId: pkgId,
+      clientId,
+      clientName: 'Alejandro Ortiz',
+      serviceId,
+      serviceName: 'Entrenamiento Personal',
+      sessionsToSchedule: 4,
+      sessionsScheduled: 0,
+      sessionsBought: 4,
+      expiresAt: '2026-11-30T23:59:59.000Z',
+      daysRemaining: 11,
+      paymentPending: false
+    }]
+  };
+
+  const dom = new JSDOM(fs.readFileSync('web/calendar/index.html', 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'http://localhost/calendar/index.html',
+    pretendToBeVisual: true,
+    virtualConsole: vc
+  });
+  const w = dom.window;
+  const d = w.document;
+
+  w.CALENDAR_SERVER = true;
+  w.sessionStorage.setItem('calendar-admin-token', 'mock-token');
+  w.localStorage.setItem('calendar-active-brand-view', 'TRAINERS_POINT');
+  w.localStorage.setItem('calendar-selected-gym', gymId);
+  w.structuredClone = structuredClone;
+  w.TrainersPoint = { poll: () => () => {} };
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  w.confirm = () => true;
+
+  w.fetch = async (path, options = {}) => {
+    let result = {};
+    if (path === '/api/me') {
+      result = { user: { id: 'admin', name: 'Administrador', role: 'ADMIN' }, role: 'ADMIN' };
+    } else if (path === '/api/state') {
+      result = structuredClone(state);
+    } else if (path === '/api/pending-packages') {
+      result = structuredClone(pendingPackages);
+    } else if (path.startsWith('/api/recoveries')) {
+      result = [];
+    } else if (path === '/api/aws-clients') {
+      result = { clients: [] };
+    } else if (path.startsWith('/api/slots?')) {
+      result = [{ start: '10:00', end: '11:00' }];
+    } else {
+      result = {};
+    }
+    return { ok: true, json: async () => result };
+  };
+
+  try {
+    w.eval(fs.readFileSync('web/calendar/calendar-core.js', 'utf8'));
+    w.eval(fs.readFileSync('web/calendar/app.js', 'utf8'));
+    w.eval(fs.readFileSync('web/calendar/pending-banner.js', 'utf8'));
+
+    // Esperar a que el calendario y el banner carguen
+    await until(() => d.querySelectorAll('.day-heading').length === 7);
+    await until(() => d.getElementById('planning-banner-count')?.textContent.includes('Alejandro Ortiz'));
+
+    // 1. Verificar que se muestran los 7 días (Lunes a Domingo) y botones de añadir entrenador (+)
+    const dayHeadings = d.querySelectorAll('.day-heading');
+    assert.equal(dayHeadings.length, 7, 'Deben mostrarse los 7 días de lunes a domingo');
+
+    const addTrainerBtns = d.querySelectorAll('.add-trainer-day-btn');
+    assert.ok(addTrainerBtns.length >= 7, 'Cada día debe disponer del botón "+" para añadir entrenadores según necesidad');
+
+    const timeColumns = d.querySelectorAll('.time-column');
+    assert.ok(timeColumns.length >= 7, 'Debe haber al menos 7 columnas de tiempo en la cuadrícula');
+
+    // El día con turno (Lunes 16) tiene la columna del entrenador planificado
+    assert.ok(d.querySelector('[data-shift-employee]'), 'Debe mostrarse el entrenador planificado en su día');
+
+    // Los días sin turno muestran el estado limpio con botón para añadir entrenador
+    const emptyPlaceholders = d.querySelectorAll('.empty-day-placeholder');
+    assert.ok(emptyPlaceholders.length > 0, 'Los días sin turnos no deben mostrar todos los entrenadores forzados, sino el botón de añadir');
+
+    // Comprobar que en vista semanal se adapta al 100% sin scroll horizontal
+    const timeGrid = d.querySelector('.time-grid');
+    assert.ok(timeGrid?.classList.contains('is-week-view'), 'El grid debe tener la clase is-week-view');
+    assert.match(timeGrid.style.gridTemplateColumns, /minmax\(0,\s*1fr\)/, 'Las columnas deben usar minmax(0, 1fr) para caber sin deslizamiento');
+    const calScroll = d.getElementById('calendar');
+    assert.ok(calScroll.classList.contains('is-week-view'), 'El contenedor de scroll debe tener la clase is-week-view');
+
+    // 2. Abrir el desplegable de pendientes y pulsar "Agendar sesión"
+    d.getElementById('planning-banner-header').click();
+    await until(() => !d.getElementById('planning-banner-content').hidden);
+
+    const agendarBtn = d.querySelector('[data-package="' + pkgId + '"]');
+    assert.ok(agendarBtn, 'Debe existir el botón para agendar la sesión del bono');
+    agendarBtn.click();
+
+    // 3. Verificar que se abre el modal del editor y que el mini-calendario se renderiza
+    await until(() => d.getElementById('planning-editor').open);
+    const miniCal = d.getElementById('planning-mini-calendar-wrap');
+    assert.ok(miniCal, 'Debe existir el contenedor del mini-calendario');
+
+    // Comprobar días de preferencia en verde (.is-preferred-day)
+    const prefDays = miniCal.querySelectorAll('.mini-cal-day.is-preferred-day');
+    assert.ok(prefDays.length >= 10, 'Deben marcarse en verde los días preferidos (L, X, V) del mes');
+    assert.match(miniCal.textContent, /⭐/);
+    assert.match(miniCal.textContent, /Lunes, Miércoles, Viernes/);
+
+    // 4. Seleccionar un día de preferencia en el mini-calendario
+    const dayToClick = Array.from(prefDays).find(btn => !btn.disabled);
+    assert.ok(dayToClick, 'Debe haber al menos un día preferente habilitado para seleccionar');
+    const targetDate = dayToClick.dataset.miniDate;
+    dayToClick.click();
+
+    // Comprobar que el input de fecha se actualiza y el día queda seleccionado
+    assert.equal(d.getElementById('planning-date').value, targetDate);
+    const selectedDay = miniCal.querySelector('.mini-cal-day.is-selected');
+    assert.equal(selectedDay?.dataset.miniDate, targetDate);
+
+    // Esperar a que se consulten los slots para evitar promesas huérfanas
+    await until(() => d.querySelectorAll('#editor-slots [data-slot]').length > 0);
+
+    assert.deepEqual(errors, []);
+  } finally {
+    dom.window.close();
+  }
 });

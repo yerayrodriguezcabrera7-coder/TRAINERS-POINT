@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════
 (function () {
   'use strict';
-  const $ = id => document.getElementById(id);
+  const $ = id => (typeof document !== 'undefined' && document?.getElementById ? document.getElementById(id) : null);
   function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
   function dayKey(v) { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(v)); }
   function timeKey(v) { return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(v)); }
@@ -266,6 +266,7 @@
   }
 
   function renderAll() {
+    if (typeof document === 'undefined' || !document || !document.getElementById) return;
     renderBanner();
     renderRows();
   }
@@ -370,6 +371,159 @@
     btn.addEventListener('click', () => { loadPendingData().then(renderAll); });
   }
 
+  const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const DAY_SHORT = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const DAY_NAMES_CLEAN = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+  const DAYS_MAP = { L: 'Lunes', M: 'Martes', X: 'Miércoles', J: 'Jueves', V: 'Viernes', S: 'Sábado', D: 'Domingo' };
+
+  function getClientPrefDays(client) {
+    if (!client) return [];
+    let avail = client.availability;
+    if (typeof avail === 'string') {
+      try { avail = JSON.parse(avail); } catch (_) {}
+    }
+    if (Array.isArray(avail?.days)) return avail.days;
+    if (Array.isArray(avail)) return avail;
+    if (typeof avail === 'object' && avail && Array.isArray(avail.preferredDays)) return avail.preferredDays;
+    return [];
+  }
+
+  function getClientPrefSlots(client) {
+    if (!client) return [];
+    let avail = client.availability;
+    if (typeof avail === 'string') {
+      try { avail = JSON.parse(avail); } catch (_) {}
+    }
+    const slots = [];
+    if (client.contactSlot) slots.push(client.contactSlot);
+    if (Array.isArray(avail?.slots)) {
+      avail.slots.forEach(s => { if (!slots.includes(s)) slots.push(s); });
+    }
+    return slots;
+  }
+
+  function isPreferredDayOfWeek(date, prefDaysList) {
+    if (!prefDaysList || !prefDaysList.length) return false;
+    const dow = (date.getDay() + 6) % 7;
+    const letter = DAY_SHORT[dow];
+    const cleanName = DAY_NAMES_CLEAN[dow];
+    return prefDaysList.some(d => {
+      const s = String(d || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return s === letter.toLowerCase() || s === cleanName || cleanName.startsWith(s);
+    });
+  }
+
+  function renderMiniCalendar(container, config) {
+    if (!container) return { setSelectedDate: () => {} };
+    let viewDate = config.selectedDate ? new Date(config.selectedDate + 'T12:00:00') : new Date();
+    if (isNaN(viewDate.getTime())) viewDate = new Date();
+    let viewYear = viewDate.getFullYear();
+    let viewMonth = viewDate.getMonth();
+
+    function updateView() {
+      const firstDayOfMonth = new Date(viewYear, viewMonth, 1, 12);
+      const firstDayDow = (firstDayOfMonth.getDay() + 6) % 7;
+      const numDays = new Date(viewYear, viewMonth + 1, 0, 12).getDate();
+      const prefNames = (config.prefDays || []).map(d => DAYS_MAP[d] || d).join(', ');
+
+      let daysHtml = '';
+      for (let i = 0; i < firstDayDow; i++) {
+        daysHtml += '<div class="mini-cal-empty" aria-hidden="true"></div>';
+      }
+
+      for (let day = 1; day <= numDays; day++) {
+        const dObj = new Date(viewYear, viewMonth, day, 12);
+        const y = dObj.getFullYear();
+        const m = String(dObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dObj.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${d}`;
+
+        const isPref = isPreferredDayOfWeek(dObj, config.prefDays);
+        const isSelected = dateStr === config.selectedDate;
+        const isPast = config.minDate && dateStr < config.minDate;
+        const isExpired = config.maxDate && dateStr > config.maxDate;
+        const isDisabled = isPast || isExpired;
+
+        const classes = [
+          'mini-cal-day',
+          isPref ? 'is-preferred-day' : '',
+          isSelected ? 'is-selected' : '',
+          isPast ? 'is-past' : '',
+          isExpired ? 'is-expired' : ''
+        ].filter(Boolean).join(' ');
+
+        const title = isPref ? 'Día de preferencia del cliente ⭐' : isSelected ? 'Fecha seleccionada' : 'Seleccionar fecha';
+
+        daysHtml += `<button type="button" class="${classes}" data-mini-date="${dateStr}" ${isDisabled ? 'disabled' : ''} title="${title}">` +
+          `<span class="mini-cal-day-num">${day}</span>` +
+          (isPref ? '<span class="mini-cal-pref-star" aria-hidden="true">⭐</span>' : '') +
+          `</button>`;
+      }
+
+      container.innerHTML = `
+        <div class="mini-cal-header">
+          <button type="button" class="mini-cal-nav mini-cal-prev" aria-label="Mes anterior">‹</button>
+          <strong class="mini-cal-title">${MONTH_NAMES[viewMonth]} ${viewYear}</strong>
+          <button type="button" class="mini-cal-nav mini-cal-next" aria-label="Mes siguiente">›</button>
+        </div>
+        <div class="mini-cal-grid">
+          ${DAY_SHORT.map(wd => `<div class="mini-cal-weekday">${wd}</div>`).join('')}
+          ${daysHtml}
+        </div>
+        <div class="mini-cal-legend">
+          <span class="mini-cal-legend-item"><span class="mini-cal-swatch is-preferred-swatch"></span> Día de preferencia</span>
+          <span class="mini-cal-legend-item"><span class="mini-cal-swatch is-selected-swatch"></span> Seleccionado</span>
+          ${prefNames ? `<span class="mini-cal-pref-text">Preferencias: <strong>${prefNames}</strong></span>` : '<span class="mini-cal-pref-text is-empty">Sin días de preferencia en ficha</span>'}
+        </div>
+      `;
+
+      const prevBtn = container.querySelector('.mini-cal-prev');
+      if (prevBtn) {
+        prevBtn.onclick = (e) => {
+          e.preventDefault();
+          viewMonth--;
+          if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+          updateView();
+        };
+      }
+      const nextBtn = container.querySelector('.mini-cal-next');
+      if (nextBtn) {
+        nextBtn.onclick = (e) => {
+          e.preventDefault();
+          viewMonth++;
+          if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+          updateView();
+        };
+      }
+
+      container.querySelectorAll('.mini-cal-day:not(:disabled)').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          const targetDate = btn.dataset.miniDate;
+          config.selectedDate = targetDate;
+          if (typeof config.onSelect === 'function') {
+            config.onSelect(targetDate);
+          }
+          updateView();
+        };
+      });
+    }
+
+    updateView();
+
+    return {
+      setSelectedDate(newDate) {
+        config.selectedDate = newDate;
+        const d = new Date(newDate + 'T12:00:00');
+        if (!isNaN(d.getTime())) {
+          viewYear = d.getFullYear();
+          viewMonth = d.getMonth();
+        }
+        updateView();
+      }
+    };
+  }
+
   // ─── Editor ───
   function openEditor(event) {
     if (pendingSaving) return;
@@ -429,19 +583,17 @@
 
     // Preferencias del cliente
     const prefBox = $('planning-client-preferences');
+    const prefDaysList = getClientPrefDays(client);
+    const prefSlotsList = getClientPrefSlots(client);
     if (prefBox) {
       const assignedEmp = client?.assignedWorkerId ? pendingData.employees.find(e => e.id === client.assignedWorkerId) : null;
-      const daysMap = { L: 'Lunes', M: 'Martes', X: 'Miércoles', J: 'Jueves', V: 'Viernes', S: 'Sábado', D: 'Domingo' };
       const slotsMap = { MANANA: 'Mañanas (09:00–14:00)', MEDIODIA: 'Mediodía (14:00–16:00)', TARDE: 'Tardes (16:00–21:00)' };
-      const prefDays = client?.availability?.days?.map(d => daysMap[d] || d).join(', ');
-      const prefSlots = [
-        ...(client?.contactSlot ? [slotsMap[client.contactSlot] || client.contactSlot] : []),
-        ...(client?.availability?.slots ? client.availability.slots.filter(s => s !== client.contactSlot).map(s => slotsMap[s] || s) : [])
-      ].join(' · ');
+      const prefDaysText = prefDaysList.map(d => DAYS_MAP[d] || d).join(', ');
+      const prefSlotsText = prefSlotsList.map(s => slotsMap[s] || s).join(' · ');
       const items = [];
       if (assignedEmp) items.push('<span class="pref-pill pref-pill-worker">⭐ Entrenador habitual: <strong>' + esc(assignedEmp.name) + '</strong></span>');
-      if (prefDays) items.push('<span class="pref-pill pref-pill-days">📅 Días: <strong>' + esc(prefDays) + '</strong></span>');
-      if (prefSlots) items.push('<span class="pref-pill pref-pill-time">⏰ Horario: <strong>' + esc(prefSlots) + '</strong></span>');
+      if (prefDaysText) items.push('<span class="pref-pill pref-pill-days">📅 Días: <strong>' + esc(prefDaysText) + '</strong></span>');
+      if (prefSlotsText) items.push('<span class="pref-pill pref-pill-time">⏰ Horario: <strong>' + esc(prefSlotsText) + '</strong></span>');
       if (client?.objective) items.push('<span class="pref-pill pref-pill-obj">🎯 Objetivo: <em>' + esc(client.objective) + '</em></span>');
       if (client?.injuryNotes) items.push('<span class="pref-pill pref-pill-injury">⚠️ Consideración: <em>' + esc(client.injuryNotes) + '</em></span>');
       if (items.length) {
@@ -450,6 +602,28 @@
       } else {
         prefBox.hidden = true;
         prefBox.innerHTML = '';
+      }
+    }
+
+    // Mini-calendario interactivo con días de preferencia en verde
+    const miniCalWrap = $('planning-mini-calendar-wrap');
+    if (miniCalWrap) {
+      const miniCal = renderMiniCalendar(miniCalWrap, {
+        selectedDate: dateInput ? dateInput.value : dayKey(Date.now()),
+        prefDays: prefDaysList,
+        minDate: dayKey(Date.now()),
+        maxDate: pkg ? dayKey(pkg.expiresAt) : '',
+        onSelect: (selectedDateStr) => {
+          if (dateInput) {
+            dateInput.value = selectedDateStr;
+            checkSlots();
+          }
+        }
+      });
+      if (dateInput) {
+        dateInput.onchange = () => {
+          miniCal.setSelectedDate(dateInput.value);
+        };
       }
     }
 
@@ -472,10 +646,7 @@
       if (!valid.length) { $('editor-slots').innerHTML = '<p>No hay huecos disponibles. Prueba otro día o trabajador.</p>'; }
       else {
         const client = pendingData.clients ? pendingData.clients.find(c => c.id === pendingEditorData?.clientId) : null;
-        const targetSlots = [
-          ...(client?.contactSlot ? [client.contactSlot] : []),
-          ...(client?.availability?.slots || [])
-        ];
+        const targetSlots = getClientPrefSlots(client);
         const isSlotPreferred = slotStart => {
           if (!targetSlots.length) return false;
           const [h] = slotStart.split(':').map(Number);

@@ -1439,6 +1439,8 @@ h1, h2, h3, .stat-value, .heading-count, .gym-card-count { font-family: var(--tp
 body :focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
 .client-card:focus-visible, .client-card-modern:focus-visible { outline: 2px solid var(--tp-black); outline-offset: 2px; }
 .page-heading .button-plus { display: block; width: 18px; height: 18px; }
+.professional-deactivate { margin-right: auto; border-color: #efc9c5; background: #fff5f4; color: #a63c34; }
+.professional-deactivate:hover { border-color: #d98e87; background: #fff0ef; }
 @media (max-width: 1050px) {
   .client-card-modern { grid-template-columns: minmax(190px, .9fr) minmax(0, 2fr); }
   .client-card-modern .client-card-info { grid-template-columns: repeat(2, minmax(0, 1fr)); }

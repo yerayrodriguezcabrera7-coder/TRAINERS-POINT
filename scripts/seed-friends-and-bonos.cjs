@@ -77,6 +77,8 @@ async function main() {
       assignedWorkerId: null,
       sex: 'HOMBRE',
       source: 'PASO_POR_LA_PUERTA',
+      availability: { days: ['M', 'J'], slots: ['TARDE'] },
+      contactSlot: 'TARDE',
       objective: 'Fuerza e hipertrofia. Entrena siempre con su mejor amigo David en sesión dual.',
       notes: 'Cliente muy constante. Le gusta el entrenamiento de fuerza pesado y trabajo funcional.'
     }
@@ -99,6 +101,8 @@ async function main() {
       sex: 'HOMBRE',
       source: 'RECOMENDACION',
       sourceDetail: 'Amigo de Marcos Delgado',
+      availability: { days: ['M', 'J'], slots: ['TARDE'] },
+      contactSlot: 'TARDE',
       referredById: marcos.id,
       objective: 'Preparación física y fuerza. Comparte bono dual con Marcos.',
       notes: 'Amigo íntimo de Marcos Delgado. Vienen juntos en coche desde Indautxu.'
@@ -122,6 +126,8 @@ async function main() {
       sex: 'MUJER',
       source: 'RECOMENDACION',
       sourceDetail: 'Recomendada por Marcos y David',
+      availability: { days: ['L', 'M', 'X', 'J', 'V'], slots: ['MANANA'] },
+      contactSlot: 'MANANA',
       referredById: marcos.id,
       objective: 'Readaptación tras lesión de rodilla y tonificación general.',
       notes: 'Amiga de Marcos y David. Quiere entrenar en días alternos.'
@@ -146,6 +152,8 @@ async function main() {
       assignedWorkerId: null,
       sex: 'MUJER',
       source: 'INSTAGRAM',
+      availability: { days: ['L', 'X'], slots: ['MANANA'] },
+      contactSlot: 'MANANA',
       objective: 'Pérdida de grasa, salud cardiovascular y movilidad.',
       notes: 'Muy activa, suele traer a su amiga Elena Morales a entrenar.'
     }
@@ -168,6 +176,8 @@ async function main() {
       sex: 'MUJER',
       source: 'RECOMENDACION',
       sourceDetail: 'Amiga de Sofía Ramos',
+      availability: { days: ['L', 'V'], slots: ['TARDE'] },
+      contactSlot: 'TARDE',
       referredById: sofia.id,
       objective: 'Acondicionamiento físico general y mejora postural.',
       notes: 'Amiga y compañera de oficina de Sofía Ramos.'
@@ -191,6 +201,8 @@ async function main() {
       sex: 'HOMBRE',
       source: 'RECOMENDACION',
       sourceDetail: 'Amigo de David Navarro',
+      availability: { days: ['L', 'X', 'V'], slots: ['MANANA'] },
+      contactSlot: 'MANANA',
       referredById: david.id,
       objective: 'Rendimiento deportivo para fútbol aficionado.',
       notes: 'Amigo de David Navarro del equipo de fútbol sala.'

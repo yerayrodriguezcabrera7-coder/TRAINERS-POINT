@@ -2452,3 +2452,299 @@ body > main.main-content {
 #planning-editor .field-guidance {
   display: none !important;
 }
+
+/* ═══════════════════════════════════════════════
+   Mini-Calendario Interactivo para Agendar
+   (Días de preferencia en verde)
+   ═══════════════════════════════════════════════ */
+.planning-mini-calendar-wrap {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.mini-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.mini-cal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.mini-cal-nav {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.mini-cal-nav:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+.mini-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.mini-cal-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  padding-bottom: 6px;
+  text-transform: uppercase;
+}
+.mini-cal-day {
+  aspect-ratio: 1;
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+  padding: 2px;
+}
+.mini-cal-day:hover:not(:disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* Verde para días que el cliente tiene como preferencia */
+.mini-cal-day.is-preferred-day {
+  background: #dcfce7 !important;
+  border: 2px solid #16a34a !important;
+  color: #14532d !important;
+  font-weight: 800;
+  box-shadow: 0 1px 4px rgba(22, 163, 74, 0.25);
+}
+.mini-cal-day.is-preferred-day:hover:not(:disabled) {
+  background: #bbf7d0 !important;
+  border-color: #15803d !important;
+  color: #14532d !important;
+}
+.mini-cal-day.is-preferred-day .mini-cal-pref-star {
+  font-size: 9px;
+  line-height: 1;
+  margin-top: -2px;
+}
+
+/* Día seleccionado */
+.mini-cal-day.is-selected {
+  background: #eb5a46 !important;
+  border-color: #d94b38 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(235, 90, 70, 0.35);
+}
+.mini-cal-day.is-preferred-day.is-selected {
+  background: #16a34a !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.5);
+}
+
+.mini-cal-day:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+}
+
+.mini-cal-empty {
+  aspect-ratio: 1;
+}
+
+.mini-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 11px;
+  color: #64748b;
+}
+.mini-cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.mini-cal-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.mini-cal-swatch.is-preferred-swatch {
+  background: #dcfce7;
+  border: 2px solid #16a34a;
+}
+.mini-cal-swatch.is-selected-swatch {
+  background: #16a34a;
+  border: 2px solid #15803d;
+}
+.mini-cal-pref-text {
+  margin-left: auto;
+  color: #15803d;
+  font-weight: 600;
+}
+.mini-cal-pref-text.is-empty {
+  color: #94a3b8;
+  font-weight: normal;
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════
+   Vista semanal completa: toda la semana en pantalla
+   (Lunes a Domingo) sin tener que deslizar
+   ═══════════════════════════════════════════════ */
+.calendar-scroll {
+  height: calc(100vh - 215px) !important;
+  min-height: 520px;
+  max-height: none !important;
+}
+
+.calendar-scroll.is-week-view {
+  overflow-x: hidden !important;
+}
+
+.time-grid.is-week-view {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.time-grid.is-week-view .time-column {
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.time-grid.is-week-view .day-heading {
+  min-width: 0 !important;
+  padding: 4px 2px !important;
+  gap: 3px !important;
+}
+
+.time-grid.is-week-view .day-heading strong {
+  font-size: 13.5px !important;
+}
+
+.time-grid.is-week-view .employee-heading {
+  min-width: 0 !important;
+  padding: 2px 3px !important;
+  overflow: hidden !important;
+}
+
+.time-grid.is-week-view .employee-heading-name {
+  font-size: 10.5px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.time-grid.is-week-view .employee-shift-tag {
+  font-size: 8.5px !important;
+  padding: 0 4px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+
+.time-grid.is-week-view .empty-day-heading,
+.time-grid.is-week-view .empty-day-column {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.time-grid.is-week-view .empty-day-placeholder {
+  padding: 16px 4px !important;
+  font-size: 10px !important;
+}
+
+.time-grid.is-week-view .add-trainer-pill-btn {
+  font-size: 9.5px !important;
+  padding: 2px 4px !important;
+  max-width: 95% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.time-grid.is-week-view .corner {
+  font-size: 9px !important;
+  width: 46px !important;
+  padding: 0 2px !important;
+}
+
+.time-grid.is-week-view .time-axis {
+  width: 46px !important;
+}
+
+.time-grid.is-week-view .hour-label {
+  font-size: 9.5px !important;
+}
+
+.time-grid.is-week-view .event {
+  padding: 2px 4px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+  overflow: hidden !important;
+}
+
+.time-grid.is-week-view .event .event-time {
+  font-size: 9px !important;
+  margin-bottom: 1px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.time-grid.is-week-view .event .event-title {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-bottom: 1px !important;
+}
+
+.time-grid.is-week-view .event .event-training-type {
+  font-size: 9px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.time-grid.is-week-view .event .event-meta {
+  font-size: 8.5px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
