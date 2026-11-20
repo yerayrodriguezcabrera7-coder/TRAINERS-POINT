@@ -35,7 +35,6 @@
     if (!validDate(booking.date) || !validTime(booking.start) || !validTime(booking.end)) return 'Introduce una fecha y unas horas válidas.';
     if (minutes(booking.start) >= minutes(booking.end)) return 'La hora de fin debe ser posterior al inicio.';
     if (booking.status === 'cancelled') return '';
-    if (parseDate(booking.date).getDay() === 0 && !booking.employeeId) return '';
     if (!isOpen(booking.date, minutes(booking.start), minutes(booking.end), schedule)) return 'La reserva debe quedar dentro del horario de apertura.';
     const isCobosu = booking.employeeId === '__cobosu';
     const active = bookings.filter(other => other.id !== booking.id && other.status !== 'cancelled');

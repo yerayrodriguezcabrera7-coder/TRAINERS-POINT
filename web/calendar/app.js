@@ -234,6 +234,7 @@ function dualMissingPartner(b) {
 }
 function dualBadge(b) {
   if (!dualMissingPartner(b)) return '';
+  if (b.sessionId && data.bookings.some(other => other.id !== b.id && other.sessionId === b.sessionId && other.status === 'cancelled')) return '<span class="booking-dual-missing-badge" role="status">⚠️ Aviso DUAL: El compañero ha cancelado. Contactar para reubicar o abonar suplemento individual.</span>';
   return '<span class="booking-dual-missing-badge" title="Sesión dual pendiente de 2ª persona. Haz clic para asignarla.">👥 Falta por asignar 2ª persona</span>';
 }
 function eventLabel(b) { const renewal=upcomingRenewal(b); return `${lookup('clients', b.clientId).name}, ${lookup('services', b.serviceId).name}, ${b.start} a ${b.end}, ${STATUS[b.status]}, ${lookup('employees', b.employeeId).name}, ${b.centerName||'Centro actual'}${b.needsReschedule?', Pendiente de reprogramación':''}${dualMissingPartner(b)?', Falta por asignar 2ª persona':''}${upcomingDebt(b)>0?', Pago pendiente '+debtMoney(upcomingDebt(b)):''}${renewal?', '+renewal.message:''}`; }

@@ -227,7 +227,6 @@ export function normalize(input: Input, c: Config): Booking {
 export function assertAvailable(b: Booking, all: Booking[], c: Config) {
   if (b.status === "CANCELLED") return;
   const day = DateTime.fromISO(b.date).weekday - 1;
-  if (day === 6 && !b.employeeId) return;
   const service = c.services.find(s => s.id === b.serviceId)!;
   const isCobosu = b.employeeId === COBOSU_ID;
   if (b.employeeId && !isCobosu && service.employeeIds?.length && !service.employeeIds.includes(b.employeeId)) throw new ApiError(409, "El entrenador no realiza este servicio.");

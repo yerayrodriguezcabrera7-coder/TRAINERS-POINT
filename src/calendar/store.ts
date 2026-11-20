@@ -384,6 +384,7 @@ export class Store {
       const held=Number((await db.query(`SELECT count(*) FROM calendar.recoveries r JOIN "Booking" original ON original.id::text=r.original_id WHERE original."packageId"=$1::uuid AND ($2::text IS NOT NULL) AND r.id<>COALESCE($3,'') AND r.data->>'status' IN ('PENDING','RESCHEDULE_PENDING')`,[pkg.id,gym,b.recoveryId||null])).rows[0].count);
       if(!['CANCELLED','NO_SHOW'].includes(b.status)&&count+held>=pkg.sessionsBought)throw new ApiError(409,"Este bono ya no tiene sesiones disponibles. Actualiza los bonos del cliente.");
       paid=pkg.paymentStatus==='PAGADO';
+      if (!paid && !['CANCELLED','NO_SHOW'].includes(b.status) && count + held >= 1) throw new ApiError(409, "Este bono tiene el pago pendiente. Registra el cobro en Caja antes de agendar más sesiones.");
     }
     if(billed?.saleId)paid=!billed.paymentPending;
     b.paymentDue=!paid&&!b.recoveryId;

@@ -22,7 +22,6 @@
     chat:'<path d="M21 11a8 8 0 0 1-8 8H8l-5 3 1-6a8 8 0 0 1 9-13 8 8 0 0 1 8 8Z"/>'
   };
   const items = [
-    ['Mis reservas','calendar','/mis-reservas.html'],
     ['Calendario','calendar','/index.html'],
     ['Pendientes de asignación','calendar','/index.html#pendientes'],
     ['Clientes','people','/clientes'],
